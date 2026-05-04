@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 import { auth } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 import { estimateSchema, type EstimateInput } from "./schemas";
 
 async function getSessionRole(): Promise<string | null> {
@@ -28,7 +29,7 @@ export async function createEstimate(input: EstimateInput) {
   const role = await getSessionRole();
   requireRole(role, "ketoan");
   const data = estimateSchema.parse(input);
-  const totalVnd = data.qty * data.unitPrice;
+  const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.create({
     data: {
       projectId: data.projectId,
@@ -52,7 +53,7 @@ export async function updateEstimate(id: number, input: EstimateInput) {
   const role = await getSessionRole();
   requireRole(role, "ketoan");
   const data = estimateSchema.parse(input);
-  const totalVnd = data.qty * data.unitPrice;
+  const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.update({
     where: { id },
     data: {

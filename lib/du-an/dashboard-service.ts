@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getProjectById } from "@/lib/master-data/project-service";
 
 export async function getProjectDashboard(projectId: number) {
+  // Fetch settings first to get contractWarningDays; fall back to 90
+  const settings = await prisma.projectSettings.findUnique({ where: { projectId } });
+  const warningDays = settings?.contractWarningDays ?? 90;
+
   const [project, scheduleStats, estimateSum, transactionSum, cashflowSum, contractWarnings] =
     await Promise.all([
       getProjectById(projectId),
@@ -34,7 +38,7 @@ export async function getProjectDashboard(projectId: number) {
         _sum: { amountVnd: true },
       }),
 
-      // Contracts expiring within 90 days
+      // Contracts expiring within configured warningDays
       prisma.projectContract.findMany({
         where: {
           projectId,
@@ -42,7 +46,7 @@ export async function getProjectDashboard(projectId: number) {
           status: "active",
           expiryDate: {
             not: null,
-            lte: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+            lte: new Date(Date.now() + warningDays * 24 * 60 * 60 * 1000),
             gte: new Date(),
           },
         },
@@ -64,6 +68,7 @@ export async function getProjectDashboard(projectId: number) {
 
   return {
     project,
+    warningDays,
     schedule: {
       pending: scheduleCounts["pending"] ?? 0,
       in_progress: scheduleCounts["in_progress"] ?? 0,

@@ -2,16 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
+import { toast } from "sonner";
+import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
 import { AgGridBase, VND_COL_DEF, NUMBER_COL_DEF, vndFormatter } from "@/components/ag-grid-base";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
-import { estimateSchema, type EstimateInput } from "@/lib/du-an/schemas";
+import { type EstimateInput } from "@/lib/du-an/schemas";
 import { createEstimate, updateEstimate, softDeleteEstimate } from "@/lib/du-an/estimate-service";
+import { EstimateForm } from "./du-toan-form";
 
 type EstimateRow = {
   id: number;
@@ -34,56 +32,6 @@ interface Props {
   categories: CategoryOption[];
 }
 
-function EstimateForm({ projectId, categories, defaultValues, onSubmit }: {
-  projectId: number;
-  categories: CategoryOption[];
-  defaultValues?: Partial<EstimateInput>;
-  onSubmit: (d: EstimateInput) => Promise<void>;
-}) {
-  const form = useForm<EstimateInput>({
-    resolver: zodResolver(estimateSchema),
-    defaultValues: { projectId, categoryId: categories[0]?.id ?? 0, ...defaultValues },
-  });
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-        <FormField control={form.control} name="categoryId" render={({ field }) => (
-          <FormItem><FormLabel>Hạng mục</FormLabel><FormControl>
-            <select {...field} onChange={(e) => field.onChange(Number(e.target.value))}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
-            </select>
-          </FormControl><FormMessage /></FormItem>
-        )} />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="itemCode" render={({ field }) => (
-            <FormItem><FormLabel>Mã hàng</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="unit" render={({ field }) => (
-            <FormItem><FormLabel>Đơn vị</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
-        <FormField control={form.control} name="itemName" render={({ field }) => (
-          <FormItem><FormLabel>Tên vật tư/công việc</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="qty" render={({ field }) => (
-            <FormItem><FormLabel>Số lượng</FormLabel><FormControl>
-              <Input type="number" step="0.0001" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value))} />
-            </FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="unitPrice" render={({ field }) => (
-            <FormItem><FormLabel>Đơn giá (VND)</FormLabel><FormControl>
-              <Input type="number" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value))} />
-            </FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
-        <div className="flex justify-end pt-2"><Button type="submit">Lưu</Button></div>
-      </form>
-    </Form>
-  );
-}
-
 export function DuToanClient({ projectId, initialData, categories }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -93,18 +41,47 @@ export function DuToanClient({ projectId, initialData, categories }: Props) {
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, `${c.code} - ${c.name}`]));
   const grandTotal = initialData.reduce((sum, r) => sum + Number(r.totalVnd), 0);
 
+  /**
+   * Inline cell edit handler — called by AG Grid when user commits a cell edit.
+   * Editable columns: itemName, qty, unitPrice (text/numeric, not FK or computed).
+   * Dialog form remains the fallback for "Add new" and full row editing.
+   */
+  async function handleCellValueChanged(event: CellValueChangedEvent<EstimateRow>) {
+    const row = event.data;
+    try {
+      const input: EstimateInput = {
+        projectId,
+        categoryId: row.categoryId,
+        itemCode: row.itemCode,
+        itemName: row.itemName,
+        unit: row.unit,
+        qty: Number(row.qty),
+        unitPrice: Number(row.unitPrice),
+        note: row.note ?? undefined,
+      };
+      await updateEstimate(row.id, input);
+      toast.success("Đã lưu");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+      // Revert optimistic edit by refreshing
+      startTransition(() => router.refresh());
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
     { field: "itemCode", headerName: "Mã hàng", width: 110 },
-    { field: "itemName", headerName: "Tên vật tư/công việc", flex: 2, minWidth: 200 },
+    { field: "itemName", headerName: "Tên vật tư/công việc", flex: 2, minWidth: 200, editable: true },
     { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? "", width: 150 },
     { field: "unit", headerName: "ĐVT", width: 70 },
-    { field: "qty", headerName: "SL", ...NUMBER_COL_DEF, width: 100 },
-    { field: "unitPrice", headerName: "Đơn giá", ...VND_COL_DEF, width: 130 },
+    { field: "qty", headerName: "SL", ...NUMBER_COL_DEF, width: 100, editable: true },
+    { field: "unitPrice", headerName: "Đơn giá", ...VND_COL_DEF, width: 130, editable: true },
     { field: "totalVnd", headerName: "Thành tiền", ...VND_COL_DEF, width: 140 },
     {
+      headerName: "Thao tác", width: 120,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
+      cellRenderer: (p: { data: any }) => (
         <div className="flex gap-1 items-center h-full">
           <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
           <DeleteConfirmDialog
@@ -140,7 +117,13 @@ export function DuToanClient({ projectId, initialData, categories }: Props) {
         <Button onClick={() => setCreateOpen(true)}>Thêm hạng mục</Button>
       </div>
 
-      <AgGridBase rowData={initialData} columnDefs={colDefs} height={500} />
+      {/* Editable columns: itemName, qty, unitPrice. Double-click to edit inline. */}
+      <AgGridBase
+        rowData={initialData}
+        columnDefs={colDefs}
+        height={500}
+        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+      />
 
       <CrudDialog title="Thêm hạng mục dự toán" open={createOpen} onOpenChange={setCreateOpen}>
         <EstimateForm projectId={projectId} categories={categories} onSubmit={handleCreate} />

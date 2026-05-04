@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 import { auth } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 import { transactionSchema, type TransactionInput } from "./schemas";
 
 async function getSessionRole(): Promise<string | null> {
@@ -28,8 +29,9 @@ export async function createTransaction(input: TransactionInput) {
   const role = await getSessionRole();
   requireRole(role, "ketoan");
   const data = transactionSchema.parse(input);
-  const amountHd = data.qty * data.unitPriceHd;
-  const amountTt = data.qty * data.unitPriceTt;
+  const qtyDecimal = new Prisma.Decimal(data.qty);
+  const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
+  const amountTt = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceTt));
   const record = await prisma.projectTransaction.create({
     data: {
       projectId: data.projectId,
@@ -59,8 +61,9 @@ export async function updateTransaction(id: number, input: TransactionInput) {
   const role = await getSessionRole();
   requireRole(role, "ketoan");
   const data = transactionSchema.parse(input);
-  const amountHd = data.qty * data.unitPriceHd;
-  const amountTt = data.qty * data.unitPriceTt;
+  const qtyDecimal = new Prisma.Decimal(data.qty);
+  const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
+  const amountTt = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceTt));
   const record = await prisma.projectTransaction.update({
     where: { id },
     data: {

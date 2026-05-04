@@ -3,14 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
-import { contractSchema, type ContractInput } from "@/lib/du-an/schemas";
+import { type ContractInput } from "@/lib/du-an/schemas";
 import { createContract, updateContract, softDeleteContract } from "@/lib/du-an/contract-service";
 import { vndFormatter } from "@/components/ag-grid-base";
+import { ContractForm } from "./hop-dong-form";
 
 type ContractRow = {
   id: number;
@@ -32,64 +29,11 @@ const STATUS_LABELS: Record<string, string> = { active: "Hiệu lực", expired:
 interface Props {
   projectId: number;
   initialData: ContractRow[];
+  /** Warning threshold in days from ProjectSettings (default 90) */
+  warningDays?: number;
 }
 
-function ContractForm({ defaultValues, onSubmit }: { defaultValues?: Partial<ContractInput>; onSubmit: (d: ContractInput) => Promise<void> }) {
-  const form = useForm<ContractInput>({
-    resolver: zodResolver(contractSchema),
-    defaultValues: { docType: "contract", status: "active", projectId: defaultValues?.projectId ?? 0, ...defaultValues },
-  });
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-        <FormField control={form.control} name="docName" render={({ field }) => (
-          <FormItem><FormLabel>Tên tài liệu</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
-        )} />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="docType" render={({ field }) => (
-            <FormItem><FormLabel>Loại</FormLabel><FormControl>
-              <select {...field} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                <option value="contract">Hợp đồng</option>
-                <option value="license">Giấy phép</option>
-              </select>
-            </FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="status" render={({ field }) => (
-            <FormItem><FormLabel>Trạng thái</FormLabel><FormControl>
-              <select {...field} className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm">
-                <option value="active">Hiệu lực</option>
-                <option value="expired">Hết hạn</option>
-                <option value="terminated">Đã hủy</option>
-              </select>
-            </FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
-        <FormField control={form.control} name="partyName" render={({ field }) => (
-          <FormItem><FormLabel>Đối tác</FormLabel><FormControl><Input {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
-        )} />
-        <FormField control={form.control} name="valueVnd" render={({ field }) => (
-          <FormItem><FormLabel>Giá trị (VND)</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
-        )} />
-        <div className="grid grid-cols-2 gap-3">
-          <FormField control={form.control} name="signedDate" render={({ field }) => (
-            <FormItem><FormLabel>Ngày ký</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
-          )} />
-          <FormField control={form.control} name="expiryDate" render={({ field }) => (
-            <FormItem><FormLabel>Ngày hết hạn</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
-          )} />
-        </div>
-        <FormField control={form.control} name="storage" render={({ field }) => (
-          <FormItem><FormLabel>Nơi lưu trữ</FormLabel><FormControl><Input {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
-        )} />
-        <div className="flex justify-end pt-2">
-          <Button type="submit">Lưu</Button>
-        </div>
-      </form>
-    </Form>
-  );
-}
-
-export function HopDongClient({ projectId, initialData }: Props) {
+export function HopDongClient({ projectId, initialData, warningDays = 90 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ContractRow | null>(null);
@@ -141,9 +85,11 @@ export function HopDongClient({ projectId, initialData }: Props) {
               const daysToExpiry = row.expiryDate
                 ? Math.ceil((new Date(row.expiryDate).getTime() - Date.now()) / 86400000)
                 : null;
-              const isWarning = daysToExpiry !== null && daysToExpiry > 0 && daysToExpiry <= 90;
+              // Warn for contracts expiring within warningDays; also highlight already-expired (<=0) in red
+              const isExpired = daysToExpiry !== null && daysToExpiry <= 0;
+              const isWarning = daysToExpiry !== null && daysToExpiry > 0 && daysToExpiry <= warningDays;
               return (
-                <tr key={row.id} className={`border-t ${isWarning ? "bg-yellow-50" : ""}`}>
+                <tr key={row.id} className={`border-t ${isExpired ? "bg-red-50" : isWarning ? "bg-yellow-50" : ""}`}>
                   <td className="px-3 py-2">{row.docName}</td>
                   <td className="px-3 py-2">{DOC_TYPE_LABELS[row.docType] ?? row.docType}</td>
                   <td className="px-3 py-2">{row.partyName ?? "—"}</td>
@@ -151,9 +97,10 @@ export function HopDongClient({ projectId, initialData }: Props) {
                   <td className="px-3 py-2">{row.signedDate ? new Date(row.signedDate).toLocaleDateString("vi-VN") : "—"}</td>
                   <td className="px-3 py-2">
                     {row.expiryDate ? (
-                      <span className={isWarning ? "text-yellow-700 font-medium" : ""}>
+                      <span className={isExpired ? "text-red-700 font-medium" : isWarning ? "text-yellow-700 font-medium" : ""}>
                         {new Date(row.expiryDate).toLocaleDateString("vi-VN")}
                         {isWarning && ` (còn ${daysToExpiry}n)`}
+                        {isExpired && ` (đã hết hạn ${Math.abs(daysToExpiry!)}n)`}
                       </span>
                     ) : "—"}
                   </td>

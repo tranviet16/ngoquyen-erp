@@ -114,7 +114,10 @@ export const settingsSchema = z.object({
   contractWarningDays: z.number().int().min(0),
   managementFeePct: z.number().min(0).max(1),
   teamSharePct: z.number().min(0).max(1),
-});
+}).refine(
+  (d) => d.normYellowThreshold < d.normRedThreshold,
+  { message: "Ngưỡng cảnh báo vàng phải nhỏ hơn ngưỡng cảnh báo đỏ", path: ["normRedThreshold"] }
+);
 
 export type ScheduleInput = z.infer<typeof scheduleSchema>;
 export type AcceptanceInput = z.infer<typeof acceptanceSchema>;

@@ -12,15 +12,12 @@ export default async function DinhMucPage({ params }: Props) {
   const projectId = Number(id);
   if (isNaN(projectId)) notFound();
 
-  const [settings, rows] = await Promise.all([
-    getSettings(projectId),
-    listNorm(projectId),
-  ]);
+  const settings = await getSettings(projectId);
 
-  const enrichedRows = await listNorm(projectId, {
+  const rows = await listNorm(projectId, {
     normYellowThreshold: Number(settings?.normYellowThreshold ?? 0.8),
     normRedThreshold: Number(settings?.normRedThreshold ?? 0.95),
   });
 
-  return <DinhMucClient rows={enrichedRows} />;
+  return <DinhMucClient rows={rows} />;
 }
