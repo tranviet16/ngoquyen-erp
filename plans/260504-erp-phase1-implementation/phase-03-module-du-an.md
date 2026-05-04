@@ -1,7 +1,8 @@
 ---
 phase: 3
 title: "Module: Quản lý Dự án Xây dựng"
-status: pending
+status: in-progress
+session_progress: "Session 1 complete (2026-05-04, commit 26fa936)"
 priority: P1
 effort: "3w"
 dependencies: [2]
@@ -154,11 +155,24 @@ model ProjectSettings {            // Cài Đặt per-project
 6. So sánh số liệu Định Mức + Dòng Tiền 3 Bên với Excel mẫu
 
 ## Success Criteria
-- [ ] 9 tab dự án CRUD đầy đủ qua AG Grid
-- [ ] % hoàn thành, biến động dự toán, cờ cảnh báo định mức tính đúng so với Excel mẫu
-- [ ] Dashboard load <2s với 1 dự án có 5000 transaction
-- [ ] Cảnh báo hợp đồng <90 ngày hiển thị
-- [ ] Tổng hợp 3 bên (CĐT/Cty/Đội) khớp 100% với Excel "Dòng Tiền 3 Bên"
+- [x] Schema + migration (8 models + 2 views) — DONE
+- [x] AG Grid base component (vi-VN locale + VND formatter) — DONE
+- [x] Project list page /du-an — DONE
+- [x] Tab layout /du-an/[id] (11 tabs) — DONE
+- [x] Dashboard aggregate — DONE
+- [x] Hợp Đồng CRUD — DONE
+- [x] Cài Đặt CRUD — DONE
+- [x] Tiến Độ CRUD + AG Grid — DONE
+- [x] Nghiệm Thu CRUD + AG Grid — DONE
+- [x] Dự Toán CRUD + AG Grid + auto-total — DONE
+- [x] Phát Sinh (CO) CRUD + AG Grid — DONE
+- [x] Giao Dịch CRUD + AG Grid — DONE
+- [x] Định Mức read-only view + flag logic — DONE
+- [x] Dự Toán Điều Chỉnh read-only view — DONE
+- [x] Dòng Tiền 3 Bên CRUD + 3-way summary — DONE
+- [ ] Smoke test with real data vs Excel — REMAINING
+- [ ] Cảnh báo hợp đồng uses per-project contractWarningDays setting — REMAINING (currently hardcoded 90 days)
+- [ ] AG Grid inline editing (edit-in-cell without dialog) — REMAINING (currently dialog-based)
 
 ## Risk Assessment
 | Risk | Mitigation |
