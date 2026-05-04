@@ -29,7 +29,7 @@ Số hóa nguyên trạng 6 file Excel SOP thành web app nội bộ (<20 user),
 | 6 | [Module: Công nợ Nhân công (reuse Ledger)](phase-06-module-cong-no-nhan-cong.md) | completed | P1 | 0.5w | 5 |
 | 7 | [Module: Sản lượng – Doanh thu](phase-07-module-sl-dt.md) | completed | P2 | 1w | 3 |
 | 8 | [Module: Quản lý Tài chính NQ + Dashboard](phase-08-module-tai-chinh.md) | completed | P2 | 1.5w | 5,6 |
-| 9 | [Excel Import (one-shot) + Export (PDF/Excel)](phase-09-import-export.md) | pending | P1 | 1w | 8 |
+| 9 | [Excel Import (one-shot) + Export (PDF/Excel)](phase-09-import-export.md) | completed | P1 | 1w | 8 |
 | 10 | [UAT, Bug Fix, Training, Go-live](phase-10-uat-golive.md) | pending | P1 | 1w | 9 |
 
 ## Key Dependencies
