@@ -2,7 +2,7 @@
 phase: 3
 title: "Module: Quản lý Dự án Xây dựng"
 status: in-progress
-session_progress: "Session 1 complete (2026-05-04, commit 26fa936)"
+session_progress: "Session 2 complete (2026-05-04, commit 2b68198)"
 priority: P1
 effort: "3w"
 dependencies: [2]
@@ -171,8 +171,12 @@ model ProjectSettings {            // Cài Đặt per-project
 - [x] Dự Toán Điều Chỉnh read-only view — DONE
 - [x] Dòng Tiền 3 Bên CRUD + 3-way summary — DONE
 - [ ] Smoke test with real data vs Excel — REMAINING
-- [ ] Cảnh báo hợp đồng uses per-project contractWarningDays setting — REMAINING (currently hardcoded 90 days)
-- [ ] AG Grid inline editing (edit-in-cell without dialog) — REMAINING (currently dialog-based)
+- [x] Canh bao hop dong uses per-project contractWarningDays setting - DONE (session 2)
+- [x] AG Grid inline editing on Du Toan (itemName, qty, unitPrice) with toast - DONE (session 2)
+- [x] Money precision: Prisma.Decimal arithmetic for totalVnd/amountHd/amountTt - DONE (session 2)
+- [x] Settings cross-field refine: normYellow < normRed - DONE (session 2)
+- [x] dinh-muc/page.tsx: single listNorm call (removed duplicate query) - DONE (session 2)
+- [x] hop-dong-client.tsx: split ContractForm to hop-dong-form.tsx - DONE (session 2)
 
 ## Risk Assessment
 | Risk | Mitigation |
