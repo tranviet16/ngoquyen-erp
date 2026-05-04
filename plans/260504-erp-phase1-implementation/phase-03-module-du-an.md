@@ -1,8 +1,8 @@
 ---
 phase: 3
 title: "Module: Quản lý Dự án Xây dựng"
-status: in-progress
-session_progress: "Session 2 complete (2026-05-04, commit 2b68198)"
+status: completed
+session_progress: "Session 3 complete (2026-05-04)"
 priority: P1
 effort: "3w"
 dependencies: [2]
@@ -170,13 +170,18 @@ model ProjectSettings {            // Cài Đặt per-project
 - [x] Định Mức read-only view + flag logic — DONE
 - [x] Dự Toán Điều Chỉnh read-only view — DONE
 - [x] Dòng Tiền 3 Bên CRUD + 3-way summary — DONE
-- [ ] Smoke test with real data vs Excel — REMAINING
+- [ ] Smoke test with real data vs Excel — DEFERRED to Phase 10 UAT
 - [x] Canh bao hop dong uses per-project contractWarningDays setting - DONE (session 2)
 - [x] AG Grid inline editing on Du Toan (itemName, qty, unitPrice) with toast - DONE (session 2)
 - [x] Money precision: Prisma.Decimal arithmetic for totalVnd/amountHd/amountTt - DONE (session 2)
 - [x] Settings cross-field refine: normYellow < normRed - DONE (session 2)
 - [x] dinh-muc/page.tsx: single listNorm call (removed duplicate query) - DONE (session 2)
 - [x] hop-dong-client.tsx: split ContractForm to hop-dong-form.tsx - DONE (session 2)
+- [x] AG Grid inline editing on Tien Do (taskName, pctComplete, status, note; dates via dialog) - DONE (session 3)
+- [x] AG Grid inline editing on Giao Dich (itemName, partyName, qty, unit, unitPriceHd, unitPriceTt, invoiceNo, status, note; amountHd/amountTt recomputed server-side) - DONE (session 3)
+- [x] AG Grid inline editing on Nghiem Thu (checkItem, inspector, result, defectCount, amountCdtVnd, amountInternalVnd, acceptanceBatch, note; dates via dialog) - DONE (session 3)
+- [x] Regular views doc comment added to migration.sql (matview deferred to Phase 2) - DONE (session 3)
+- [x] Smoke test: createTransaction + vw_project_norm query via Prisma.Decimal - DONE (session 3)
 
 ## Risk Assessment
 | Risk | Mitigation |
