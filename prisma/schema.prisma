@@ -183,3 +183,174 @@ model Item {
   @@index([code])
   @@map("items")
 }
+
+// ─── Project Management Models ───────────────────────────────────────────────
+
+model ProjectSchedule {
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  categoryId  Int
+  taskName    String
+  planStart   DateTime
+  planEnd     DateTime
+  actualStart DateTime?
+  actualEnd   DateTime?
+  pctComplete Decimal   @default(0) @db.Decimal(5, 4)
+  status      String    @default("pending") // pending|in_progress|done|delayed
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("project_schedules")
+}
+
+model ProjectAcceptance {
+  id               Int       @id @default(autoincrement())
+  projectId        Int
+  categoryId       Int
+  checkItem        String
+  planEnd          DateTime?
+  actualEnd        DateTime?
+  inspector        String?
+  result           String?   // "pass|fail|partial"
+  defectCount      Int       @default(0)
+  fixRequest       String?
+  acceptedAt       DateTime?
+  amountCdtVnd     Decimal   @default(0) @db.Decimal(18, 2)
+  amountInternalVnd Decimal  @default(0) @db.Decimal(18, 2)
+  acceptanceBatch  String?
+  note             String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("project_acceptances")
+}
+
+model ProjectEstimate {
+  id         Int       @id @default(autoincrement())
+  projectId  Int
+  categoryId Int
+  itemCode   String
+  itemName   String
+  unit       String
+  qty        Decimal   @db.Decimal(18, 4)
+  unitPrice  Decimal   @db.Decimal(18, 2)
+  totalVnd   Decimal   @default(0) @db.Decimal(18, 2) // qty * unitPrice, computed on write
+  note       String?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now())
+
+  @@index([projectId, categoryId])
+  @@map("project_estimates")
+}
+
+model ProjectChangeOrder {
+  id                  Int       @id @default(autoincrement())
+  projectId           Int
+  date                DateTime
+  coCode              String
+  description         String
+  reason              String?
+  categoryId          Int?
+  itemCode            String?
+  costImpactVnd       Decimal   @default(0) @db.Decimal(18, 2)
+  scheduleImpactDays  Int       @default(0)
+  approvedBy          String?
+  status              String    @default("pending") // pending|approved|rejected
+  newItemName         String?
+  newUnit             String?
+  newQty              Decimal?  @db.Decimal(18, 4)
+  newUnitPrice        Decimal?  @db.Decimal(18, 2)
+  note                String?
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("project_change_orders")
+}
+
+model ProjectTransaction {
+  id              Int       @id @default(autoincrement())
+  projectId       Int
+  date            DateTime
+  transactionType String    // lay_hang|nhan_cong|may_moc
+  categoryId      Int
+  itemCode        String
+  itemName        String
+  partyName       String?
+  qty             Decimal   @db.Decimal(18, 4)
+  unit            String
+  unitPriceHd     Decimal   @default(0) @db.Decimal(18, 2)
+  unitPriceTt     Decimal   @default(0) @db.Decimal(18, 2)
+  amountHd        Decimal   @default(0) @db.Decimal(18, 2)
+  amountTt        Decimal   @default(0) @db.Decimal(18, 2)
+  invoiceNo       String?
+  status          String    @default("pending") // pending|approved|paid
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now())
+
+  @@index([projectId, categoryId])
+  @@map("project_transactions")
+}
+
+model ProjectContract {
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  docName     String
+  docType     String    // contract|license
+  partyName   String?
+  valueVnd    Decimal?  @db.Decimal(18, 2)
+  signedDate  DateTime?
+  expiryDate  DateTime?
+  status      String    @default("active") // active|expired|terminated
+  storage     String?
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("project_contracts")
+}
+
+model Project3WayCashflow {
+  id            Int       @id @default(autoincrement())
+  projectId     Int
+  date          DateTime
+  flowDirection String    // cdt_to_cty|cty_to_doi|doi_to_cty|cty_to_cdt|doi_refund
+  category      String    // tam_ung|nop_lai|thanh_toan|hoan_ung
+  payerName     String
+  payeeName     String
+  amountVnd     Decimal   @db.Decimal(18, 2)
+  batch         String?
+  refDoc        String?
+  note          String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+
+  @@index([projectId, date])
+  @@map("project_3way_cashflows")
+}
+
+model ProjectSettings {
+  projectId          Int     @id
+  vatPct             Decimal @default(0.1) @db.Decimal(5, 4)
+  normYellowThreshold Decimal @default(0.8) @db.Decimal(5, 4)
+  normRedThreshold   Decimal @default(0.95) @db.Decimal(5, 4)
+  contractWarningDays Int    @default(90)
+  managementFeePct   Decimal @default(0.05) @db.Decimal(5, 4)
+  teamSharePct       Decimal @default(0.85) @db.Decimal(5, 4)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now())
+
+  @@map("project_settings")
+}

@@ -58,11 +58,21 @@
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d ngoquyyen_erp -c 'ALTER TABLE \"project_categories\" ALTER COLUMN \"updatedAt\" SET DEFAULT CURRENT_TIMESTAMP;')",
       "PowerShell($env:PGPASSWORD=\"postgres\"; psql -h localhost -p 5433 -U postgres -d ngoquyyen_erp -c 'ALTER TABLE \\\\\"project_categories\\\\\" ALTER COLUMN \\\\\"updatedAt\\\\\" SET DEFAULT CURRENT_TIMESTAMP;')",
       "Bash(npx next *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(psql -h localhost -p 5433 -U nqerp -d ngoquyyen_erp -c ' *)",
+      "Bash(where psql *)",
+      "Bash(Get-Command psql *)",
+      "Bash(Get-ChildItem \"C:\\\\Program Files\\\\PostgreSQL\" -ErrorAction SilentlyContinue)",
+      "Bash(cat .env)",
+      "Bash(cat .env.local)",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); console.log\\('ag-grid-react:', pkg.dependencies['ag-grid-react'], 'ag-grid-community:', pkg.dependencies['ag-grid-community']\\)\")",
+      "Read(//dev/**)",
+      "Bash(sed -n '55,65p' \"app/\\(app\\)/du-an/[id]/phat-sinh/phat-sinh-client.tsx\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\api\\auth",
-      "c:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\(app)\\master-data\\projects"
+      "c:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\(app)\\master-data\\projects",
+      "c:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\(app)\\du-an"
     ]
   }
 }
