@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Master Data (Entities, Suppliers, Contractors, Projects, Items)"
-status: pending
+status: completed
 priority: P1
 effort: "1w"
 dependencies: [1]

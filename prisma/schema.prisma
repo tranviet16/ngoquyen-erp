@@ -87,3 +87,99 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+model Entity {
+  id        Int       @id @default(autoincrement())
+  name      String
+  type      String    // "company" | "person"
+  note      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Partial unique enforced via raw SQL: entities_name_active_unique WHERE "deletedAt" IS NULL
+  @@index([name])
+  @@map("entities")
+}
+
+model Supplier {
+  id        Int       @id @default(autoincrement())
+  name      String
+  taxCode   String?
+  phone     String?
+  address   String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Partial unique enforced via raw SQL: suppliers_name_active_unique WHERE "deletedAt" IS NULL
+  @@index([name])
+  @@map("suppliers")
+}
+
+model Contractor {
+  id        Int       @id @default(autoincrement())
+  name      String
+  leader    String?
+  contact   String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Partial unique enforced via raw SQL: contractors_name_active_unique WHERE "deletedAt" IS NULL
+  @@index([name])
+  @@map("contractors")
+}
+
+model Project {
+  id            Int               @id @default(autoincrement())
+  code          String
+  name          String
+  ownerInvestor String?
+  contractValue Decimal?          @db.Decimal(18, 2)
+  startDate     DateTime?
+  endDate       DateTime?
+  status        String            @default("active")
+  deletedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  categories ProjectCategory[]
+
+  // Partial unique enforced via raw SQL: projects_code_active_unique WHERE "deletedAt" IS NULL
+  @@index([code])
+  @@map("projects")
+}
+
+model ProjectCategory {
+  id        Int       @id @default(autoincrement())
+  projectId Int
+  code      String
+  name      String
+  sortOrder Int       @default(0)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  // Partial unique enforced via raw SQL: project_categories_projectid_code_active_unique WHERE "deletedAt" IS NULL
+  @@index([projectId, code])
+  @@map("project_categories")
+}
+
+model Item {
+  id        Int       @id @default(autoincrement())
+  code      String
+  name      String
+  unit      String
+  type      String    // "material" | "labor" | "machine"
+  note      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Partial unique enforced via raw SQL: items_code_active_unique WHERE "deletedAt" IS NULL
+  @@index([code])
+  @@map("items")
+}

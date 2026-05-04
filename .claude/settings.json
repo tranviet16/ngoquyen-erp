@@ -50,10 +50,19 @@
       "Bash(curl -s -c /tmp/nq_fresh.txt -X POST http://localhost:3001/api/auth/sign-in/email -H 'Content-Type: application/json' -d '{\"email\":\"admin@nq.local\",\"password\":\"changeme123\"}' -w '\\\\n%{http_code}')",
       "Bash(curl -s -b /tmp/nq_fresh.txt -o /dev/null -w \"Authenticated: %{http_code}\\\\n\" http://localhost:3001/master-data)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git -c user.name=dev -c user.email=dev@ngoquyyen.local commit -m 'feat: bootstrap erp phase 1 - auth, rbac, audit log, docker *)",
+      "Bash(node -e \"console.log\\(require\\('@hookform/resolvers/package.json'\\).version\\)\")",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes, reset the dev database\" npx prisma migrate reset --force)",
+      "Bash(npx tsx *)",
+      "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d ngoquyyen_erp -c 'ALTER TABLE \"project_categories\" ALTER COLUMN \"updatedAt\" SET DEFAULT CURRENT_TIMESTAMP;')",
+      "PowerShell($env:PGPASSWORD=\"postgres\"; psql -h localhost -p 5433 -U postgres -d ngoquyyen_erp -c 'ALTER TABLE \\\\\"project_categories\\\\\" ALTER COLUMN \\\\\"updatedAt\\\\\" SET DEFAULT CURRENT_TIMESTAMP;')",
+      "Bash(npx next *)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
-      "C:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\api\\auth"
+      "C:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\api\\auth",
+      "c:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\(app)\\master-data\\projects"
     ]
   }
 }
