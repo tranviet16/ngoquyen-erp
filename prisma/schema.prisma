@@ -355,6 +355,49 @@ model ProjectSettings {
   @@map("project_settings")
 }
 
+// ─── Vật tư theo NCC Models (Phase 4) ────────────────────────────────────────
+
+model SupplierDeliveryDaily {
+  id         Int       @id @default(autoincrement())
+  supplierId Int
+  projectId  Int?
+  date       DateTime
+  itemId     Int
+  qty        Decimal   @db.Decimal(18, 4)
+  unit       String    // snapshot from Item.unit at entry time
+  cbVatTu    String?   // Cán bộ vật tư
+  chiHuyCt   String?   // Chỉ huy công trường
+  keToan     String?   // Kế toán
+  note       String?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now())
+
+  @@index([supplierId, date])
+  @@index([supplierId, itemId])
+  @@map("supplier_delivery_daily")
+}
+
+model SupplierReconciliation {
+  id                Int       @id @default(autoincrement())
+  supplierId        Int
+  periodFrom        DateTime
+  periodTo          DateTime
+  openingBalance    Decimal   @db.Decimal(18, 2)
+  totalIn           Decimal   @db.Decimal(18, 2)
+  totalPaid         Decimal   @db.Decimal(18, 2)
+  closingBalance    Decimal   @db.Decimal(18, 2)
+  signedBySupplier  Boolean   @default(false)
+  signedDate        DateTime?
+  note              String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now())
+
+  @@index([supplierId, periodFrom])
+  @@map("supplier_reconciliations")
+}
+
 // ─── Ledger Models (Phase 5 — Công nợ Vật tư / Nhân công) ───────────────────
 
 model LedgerTransaction {
@@ -408,4 +451,44 @@ model LedgerOpeningBalance {
   // Opening balance is set once per (ledgerType, entity, party, project) — not soft-deletable
   @@unique([ledgerType, entityId, partyId, projectId])
   @@map("ledger_opening_balances")
+}
+
+// ─── SL-DT Models (Phase 7 — Sản lượng / Doanh thu) ────────────────────────
+
+model SlDtTarget {
+  // Chỉ tiêu sản lượng & doanh thu theo (project, year, month)
+  // SL = giá trị nghiệm thu nội bộ (amountInternalVnd)
+  // DT = giá trị nghiệm thu CĐT   (amountCdtVnd) + thu tiền CĐT
+  id        Int      @id @default(autoincrement())
+  projectId Int
+  year      Int
+  month     Int      // 1–12
+  slTarget  Decimal  @db.Decimal(18, 2) // sản lượng kế hoạch (VNĐ)
+  dtTarget  Decimal  @db.Decimal(18, 2) // doanh thu kế hoạch (VNĐ)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Partial unique enforced via raw SQL: sl_dt_targets_project_year_month_unique WHERE 1=1
+  @@index([projectId, year, month])
+  @@map("sl_dt_targets")
+}
+
+model PaymentSchedule {
+  // Tiến độ nộp tiền của chủ đầu tư theo từng đợt
+  id           Int       @id @default(autoincrement())
+  projectId    Int
+  batch        String    // "Đợt 1", "Đợt 2", …
+  planDate     DateTime
+  planAmount   Decimal   @db.Decimal(18, 2)
+  actualDate   DateTime?
+  actualAmount Decimal?  @db.Decimal(18, 2)
+  status       String    @default("pending") // pending|paid|overdue
+  note         String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now())
+
+  @@index([projectId])
+  @@map("payment_schedules")
 }
