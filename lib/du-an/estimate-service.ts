@@ -43,6 +43,8 @@ export async function createEstimate(input: EstimateInput) {
     },
   });
   revalidatePath(`/du-an/${data.projectId}/du-toan`);
+  revalidatePath(`/du-an/${data.projectId}/dinh-muc`);
+  revalidatePath(`/du-an/${data.projectId}/du-toan-dieu-chinh`);
   return record;
 }
 
@@ -65,6 +67,8 @@ export async function updateEstimate(id: number, input: EstimateInput) {
     },
   });
   revalidatePath(`/du-an/${data.projectId}/du-toan`);
+  revalidatePath(`/du-an/${data.projectId}/dinh-muc`);
+  revalidatePath(`/du-an/${data.projectId}/du-toan-dieu-chinh`);
   return record;
 }
 
@@ -76,5 +80,7 @@ export async function softDeleteEstimate(id: number, projectId: number) {
     data: { deletedAt: new Date() },
   });
   revalidatePath(`/du-an/${projectId}/du-toan`);
+  revalidatePath(`/du-an/${projectId}/dinh-muc`);
+  revalidatePath(`/du-an/${projectId}/du-toan-dieu-chinh`);
   return record;
 }

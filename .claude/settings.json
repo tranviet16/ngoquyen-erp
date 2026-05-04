@@ -67,7 +67,11 @@
       "Bash(cat .env.local)",
       "Bash(node -e \"const pkg = require\\('./package.json'\\); console.log\\('ag-grid-react:', pkg.dependencies['ag-grid-react'], 'ag-grid-community:', pkg.dependencies['ag-grid-community']\\)\")",
       "Read(//dev/**)",
-      "Bash(sed -n '55,65p' \"app/\\(app\\)/du-an/[id]/phat-sinh/phat-sinh-client.tsx\")"
+      "Bash(sed -n '55,65p' \"app/\\(app\\)/du-an/[id]/phat-sinh/phat-sinh-client.tsx\")",
+      "Bash(git commit *)",
+      "Bash(PGPASSWORD=nqerp_secret psql -h localhost -p 5433 -U nqerp -d ngoquyyen_erp -c \"SELECT pg_get_viewdef\\('vw_project_norm', true\\);\")",
+      "Bash(where psql.exe)",
+      "Read(//c/Program Files/**)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Admin\\Desktop\\ngoquyyen-erp\\app\\api\\auth",
