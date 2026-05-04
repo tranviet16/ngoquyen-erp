@@ -1,6 +1,6 @@
 import { getMaterialDebtMatrix } from "@/lib/cong-no-vt/material-ledger-service";
 import { prisma } from "@/lib/prisma";
-import { DebtMatrix } from "@/components/cong-no-vt/debt-matrix";
+import { DebtMatrix } from "@/components/ledger/debt-matrix";
 
 export default async function ChiTietPage() {
   const [matrixRows, entities, suppliers] = await Promise.all([
@@ -10,8 +10,6 @@ export default async function ChiTietPage() {
   ]);
 
   const supplierMap = Object.fromEntries(suppliers.map((s) => [s.id, s.name]));
-
-  // Fill partyName from supplier lookup
   const rows = matrixRows.map((r) => ({ ...r, partyName: supplierMap[r.partyId] ?? `NCC #${r.partyId}` }));
 
   return (
@@ -21,7 +19,7 @@ export default async function ChiTietPage() {
         <p className="text-sm text-muted-foreground">Pivot Chủ thể × NCC, mỗi ô hiển thị TT / HĐ song song</p>
       </div>
 
-      <DebtMatrix rows={rows} entities={entities} />
+      <DebtMatrix rows={rows} entities={entities} partyLabel="NCC" />
     </div>
   );
 }

@@ -1,18 +1,27 @@
-import { listMaterialTransactions, createMaterialTransaction, updateMaterialTransaction, softDeleteMaterialTransaction } from "@/lib/cong-no-vt/material-ledger-service";
+import {
+  listLaborTransactions,
+  createLaborTransaction,
+  updateLaborTransaction,
+  softDeleteLaborTransaction,
+} from "@/lib/cong-no-nc/labor-ledger-service";
 import { prisma } from "@/lib/prisma";
 import { TransactionGrid, type TransactionRow } from "@/components/ledger/transaction-grid";
 
-export default async function NhapLieuPage() {
-  const [txResult, entities, suppliers, projects, items] = await Promise.all([
-    listMaterialTransactions({ pageSize: 200 }),
+export default async function NhapLieuNcPage() {
+  const [txResult, entities, contractors, projects, items] = await Promise.all([
+    listLaborTransactions({ pageSize: 200 }),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.supplier.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.contractor.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.item.findMany({ where: { deletedAt: null, type: "material" }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.item.findMany({
+      where: { deletedAt: null, type: { in: ["labor", "machine"] } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const entityMap = Object.fromEntries(entities.map((e) => [e.id, e.name]));
-  const supplierMap = Object.fromEntries(suppliers.map((s) => [s.id, s.name]));
+  const contractorMap = Object.fromEntries(contractors.map((c) => [c.id, c.name]));
   const projectMap = Object.fromEntries(projects.map((p) => [p.id, p.name]));
 
   const rows: TransactionRow[] = txResult.items.map((t) => ({
@@ -22,7 +31,7 @@ export default async function NhapLieuPage() {
     entityId: t.entityId,
     entityName: entityMap[t.entityId] ?? `#${t.entityId}`,
     partyId: t.partyId,
-    partyName: supplierMap[t.partyId] ?? `#${t.partyId}`,
+    partyName: contractorMap[t.partyId] ?? `#${t.partyId}`,
     projectId: t.projectId,
     projectName: t.projectId ? (projectMap[t.projectId] ?? `#${t.projectId}`) : null,
     itemId: t.itemId,
@@ -43,21 +52,21 @@ export default async function NhapLieuPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Nhập liệu công nợ vật tư</h1>
-        <p className="text-sm text-muted-foreground">Giao dịch TT/HĐ: Lấy hàng, Thanh toán, Điều chỉnh</p>
+        <h1 className="text-2xl font-bold">Nhập liệu công nợ nhân công</h1>
+        <p className="text-sm text-muted-foreground">Giao dịch TT/HĐ: Lấy hàng, Thanh toán, Điều chỉnh với đội thi công</p>
       </div>
 
       <TransactionGrid
         initialData={rows}
-        partyLabel="Nhà cung cấp"
-        title="Nhập liệu công nợ vật tư"
+        partyLabel="Đội thi công"
+        title="Nhập liệu công nợ nhân công"
         entities={entities}
-        partyOptions={suppliers}
+        partyOptions={contractors}
         projects={projects}
         items={items}
-        onCreate={createMaterialTransaction}
-        onUpdate={updateMaterialTransaction}
-        onDelete={softDeleteMaterialTransaction}
+        onCreate={createLaborTransaction}
+        onUpdate={updateLaborTransaction}
+        onDelete={softDeleteLaborTransaction}
       />
     </div>
   );

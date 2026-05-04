@@ -1,7 +1,8 @@
 ---
 phase: 6
 title: "Module: Công nợ Nhân công (reuse LedgerService)"
-status: pending
+status: completed
+implemented: "2026-05-04"
 priority: P1
 effort: "0.5w"
 dependencies: [5]

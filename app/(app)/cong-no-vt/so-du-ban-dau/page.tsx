@@ -1,6 +1,6 @@
-import { listMaterialOpeningBalances } from "@/lib/cong-no-vt/material-ledger-service";
+import { listMaterialOpeningBalances, setMaterialOpeningBalance, deleteMaterialOpeningBalance } from "@/lib/cong-no-vt/material-ledger-service";
 import { prisma } from "@/lib/prisma";
-import { OpeningBalanceClient } from "./so-du-ban-dau-client";
+import { OpeningBalanceClient } from "@/components/ledger/opening-balance-client";
 
 export default async function SoDuBanDauPage() {
   const [balances, entities, suppliers] = await Promise.all([
@@ -34,7 +34,10 @@ export default async function SoDuBanDauPage() {
       <OpeningBalanceClient
         initialData={rows}
         entities={entities}
-        suppliers={suppliers}
+        partyOptions={suppliers}
+        partyLabel="Nhà cung cấp"
+        onSet={setMaterialOpeningBalance}
+        onDelete={deleteMaterialOpeningBalance}
       />
     </div>
   );

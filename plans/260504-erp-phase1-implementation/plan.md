@@ -26,7 +26,7 @@ Số hóa nguyên trạng 6 file Excel SOP thành web app nội bộ (<20 user),
 | 3 | [Module: Quản lý Dự án Xây dựng](phase-03-module-du-an.md) | completed | P1 | 3w | 2 |
 | 4 | [Module: Vật tư theo NCC (per-supplier)](phase-04-module-vat-tu-ncc.md) | pending | P2 | 1w | 2 |
 | 5 | [Module: Công nợ Vật tư + LedgerService core](phase-05-module-cong-no-vat-tu.md) | completed | P1 | 1.5w | 2 |
-| 6 | [Module: Công nợ Nhân công (reuse Ledger)](phase-06-module-cong-no-nhan-cong.md) | pending | P1 | 0.5w | 5 |
+| 6 | [Module: Công nợ Nhân công (reuse Ledger)](phase-06-module-cong-no-nhan-cong.md) | completed | P1 | 0.5w | 5 |
 | 7 | [Module: Sản lượng – Doanh thu](phase-07-module-sl-dt.md) | pending | P2 | 1w | 3 |
 | 8 | [Module: Quản lý Tài chính NQ + Dashboard](phase-08-module-tai-chinh.md) | pending | P2 | 1.5w | 5,6 |
 | 9 | [Excel Import (one-shot) + Export (PDF/Excel)](phase-09-import-export.md) | pending | P1 | 1w | 8 |
