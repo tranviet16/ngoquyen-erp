@@ -1,0 +1,126 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/rbac";
+import { auth } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
+
+async function getRole(): Promise<string | null> {
+  try {
+    const h = await headers();
+    const session = await auth.api.getSession({ headers: h });
+    return session?.user?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export interface JournalEntryInput {
+  date: string;
+  entryType: "thu" | "chi" | "chuyen_khoan";
+  amountVnd: string;
+  fromAccount?: string | null;
+  toAccount?: string | null;
+  expenseCategoryId?: number | null;
+  refModule?: string | null;
+  refId?: number | null;
+  description: string;
+  attachmentUrl?: string | null;
+  note?: string | null;
+}
+
+export interface JournalFilter {
+  dateFrom?: string;
+  dateTo?: string;
+  entryType?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listJournalEntries(filter: JournalFilter = {}) {
+  const { dateFrom, dateTo, entryType, page = 1, pageSize = 50 } = filter;
+  const where: Prisma.JournalEntryWhereInput = {
+    deletedAt: null,
+    ...(entryType ? { entryType } : {}),
+    ...(dateFrom || dateTo ? {
+      date: {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      },
+    } : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.journalEntry.findMany({
+      where,
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      include: { expenseCategory: { select: { id: true, name: true, code: true } } },
+    }),
+    prisma.journalEntry.count({ where }),
+  ]);
+
+  return { items, total, page, pageSize };
+}
+
+export async function createJournalEntry(input: JournalEntryInput) {
+  const role = await getRole();
+  requireRole(role, "ketoan");
+
+  const record = await prisma.journalEntry.create({
+    data: {
+      date: new Date(input.date),
+      entryType: input.entryType,
+      amountVnd: new Prisma.Decimal(input.amountVnd),
+      fromAccount: input.fromAccount ?? null,
+      toAccount: input.toAccount ?? null,
+      expenseCategoryId: input.expenseCategoryId ?? null,
+      refModule: input.refModule ?? null,
+      refId: input.refId ?? null,
+      description: input.description,
+      attachmentUrl: input.attachmentUrl ?? null,
+      note: input.note ?? null,
+    },
+  });
+
+  revalidatePath("/tai-chinh/nhat-ky");
+  revalidatePath("/tai-chinh");
+  return record;
+}
+
+export async function updateJournalEntry(id: number, input: JournalEntryInput) {
+  const role = await getRole();
+  requireRole(role, "ketoan");
+
+  const record = await prisma.journalEntry.update({
+    where: { id },
+    data: {
+      date: new Date(input.date),
+      entryType: input.entryType,
+      amountVnd: new Prisma.Decimal(input.amountVnd),
+      fromAccount: input.fromAccount ?? null,
+      toAccount: input.toAccount ?? null,
+      expenseCategoryId: input.expenseCategoryId ?? null,
+      refModule: input.refModule ?? null,
+      refId: input.refId ?? null,
+      description: input.description,
+      attachmentUrl: input.attachmentUrl ?? null,
+      note: input.note ?? null,
+    },
+  });
+
+  revalidatePath("/tai-chinh/nhat-ky");
+  revalidatePath("/tai-chinh");
+  return record;
+}
+
+export async function softDeleteJournalEntry(id: number) {
+  const role = await getRole();
+  requireRole(role, "admin");
+  await prisma.journalEntry.update({ where: { id }, data: { deletedAt: new Date() } });
+  revalidatePath("/tai-chinh/nhat-ky");
+  revalidatePath("/tai-chinh");
+}

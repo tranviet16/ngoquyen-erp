@@ -492,3 +492,108 @@ model PaymentSchedule {
   @@index([projectId])
   @@map("payment_schedules")
 }
+
+// ─── Tài chính NQ Models (Phase 8) ──────────────────────────────────────────
+
+model LoanContract {
+  id               Int            @id @default(autoincrement())
+  lenderName       String
+  principalVnd     Decimal        @db.Decimal(18, 2)
+  interestRatePct  Decimal        @db.Decimal(5, 4)  // e.g. 0.08 = 8%/năm
+  startDate        DateTime
+  endDate          DateTime
+  paymentSchedule  String         // "monthly" | "quarterly" | "bullet"
+  status           String         @default("active") // active|paid_off|terminated
+  contractDoc      String?
+  note             String?
+  deletedAt        DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @default(now())
+
+  payments         LoanPayment[]
+
+  @@index([status, endDate])
+  @@map("loan_contracts")
+}
+
+model LoanPayment {
+  id               Int          @id @default(autoincrement())
+  loanContractId   Int
+  dueDate          DateTime
+  principalDue     Decimal      @db.Decimal(18, 2)
+  interestDue      Decimal      @db.Decimal(18, 2)
+  paidDate         DateTime?
+  principalPaid    Decimal?     @db.Decimal(18, 2)
+  interestPaid     Decimal?     @db.Decimal(18, 2)
+  status           String       @default("pending") // pending|paid|overdue
+  note             String?
+  deletedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @default(now())
+
+  loanContract     LoanContract @relation(fields: [loanContractId], references: [id])
+
+  @@index([loanContractId, dueDate])
+  @@index([dueDate, status])
+  @@map("loan_payments")
+}
+
+model JournalEntry {
+  id                 Int               @id @default(autoincrement())
+  date               DateTime
+  entryType          String            // "thu" | "chi" | "chuyen_khoan"
+  amountVnd          Decimal           @db.Decimal(18, 2)
+  fromAccount        String?
+  toAccount          String?
+  expenseCategoryId  Int?
+  refModule          String?           // "loan" | "material" | "labor" | null
+  refId              Int?
+  description        String
+  attachmentUrl      String?
+  note               String?
+  deletedAt          DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @default(now())
+
+  expenseCategory    ExpenseCategory?  @relation(fields: [expenseCategoryId], references: [id])
+
+  @@index([date, entryType])
+  @@index([expenseCategoryId])
+  @@map("journal_entries")
+}
+
+model ExpenseCategory {
+  id        Int              @id @default(autoincrement())
+  code      String
+  name      String
+  parentId  Int?
+  level     Int              @default(0)
+  deletedAt DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @default(now())
+
+  entries   JournalEntry[]
+
+  @@index([parentId])
+  @@map("expense_categories")
+}
+
+model PayableReceivableAdjustment {
+  id          Int       @id @default(autoincrement())
+  date        DateTime
+  partyType   String    // "supplier" | "contractor" | "other"
+  partyName   String
+  projectId   Int?
+  type        String    // "payable" | "receivable"
+  amountVnd   Decimal   @db.Decimal(18, 2)
+  dueDate     DateTime?
+  status      String    @default("pending") // pending|paid|cancelled
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  @@index([type, status])
+  @@index([projectId])
+  @@map("payable_receivable_adjustments")
+}
