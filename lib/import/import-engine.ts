@@ -1,0 +1,160 @@
+/**
+ * Import Engine — orchestrates the full import pipeline.
+ *
+ * Flow:
+ *   upload .xlsx → sha256 hash → adapter.parse() → adapter.validate()
+ *   → save ImportRun (status=preview) → return preview to UI
+ *   → admin resolves conflicts (mapping) → commitImport()
+ *   → adapter.apply() in $transaction → update ImportRun (status=committed)
+ *
+ * Audit bypass note: adapter.apply() uses prisma.$executeRaw for bulk inserts.
+ * This intentionally bypasses the audit middleware extension — acceptable for
+ * one-shot historical migration. The ImportRun record itself provides a paper trail.
+ */
+
+import { prisma } from "@/lib/prisma";
+import { sha256Hex } from "./file-hash";
+import { getAdapter } from "./adapters/adapter-registry";
+import type { ParsedData, ResolvedMapping } from "./adapters/adapter-types";
+
+export interface PreviewResult {
+  runId: number;
+  adapterName: string;
+  fileName: string;
+  fileHash: string;
+  parsedData: ParsedData;
+  validationErrors: { rowIndex: number; field: string; message: string }[];
+  duplicateWarning: boolean; // true if same fileHash was already committed
+}
+
+export interface CommitResult {
+  runId: number;
+  rowsImported: number;
+  rowsSkipped: number;
+  errors: { rowIndex: number; message: string }[];
+}
+
+/**
+ * Step 1: Parse + validate without writing to DB.
+ * Creates an ImportRun record with status="preview".
+ */
+export async function previewImport(
+  fileBuffer: Buffer,
+  adapterName: string,
+  fileName: string,
+  createdBy: string
+): Promise<PreviewResult> {
+  const adapter = getAdapter(adapterName);
+  if (!adapter) throw new Error(`Unknown adapter: ${adapterName}`);
+
+  const fileHash = sha256Hex(fileBuffer);
+
+  // Check if same file was already committed
+  const committed = await prisma.importRun.findFirst({
+    where: { fileHash, status: "committed" },
+  });
+
+  const parsedData = await adapter.parse(fileBuffer);
+  const validation = adapter.validate(parsedData);
+
+  // Upsert ImportRun in preview state
+  const run = await prisma.importRun.create({
+    data: {
+      fileName,
+      fileHash,
+      adapter: adapterName,
+      status: "preview",
+      rowsTotal: parsedData.rows.length,
+      errors: validation.errors.length > 0
+        ? (validation.errors as unknown as Parameters<typeof prisma.importRun.create>[0]["data"]["errors"])
+        : undefined,
+      createdBy,
+    },
+  });
+
+  return {
+    runId: run.id,
+    adapterName,
+    fileName,
+    fileHash,
+    parsedData,
+    validationErrors: validation.errors,
+    duplicateWarning: !!committed,
+  };
+}
+
+/**
+ * Step 2: Commit — write rows to DB inside a transaction.
+ * Updates ImportRun to status="committed" on success or "failed" on error.
+ */
+export async function commitImport(
+  runId: number,
+  fileBuffer: Buffer,
+  mapping: ResolvedMapping
+): Promise<CommitResult> {
+  const run = await prisma.importRun.findUnique({ where: { id: runId } });
+  if (!run) throw new Error(`ImportRun #${runId} not found`);
+  if (run.status === "committed") throw new Error("Import run already committed");
+
+  const adapter = getAdapter(run.adapter);
+  if (!adapter) throw new Error(`Unknown adapter: ${run.adapter}`);
+
+  // Re-parse (buffer may have changed — use stored fileHash to detect mismatch)
+  const currentHash = sha256Hex(fileBuffer);
+  if (currentHash !== run.fileHash) {
+    throw new Error("File hash mismatch — please re-upload the original file");
+  }
+
+  const parsedData = await adapter.parse(fileBuffer);
+
+  try {
+    // Each commit runs inside a single transaction per adapter
+    const summary = await prisma.$transaction(async (tx) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return adapter.apply(parsedData, mapping, tx as any);
+    });
+
+    await prisma.importRun.update({
+      where: { id: runId },
+      data: {
+        status: "committed",
+        rowsImported: summary.rowsImported,
+        rowsSkipped: summary.rowsSkipped,
+        errors: summary.errors.length > 0
+          ? (summary.errors as unknown as Parameters<typeof prisma.importRun.update>[0]["data"]["errors"])
+          : undefined,
+        mapping: mapping as unknown as Parameters<typeof prisma.importRun.update>[0]["data"]["mapping"],
+        committedAt: new Date(),
+      },
+    });
+
+    return {
+      runId,
+      rowsImported: summary.rowsImported,
+      rowsSkipped: summary.rowsSkipped,
+      errors: summary.errors,
+    };
+  } catch (err) {
+    await prisma.importRun.update({
+      where: { id: runId },
+      data: {
+        status: "failed",
+        errors: [{ rowIndex: -1, message: String(err) }] as unknown as Parameters<typeof prisma.importRun.update>[0]["data"]["errors"],
+      },
+    });
+    throw err;
+  }
+}
+
+/** List recent import runs for history table */
+export async function listImportRuns(limit = 50) {
+  return prisma.importRun.findMany({
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+}
+
+/** Get single run with full error details */
+export async function getImportRun(id: number) {
+  return prisma.importRun.findUnique({ where: { id } });
+}

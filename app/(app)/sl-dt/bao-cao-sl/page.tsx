@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSlDtReport } from "@/lib/sl-dt/report-service";
+import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string; projectId?: string }>;
@@ -34,9 +35,20 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
-        <p className="text-sm text-muted-foreground">So sánh SL kế hoạch vs thực hiện — SL = giá trị nghiệm thu nội bộ</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
+          <p className="text-sm text-muted-foreground">So sánh SL kế hoạch vs thực hiện — SL = giá trị nghiệm thu nội bộ</p>
+        </div>
+        <div className="flex gap-2">
+          <ExcelExportButton
+            template="sl-dt"
+            params={{ year, month, projectId }}
+            label="Xuất Excel"
+            filename={`sl-dt-${year}.xlsx`}
+          />
+          <PrintButton />
+        </div>
       </div>
 
       <form className="flex gap-3 items-end flex-wrap">

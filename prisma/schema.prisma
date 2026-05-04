@@ -578,6 +578,28 @@ model ExpenseCategory {
   @@map("expense_categories")
 }
 
+// ─── Import Runs (Phase 9 — one-shot historical migration tracking) ──────────
+
+model ImportRun {
+  id           Int       @id @default(autoincrement())
+  fileName     String
+  fileHash     String    // sha256 of uploaded file for idempotency check
+  adapter      String    // "cong-no-vat-tu" | "du-an-xay-dung" | "tai-chinh-nq" | etc
+  status       String    @default("pending") // pending|preview|committed|failed
+  rowsTotal    Int       @default(0)
+  rowsImported Int       @default(0)
+  rowsSkipped  Int       @default(0)
+  errors       Json?     // array of { row, message }
+  mapping      Json?     // user-resolved conflict mappings { sourceKey: targetId }
+  createdBy    String
+  createdAt    DateTime  @default(now())
+  committedAt  DateTime?
+
+  @@index([adapter, status])
+  @@index([createdAt])
+  @@map("import_runs")
+}
+
 model PayableReceivableAdjustment {
   id          Int       @id @default(autoincrement())
   date        DateTime

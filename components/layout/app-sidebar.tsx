@@ -51,6 +51,11 @@ const NAV_ITEMS = [
     href: "/tai-chinh",
     icon: "TC",
   },
+  {
+    label: "Nhap du lieu (Admin)",
+    href: "/admin/import",
+    icon: "IM",
+  },
 ];
 
 export function AppSidebar() {

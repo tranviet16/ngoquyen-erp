@@ -2,6 +2,7 @@ import { getMaterialMonthlyReport } from "@/lib/cong-no-vt/material-ledger-servi
 import { prisma } from "@/lib/prisma";
 import { MonthlyReport } from "@/components/ledger/monthly-report";
 import { BaoCaoThangFilter } from "./bao-cao-thang-filter";
+import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 
 interface Props {
   searchParams: Promise<{ year?: string; entityId?: string }>;
@@ -21,9 +22,20 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Báo cáo tháng - Vật tư</h1>
-        <p className="text-sm text-muted-foreground">Lấy hàng / Thanh toán / Điều chỉnh theo tháng</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Báo cáo tháng - Vật tư</h1>
+          <p className="text-sm text-muted-foreground">Lấy hàng / Thanh toán / Điều chỉnh theo tháng</p>
+        </div>
+        <div className="flex gap-2">
+          <ExcelExportButton
+            template="cong-no-monthly"
+            params={{ ledgerType: "material", year, entityId }}
+            label="Xuất Excel"
+            filename={`cong-no-vt-thang-${year}.xlsx`}
+          />
+          <PrintButton />
+        </div>
       </div>
 
       <BaoCaoThangFilter currentYear={year} currentEntityId={entityId} entities={entities} />
