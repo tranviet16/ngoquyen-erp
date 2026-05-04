@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ngoquyyen-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ngoquyyen_erp
+      POSTGRES_USER: nqerp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nqerp -d ngoquyyen_erp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  nextjs:
+    build:
+      context: ..
+      dockerfile: Dockerfile.prod
+    container_name: ngoquyyen-nextjs
+    restart: always
+    env_file:
+      - ../.env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://nqerp:${POSTGRES_PASSWORD}@postgres:5432/ngoquyyen_erp?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - internal
+      - external
+
+  nginx:
+    image: nginx:alpine
+    container_name: ngoquyyen-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/webroot:/var/www/certbot:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - nextjs
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && curl -f http://localhost/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - external
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: ngoquyyen-uptime
+    restart: always
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+    networks:
+      - external
+
+volumes:
+  postgres_data:
+    name: ngoquyyen_postgres_data
+  uptime_kuma_data:
+    name: ngoquyyen_uptime_data
+
+networks:
+  internal:
+    name: ngoquyyen_internal
+    internal: true
+  external:
+    name: ngoquyyen_external
