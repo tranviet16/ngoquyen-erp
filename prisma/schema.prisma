@@ -354,3 +354,58 @@ model ProjectSettings {
 
   @@map("project_settings")
 }
+
+// ─── Ledger Models (Phase 5 — Công nợ Vật tư / Nhân công) ───────────────────
+
+model LedgerTransaction {
+  id              Int       @id @default(autoincrement())
+  ledgerType      String    // "material" | "labor"
+  date            DateTime
+  transactionType String    // "lay_hang" | "thanh_toan" | "dieu_chinh"
+  entityId        Int       // Chủ Thể
+  partyId         Int       // supplier_id (material) | contractor_id (labor)
+  projectId       Int?
+  itemId          Int?      // null if paying total (không link item cụ thể)
+
+  // Thực tế (TT)
+  amountTt        Decimal   @default(0) @db.Decimal(18, 2)
+  vatPctTt        Decimal   @default(0) @db.Decimal(5, 4)
+  vatTt           Decimal   @default(0) @db.Decimal(18, 2)
+  totalTt         Decimal   @default(0) @db.Decimal(18, 2)
+
+  // Hóa đơn (HĐ)
+  amountHd        Decimal   @default(0) @db.Decimal(18, 2)
+  vatPctHd        Decimal   @default(0) @db.Decimal(5, 4)
+  vatHd           Decimal   @default(0) @db.Decimal(18, 2)
+  totalHd         Decimal   @default(0) @db.Decimal(18, 2)
+
+  invoiceNo       String?
+  invoiceDate     DateTime?
+  content         String?
+  status          String    @default("pending") // pending|approved|paid
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([ledgerType, entityId, partyId, projectId, date])
+  @@map("ledger_transactions")
+}
+
+model LedgerOpeningBalance {
+  id          Int      @id @default(autoincrement())
+  ledgerType  String   // "material" | "labor"
+  entityId    Int      // Chủ Thể
+  partyId     Int      // supplier_id | contractor_id
+  projectId   Int?
+  balanceTt   Decimal  @db.Decimal(18, 2)
+  balanceHd   Decimal  @db.Decimal(18, 2)
+  asOfDate    DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Opening balance is set once per (ledgerType, entity, party, project) — not soft-deletable
+  @@unique([ledgerType, entityId, partyId, projectId])
+  @@map("ledger_opening_balances")
+}
