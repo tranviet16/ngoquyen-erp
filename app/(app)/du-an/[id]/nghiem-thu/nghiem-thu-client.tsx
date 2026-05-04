@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
+import { toast } from "sonner";
+import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
 import { AgGridBase, VND_COL_DEF, vndFormatter } from "@/components/ag-grid-base";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,17 +104,61 @@ export function NghiemThuClient({ projectId, initialData, categories }: Props) {
   const totalCdt = initialData.reduce((s, r) => s + Number(r.amountCdtVnd), 0);
   const totalInternal = initialData.reduce((s, r) => s + Number(r.amountInternalVnd), 0);
 
+  /**
+   * Inline cell edit handler — called by AG Grid when user commits a cell edit.
+   * Editable: checkItem, inspector, result, defectCount, amountCdtVnd, amountInternalVnd, acceptanceBatch, note.
+   * Date columns (planEnd, actualEnd) are read-only inline — edit via dialog.
+   */
+  async function handleCellValueChanged(event: CellValueChangedEvent<AcceptanceRow>) {
+    const row = event.data;
+    try {
+      const input: AcceptanceInput = {
+        projectId,
+        categoryId: row.categoryId,
+        checkItem: row.checkItem,
+        planEnd: row.planEnd ? new Date(row.planEnd).toISOString().split("T")[0] : undefined,
+        actualEnd: row.actualEnd ? new Date(row.actualEnd).toISOString().split("T")[0] : undefined,
+        inspector: row.inspector ?? undefined,
+        result: (row.result || undefined) as AcceptanceInput["result"],
+        defectCount: Number(row.defectCount) || 0,
+        amountCdtVnd: Number(row.amountCdtVnd) || 0,
+        amountInternalVnd: Number(row.amountInternalVnd) || 0,
+        acceptanceBatch: row.acceptanceBatch ?? undefined,
+        note: row.note ?? undefined,
+      };
+      await updateAcceptance(row.id, input);
+      toast.success("Đã lưu");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+      startTransition(() => router.refresh());
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
-    { field: "checkItem", headerName: "Hạng mục kiểm tra", flex: 2, minWidth: 180 },
+    { field: "checkItem", headerName: "Hạng mục kiểm tra", flex: 2, minWidth: 180, editable: true },
     { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? "", width: 140 },
-    { field: "acceptanceBatch", headerName: "Đợt NT", width: 90 },
+    { field: "acceptanceBatch", headerName: "Đợt NT", width: 90, editable: true },
     { field: "planEnd", headerName: "Ngày KH", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 110 },
     { field: "actualEnd", headerName: "Ngày TT", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 110 },
-    { field: "inspector", headerName: "Người KT", width: 120 },
-    { field: "result", headerName: "Kết quả", valueFormatter: (p) => RESULT_LABELS[p.value as string] ?? (p.value ?? ""), width: 110 },
-    { field: "amountCdtVnd", headerName: "SL NT CĐT", ...VND_COL_DEF, width: 130 },
-    { field: "amountInternalVnd", headerName: "SL NT nội bộ", ...VND_COL_DEF, width: 130 },
+    { field: "inspector", headerName: "Người KT", width: 120, editable: true },
+    {
+      field: "result", headerName: "Kết quả",
+      valueFormatter: (p) => RESULT_LABELS[p.value as string] ?? (p.value ?? ""),
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: ["", ...Object.keys(RESULT_LABELS)] },
+      editable: true, width: 110,
+    },
+    {
+      field: "defectCount", headerName: "Lỗi",
+      type: "numericColumn", cellStyle: { textAlign: "right" },
+      editable: true, width: 70,
+      valueParser: (p) => parseInt(p.newValue, 10) || 0,
+    },
+    { field: "amountCdtVnd", headerName: "SL NT CĐT", ...VND_COL_DEF, width: 130, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
+    { field: "amountInternalVnd", headerName: "SL NT nội bộ", ...VND_COL_DEF, width: 130, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
+    { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 100, editable: true },
     {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
@@ -137,7 +182,16 @@ export function NghiemThuClient({ projectId, initialData, categories }: Props) {
         </div>
         <Button onClick={() => setCreateOpen(true)}>Thêm nghiệm thu</Button>
       </div>
-      <AgGridBase rowData={initialData} columnDefs={colDefs} height={500} />
+
+      {/* Editable: checkItem, inspector, result, defectCount, amountCdtVnd, amountInternalVnd, acceptanceBatch, note.
+          planEnd/actualEnd are read-only inline — edit via dialog. */}
+      <AgGridBase
+        rowData={initialData}
+        columnDefs={colDefs}
+        height={500}
+        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+      />
+
       <CrudDialog title="Thêm nghiệm thu" open={createOpen} onOpenChange={setCreateOpen}>
         <AcceptanceForm projectId={projectId} categories={categories} onSubmit={async (d) => { await createAcceptance(d); setCreateOpen(false); startTransition(() => router.refresh()); }} />
       </CrudDialog>

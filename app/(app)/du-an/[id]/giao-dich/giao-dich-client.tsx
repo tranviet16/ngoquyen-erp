@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
+import { toast } from "sonner";
+import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
 import { AgGridBase, VND_COL_DEF, NUMBER_COL_DEF, vndFormatter } from "@/components/ag-grid-base";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,19 +119,63 @@ export function GiaoDichClient({ projectId, initialData, categories }: Props) {
   const totalTt = initialData.reduce((s, r) => s + Number(r.amountTt), 0);
   const totalHd = initialData.reduce((s, r) => s + Number(r.amountHd), 0);
 
+  /**
+   * Inline cell edit handler — called by AG Grid when user commits a cell edit.
+   * Editable: itemName, partyName, qty, unit, unitPriceHd, unitPriceTt, invoiceNo, status, note.
+   * amountHd/amountTt are computed server-side from qty * unitPrice via Prisma.Decimal — not editable inline.
+   * date, transactionType, categoryId, itemCode use dialog (FK / structural fields).
+   */
+  async function handleCellValueChanged(event: CellValueChangedEvent<TxRow>) {
+    const row = event.data;
+    try {
+      const input: TransactionInput = {
+        projectId,
+        date: new Date(row.date).toISOString().split("T")[0],
+        transactionType: row.transactionType as TransactionInput["transactionType"],
+        categoryId: row.categoryId,
+        itemCode: row.itemCode,
+        itemName: row.itemName,
+        partyName: row.partyName ?? undefined,
+        qty: Number(row.qty),
+        unit: row.unit,
+        unitPriceHd: Number(row.unitPriceHd),
+        unitPriceTt: Number(row.unitPriceTt),
+        invoiceNo: row.invoiceNo ?? undefined,
+        status: row.status as TransactionInput["status"],
+        note: row.note ?? undefined,
+      };
+      await updateTransaction(row.id, input);
+      toast.success("Đã lưu");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+      startTransition(() => router.refresh());
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
     { field: "date", headerName: "Ngày", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 100 },
     { field: "transactionType", headerName: "Loại", valueFormatter: (p) => TYPE_LABELS[p.value as string] ?? "", width: 100 },
     { field: "itemCode", headerName: "Mã hàng", width: 100 },
-    { field: "itemName", headerName: "Tên hàng", flex: 2, minWidth: 150 },
+    { field: "itemName", headerName: "Tên hàng", flex: 2, minWidth: 150, editable: true },
     { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? "", width: 130 },
-    { field: "partyName", headerName: "Nhà cung cấp", width: 140 },
-    { field: "qty", headerName: "SL", ...NUMBER_COL_DEF, width: 90 },
-    { field: "unit", headerName: "ĐVT", width: 60 },
+    { field: "partyName", headerName: "Nhà cung cấp", width: 140, editable: true },
+    { field: "qty", headerName: "SL", ...NUMBER_COL_DEF, width: 90, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
+    { field: "unit", headerName: "ĐVT", width: 60, editable: true },
+    { field: "unitPriceHd", headerName: "ĐG HĐ", ...VND_COL_DEF, width: 120, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
+    { field: "unitPriceTt", headerName: "ĐG TT", ...VND_COL_DEF, width: 120, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
     { field: "amountHd", headerName: "Giá trị HĐ", ...VND_COL_DEF, width: 130 },
     { field: "amountTt", headerName: "Giá trị TT", ...VND_COL_DEF, width: 130 },
-    { field: "status", headerName: "TT", valueFormatter: (p) => STATUS_LABELS[p.value as string] ?? "", width: 100 },
+    { field: "invoiceNo", headerName: "Số HĐ", width: 100, editable: true },
+    {
+      field: "status", headerName: "TT",
+      valueFormatter: (p) => STATUS_LABELS[p.value as string] ?? "",
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: Object.keys(STATUS_LABELS) },
+      editable: true, width: 100,
+    },
+    { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 100, editable: true },
     {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
@@ -167,7 +212,16 @@ export function GiaoDichClient({ projectId, initialData, categories }: Props) {
         </div>
         <Button onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
       </div>
-      <AgGridBase rowData={initialData} columnDefs={colDefs} height={500} />
+
+      {/* Editable: itemName, partyName, qty, unit, unitPriceHd, unitPriceTt, invoiceNo, status, note.
+          amountHd/amountTt recomputed server-side via Prisma.Decimal on each update. */}
+      <AgGridBase
+        rowData={initialData}
+        columnDefs={colDefs}
+        height={500}
+        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+      />
+
       <CrudDialog title="Thêm giao dịch" open={createOpen} onOpenChange={setCreateOpen}>
         <TransactionForm projectId={projectId} categories={categories} onSubmit={handleCreate} />
       </CrudDialog>

@@ -2,6 +2,12 @@
 -- These views were created via raw SQL on the dev DB during Phase 3 session 1
 -- but were missing from the migration history. Adding them here so
 -- `prisma migrate reset` rebuilds them.
+--
+-- NOTE: These are regular views, not materialized views.
+-- For a <20-user system, regular views (recompute on each read) are sufficient.
+-- Materialized views would require an explicit REFRESH strategy (trigger on
+-- transaction commit or nightly cron) and adds operational complexity that is
+-- not warranted in Phase 1. Revisit in Phase 2 if query latency becomes an issue.
 
 CREATE OR REPLACE VIEW "vw_project_norm" AS
   SELECT pe.id AS estimate_id,

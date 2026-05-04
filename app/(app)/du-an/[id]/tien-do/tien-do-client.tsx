@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
+import { toast } from "sonner";
+import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
 import { AgGridBase } from "@/components/ag-grid-base";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,16 +116,59 @@ export function TienDoClient({ projectId, initialData, categories }: Props) {
 
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, `${c.code} - ${c.name}`]));
 
+  /**
+   * Inline cell edit handler — called by AG Grid when user commits a cell edit.
+   * Editable columns: taskName, pctComplete, status, note.
+   * Date columns (planStart, planEnd, actualStart, actualEnd) are read-only inline
+   * because AG Grid date editor requires agDateStringCellEditor which returns ISO string
+   * but our rows hold Date objects — editing via dialog is safer for dates.
+   */
+  async function handleCellValueChanged(event: CellValueChangedEvent<ScheduleRow>) {
+    const row = event.data;
+    try {
+      const input: ScheduleInput = {
+        projectId,
+        categoryId: row.categoryId,
+        taskName: row.taskName,
+        planStart: new Date(row.planStart).toISOString().split("T")[0],
+        planEnd: new Date(row.planEnd).toISOString().split("T")[0],
+        actualStart: row.actualStart ? new Date(row.actualStart).toISOString().split("T")[0] : undefined,
+        actualEnd: row.actualEnd ? new Date(row.actualEnd).toISOString().split("T")[0] : undefined,
+        pctComplete: Number(row.pctComplete),
+        status: row.status as ScheduleInput["status"],
+        note: row.note ?? undefined,
+      };
+      await updateSchedule(row.id, input);
+      toast.success("Đã lưu");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+      startTransition(() => router.refresh());
+    }
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
-    { field: "taskName", headerName: "Công việc", flex: 2, minWidth: 200 },
+    { field: "taskName", headerName: "Công việc", flex: 2, minWidth: 200, editable: true },
     { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? String(p.value), width: 150 },
     { field: "planStart", headerName: "BĐ KH", valueFormatter: (p) => fmt(p.value as Date), width: 110 },
     { field: "planEnd", headerName: "KT KH", valueFormatter: (p) => fmt(p.value as Date), width: 110 },
     { field: "actualStart", headerName: "BĐ TT", valueFormatter: (p) => fmt(p.value as Date | null), width: 110 },
     { field: "actualEnd", headerName: "KT TT", valueFormatter: (p) => fmt(p.value as Date | null), width: 110 },
-    { field: "pctComplete", headerName: "% HT", valueFormatter: (p) => `${(Number(p.value) * 100).toFixed(0)}%`, width: 80 },
-    { field: "status", headerName: "Trạng thái", valueFormatter: (p) => STATUS_LABELS[p.value as string] ?? String(p.value), width: 140 },
+    {
+      field: "pctComplete", headerName: "% HT",
+      valueFormatter: (p) => `${(Number(p.value) * 100).toFixed(0)}%`,
+      valueParser: (p) => Math.min(1, Math.max(0, parseFloat(p.newValue) || 0)),
+      editable: true, width: 80,
+    },
+    {
+      field: "status", headerName: "Trạng thái",
+      valueFormatter: (p) => STATUS_LABELS[p.value as string] ?? String(p.value),
+      cellEditor: "agSelectCellEditor",
+      cellEditorParams: { values: Object.keys(STATUS_LABELS) },
+      editable: true, width: 140,
+    },
+    { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 120, editable: true },
     {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
@@ -160,7 +204,13 @@ export function TienDoClient({ projectId, initialData, categories }: Props) {
         <Button onClick={() => setCreateOpen(true)}>Thêm công việc</Button>
       </div>
 
-      <AgGridBase rowData={initialData} columnDefs={colDefs} height={500} />
+      {/* Editable columns: taskName, pctComplete, status, note. Dates via dialog only. */}
+      <AgGridBase
+        rowData={initialData}
+        columnDefs={colDefs}
+        height={500}
+        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+      />
 
       <CrudDialog title="Thêm công việc" open={createOpen} onOpenChange={setCreateOpen}>
         <ScheduleForm projectId={projectId} categories={categories} onSubmit={handleCreate} />
