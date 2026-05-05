@@ -7,14 +7,14 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
+  id            String   @id @default(cuid())
   name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   image         String?
-  role          String    @default("viewer")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role          String   @default("viewer")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   sessions  Session[]
   accounts  Account[]
@@ -91,7 +91,7 @@ model AuditLog {
 model Entity {
   id        Int       @id @default(autoincrement())
   name      String
-  type      String    // "company" | "person"
+  type      String // "company" | "person"
   note      String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -132,17 +132,17 @@ model Contractor {
 }
 
 model Project {
-  id            Int               @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   code          String
   name          String
   ownerInvestor String?
-  contractValue Decimal?          @db.Decimal(18, 2)
+  contractValue Decimal?  @db.Decimal(18, 2)
   startDate     DateTime?
   endDate       DateTime?
-  status        String            @default("active")
+  status        String    @default("active")
   deletedAt     DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   categories ProjectCategory[]
 
@@ -173,7 +173,7 @@ model Item {
   code      String
   name      String
   unit      String
-  type      String    // "material" | "labor" | "machine"
+  type      String // "material" | "labor" | "machine"
   note      String?
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -207,24 +207,24 @@ model ProjectSchedule {
 }
 
 model ProjectAcceptance {
-  id               Int       @id @default(autoincrement())
-  projectId        Int
-  categoryId       Int
-  checkItem        String
-  planEnd          DateTime?
-  actualEnd        DateTime?
-  inspector        String?
-  result           String?   // "pass|fail|partial"
-  defectCount      Int       @default(0)
-  fixRequest       String?
-  acceptedAt       DateTime?
-  amountCdtVnd     Decimal   @default(0) @db.Decimal(18, 2)
-  amountInternalVnd Decimal  @default(0) @db.Decimal(18, 2)
-  acceptanceBatch  String?
-  note             String?
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @default(now())
+  id                Int       @id @default(autoincrement())
+  projectId         Int
+  categoryId        Int
+  checkItem         String
+  planEnd           DateTime?
+  actualEnd         DateTime?
+  inspector         String?
+  result            String? // "pass|fail|partial"
+  defectCount       Int       @default(0)
+  fixRequest        String?
+  acceptedAt        DateTime?
+  amountCdtVnd      Decimal   @default(0) @db.Decimal(18, 2)
+  amountInternalVnd Decimal   @default(0) @db.Decimal(18, 2)
+  acceptanceBatch   String?
+  note              String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now())
 
   @@index([projectId])
   @@map("project_acceptances")
@@ -245,31 +245,35 @@ model ProjectEstimate {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId, categoryId])
+  @@index([importRunId])
   @@map("project_estimates")
 }
 
 model ProjectChangeOrder {
-  id                  Int       @id @default(autoincrement())
-  projectId           Int
-  date                DateTime
-  coCode              String
-  description         String
-  reason              String?
-  categoryId          Int?
-  itemCode            String?
-  costImpactVnd       Decimal   @default(0) @db.Decimal(18, 2)
-  scheduleImpactDays  Int       @default(0)
-  approvedBy          String?
-  status              String    @default("pending") // pending|approved|rejected
-  newItemName         String?
-  newUnit             String?
-  newQty              Decimal?  @db.Decimal(18, 4)
-  newUnitPrice        Decimal?  @db.Decimal(18, 2)
-  note                String?
-  deletedAt           DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @default(now())
+  id                 Int       @id @default(autoincrement())
+  projectId          Int
+  date               DateTime
+  coCode             String
+  description        String
+  reason             String?
+  categoryId         Int?
+  itemCode           String?
+  costImpactVnd      Decimal   @default(0) @db.Decimal(18, 2)
+  scheduleImpactDays Int       @default(0)
+  approvedBy         String?
+  status             String    @default("pending") // pending|approved|rejected
+  newItemName        String?
+  newUnit            String?
+  newQty             Decimal?  @db.Decimal(18, 4)
+  newUnitPrice       Decimal?  @db.Decimal(18, 2)
+  note               String?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now())
 
   @@index([projectId])
   @@map("project_change_orders")
@@ -279,7 +283,7 @@ model ProjectTransaction {
   id              Int       @id @default(autoincrement())
   projectId       Int
   date            DateTime
-  transactionType String    // lay_hang|nhan_cong|may_moc
+  transactionType String // lay_hang|nhan_cong|may_moc
   categoryId      Int
   itemCode        String
   itemName        String
@@ -297,25 +301,29 @@ model ProjectTransaction {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId, categoryId])
+  @@index([importRunId])
   @@map("project_transactions")
 }
 
 model ProjectContract {
-  id          Int       @id @default(autoincrement())
-  projectId   Int
-  docName     String
-  docType     String    // contract|license
-  partyName   String?
-  valueVnd    Decimal?  @db.Decimal(18, 2)
-  signedDate  DateTime?
-  expiryDate  DateTime?
-  status      String    @default("active") // active|expired|terminated
-  storage     String?
-  note        String?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now())
+  id         Int       @id @default(autoincrement())
+  projectId  Int
+  docName    String
+  docType    String // contract|license
+  partyName  String?
+  valueVnd   Decimal?  @db.Decimal(18, 2)
+  signedDate DateTime?
+  expiryDate DateTime?
+  status     String    @default("active") // active|expired|terminated
+  storage    String?
+  note       String?
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now())
 
   @@index([projectId])
   @@map("project_contracts")
@@ -325,8 +333,8 @@ model Project3WayCashflow {
   id            Int       @id @default(autoincrement())
   projectId     Int
   date          DateTime
-  flowDirection String    // cdt_to_cty|cty_to_doi|doi_to_cty|cty_to_cdt|doi_refund
-  category      String    // tam_ung|nop_lai|thanh_toan|hoan_ung
+  flowDirection String // cdt_to_cty|cty_to_doi|doi_to_cty|cty_to_cdt|doi_refund
+  category      String // tam_ung|nop_lai|thanh_toan|hoan_ung
   payerName     String
   payeeName     String
   amountVnd     Decimal   @db.Decimal(18, 2)
@@ -342,15 +350,15 @@ model Project3WayCashflow {
 }
 
 model ProjectSettings {
-  projectId          Int     @id
-  vatPct             Decimal @default(0.1) @db.Decimal(5, 4)
-  normYellowThreshold Decimal @default(0.8) @db.Decimal(5, 4)
-  normRedThreshold   Decimal @default(0.95) @db.Decimal(5, 4)
-  contractWarningDays Int    @default(90)
-  managementFeePct   Decimal @default(0.05) @db.Decimal(5, 4)
-  teamSharePct       Decimal @default(0.85) @db.Decimal(5, 4)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @default(now())
+  projectId           Int      @id
+  vatPct              Decimal  @default(0.1) @db.Decimal(5, 4)
+  normYellowThreshold Decimal  @default(0.8) @db.Decimal(5, 4)
+  normRedThreshold    Decimal  @default(0.95) @db.Decimal(5, 4)
+  contractWarningDays Int      @default(90)
+  managementFeePct    Decimal  @default(0.05) @db.Decimal(5, 4)
+  teamSharePct        Decimal  @default(0.85) @db.Decimal(5, 4)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now())
 
   @@map("project_settings")
 }
@@ -364,35 +372,39 @@ model SupplierDeliveryDaily {
   date       DateTime
   itemId     Int
   qty        Decimal   @db.Decimal(18, 4)
-  unit       String    // snapshot from Item.unit at entry time
-  cbVatTu    String?   // Cán bộ vật tư
-  chiHuyCt   String?   // Chỉ huy công trường
-  keToan     String?   // Kế toán
+  unit       String // snapshot from Item.unit at entry time
+  cbVatTu    String? // Cán bộ vật tư
+  chiHuyCt   String? // Chỉ huy công trường
+  keToan     String? // Kế toán
   note       String?
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([supplierId, date])
   @@index([supplierId, itemId])
+  @@index([importRunId])
   @@map("supplier_delivery_daily")
 }
 
 model SupplierReconciliation {
-  id                Int       @id @default(autoincrement())
-  supplierId        Int
-  periodFrom        DateTime
-  periodTo          DateTime
-  openingBalance    Decimal   @db.Decimal(18, 2)
-  totalIn           Decimal   @db.Decimal(18, 2)
-  totalPaid         Decimal   @db.Decimal(18, 2)
-  closingBalance    Decimal   @db.Decimal(18, 2)
-  signedBySupplier  Boolean   @default(false)
-  signedDate        DateTime?
-  note              String?
-  deletedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now())
+  id               Int       @id @default(autoincrement())
+  supplierId       Int
+  periodFrom       DateTime
+  periodTo         DateTime
+  openingBalance   Decimal   @db.Decimal(18, 2)
+  totalIn          Decimal   @db.Decimal(18, 2)
+  totalPaid        Decimal   @db.Decimal(18, 2)
+  closingBalance   Decimal   @db.Decimal(18, 2)
+  signedBySupplier Boolean   @default(false)
+  signedDate       DateTime?
+  note             String?
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now())
 
   @@index([supplierId, periodFrom])
   @@map("supplier_reconciliations")
@@ -401,37 +413,37 @@ model SupplierReconciliation {
 // ─── Ledger Models (Phase 5 — Công nợ Vật tư / Nhân công) ───────────────────
 
 model LedgerTransaction {
-  id              Int       @id @default(autoincrement())
-  ledgerType      String    // "material" | "labor"
+  id              Int      @id @default(autoincrement())
+  ledgerType      String // "material" | "labor"
   date            DateTime
-  transactionType String    // "lay_hang" | "thanh_toan" | "dieu_chinh"
-  entityId        Int       // Chủ Thể
-  partyId         Int       // supplier_id (material) | contractor_id (labor)
+  transactionType String // "lay_hang" | "thanh_toan" | "dieu_chinh"
+  entityId        Int // Chủ Thể
+  partyId         Int // supplier_id (material) | contractor_id (labor)
   projectId       Int?
-  itemId          Int?      // null if paying total (không link item cụ thể)
+  itemId          Int? // null if paying total (không link item cụ thể)
 
   // Thực tế (TT)
-  amountTt        Decimal   @default(0) @db.Decimal(18, 2)
-  vatPctTt        Decimal   @default(0) @db.Decimal(5, 4)
-  vatTt           Decimal   @default(0) @db.Decimal(18, 2)
-  totalTt         Decimal   @default(0) @db.Decimal(18, 2)
+  amountTt Decimal @default(0) @db.Decimal(18, 2)
+  vatPctTt Decimal @default(0) @db.Decimal(5, 4)
+  vatTt    Decimal @default(0) @db.Decimal(18, 2)
+  totalTt  Decimal @default(0) @db.Decimal(18, 2)
 
   // Hóa đơn (HĐ)
-  amountHd        Decimal   @default(0) @db.Decimal(18, 2)
-  vatPctHd        Decimal   @default(0) @db.Decimal(5, 4)
-  vatHd           Decimal   @default(0) @db.Decimal(18, 2)
-  totalHd         Decimal   @default(0) @db.Decimal(18, 2)
+  amountHd Decimal @default(0) @db.Decimal(18, 2)
+  vatPctHd Decimal @default(0) @db.Decimal(5, 4)
+  vatHd    Decimal @default(0) @db.Decimal(18, 2)
+  totalHd  Decimal @default(0) @db.Decimal(18, 2)
 
-  invoiceNo       String?
-  invoiceDate     DateTime?
-  content         String?
-  status          String    @default("pending") // pending|approved|paid
-  note            String?
-  importRunId     Int?
-  importRun       ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
-  deletedAt       DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  invoiceNo   String?
+  invoiceDate DateTime?
+  content     String?
+  status      String     @default("pending") // pending|approved|paid
+  note        String?
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   @@index([ledgerType, entityId, partyId, projectId, date])
   @@index([importRunId])
@@ -439,19 +451,19 @@ model LedgerTransaction {
 }
 
 model LedgerOpeningBalance {
-  id          Int      @id @default(autoincrement())
-  ledgerType  String   // "material" | "labor"
-  entityId    Int      // Chủ Thể
-  partyId     Int      // supplier_id | contractor_id
+  id          Int        @id @default(autoincrement())
+  ledgerType  String // "material" | "labor"
+  entityId    Int // Chủ Thể
+  partyId     Int // supplier_id | contractor_id
   projectId   Int?
-  balanceTt   Decimal  @db.Decimal(18, 2)
-  balanceHd   Decimal  @db.Decimal(18, 2)
+  balanceTt   Decimal    @db.Decimal(18, 2)
+  balanceHd   Decimal    @db.Decimal(18, 2)
   asOfDate    DateTime
   note        String?
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   // Opening balance is set once per (ledgerType, entity, party, project) — not soft-deletable
   @@unique([ledgerType, entityId, partyId, projectId])
@@ -468,15 +480,19 @@ model SlDtTarget {
   id        Int      @id @default(autoincrement())
   projectId Int
   year      Int
-  month     Int      // 1–12
+  month     Int // 1–12
   slTarget  Decimal  @db.Decimal(18, 2) // sản lượng kế hoạch (VNĐ)
   dtTarget  Decimal  @db.Decimal(18, 2) // doanh thu kế hoạch (VNĐ)
   note      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   // Partial unique enforced via raw SQL: sl_dt_targets_project_year_month_unique WHERE 1=1
   @@index([projectId, year, month])
+  @@index([importRunId])
   @@map("sl_dt_targets")
 }
 
@@ -484,7 +500,7 @@ model PaymentSchedule {
   // Tiến độ nộp tiền của chủ đầu tư theo từng đợt
   id           Int       @id @default(autoincrement())
   projectId    Int
-  batch        String    // "Đợt 1", "Đợt 2", …
+  batch        String // "Đợt 1", "Đợt 2", …
   planDate     DateTime
   planAmount   Decimal   @db.Decimal(18, 2)
   actualDate   DateTime?
@@ -495,49 +511,57 @@ model PaymentSchedule {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
+  @@index([importRunId])
   @@map("payment_schedules")
 }
 
 // ─── Tài chính NQ Models (Phase 8) ──────────────────────────────────────────
 
 model LoanContract {
-  id               Int            @id @default(autoincrement())
-  lenderName       String
-  principalVnd     Decimal        @db.Decimal(18, 2)
-  interestRatePct  Decimal        @db.Decimal(5, 4)  // e.g. 0.08 = 8%/năm
-  startDate        DateTime
-  endDate          DateTime
-  paymentSchedule  String         // "monthly" | "quarterly" | "bullet"
-  status           String         @default("active") // active|paid_off|terminated
-  contractDoc      String?
-  note             String?
-  deletedAt        DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @default(now())
+  id              Int       @id @default(autoincrement())
+  lenderName      String
+  principalVnd    Decimal   @db.Decimal(18, 2)
+  interestRatePct Decimal   @db.Decimal(5, 4) // e.g. 0.08 = 8%/năm
+  startDate       DateTime
+  endDate         DateTime
+  paymentSchedule String // "monthly" | "quarterly" | "bullet"
+  status          String    @default("active") // active|paid_off|terminated
+  contractDoc     String?
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now())
 
-  payments         LoanPayment[]
+  payments LoanPayment[]
+
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
   @@index([status, endDate])
+  @@index([importRunId])
   @@map("loan_contracts")
 }
 
 model LoanPayment {
-  id               Int          @id @default(autoincrement())
-  loanContractId   Int
-  dueDate          DateTime
-  principalDue     Decimal      @db.Decimal(18, 2)
-  interestDue      Decimal      @db.Decimal(18, 2)
-  paidDate         DateTime?
-  principalPaid    Decimal?     @db.Decimal(18, 2)
-  interestPaid     Decimal?     @db.Decimal(18, 2)
-  status           String       @default("pending") // pending|paid|overdue
-  note             String?
-  deletedAt        DateTime?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @default(now())
+  id             Int       @id @default(autoincrement())
+  loanContractId Int
+  dueDate        DateTime
+  principalDue   Decimal   @db.Decimal(18, 2)
+  interestDue    Decimal   @db.Decimal(18, 2)
+  paidDate       DateTime?
+  principalPaid  Decimal?  @db.Decimal(18, 2)
+  interestPaid   Decimal?  @db.Decimal(18, 2)
+  status         String    @default("pending") // pending|paid|overdue
+  note           String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now())
 
-  loanContract     LoanContract @relation(fields: [loanContractId], references: [id])
+  loanContract LoanContract @relation(fields: [loanContractId], references: [id])
 
   @@index([loanContractId, dueDate])
   @@index([dueDate, status])
@@ -545,40 +569,44 @@ model LoanPayment {
 }
 
 model JournalEntry {
-  id                 Int               @id @default(autoincrement())
-  date               DateTime
-  entryType          String            // "thu" | "chi" | "chuyen_khoan"
-  amountVnd          Decimal           @db.Decimal(18, 2)
-  fromAccount        String?
-  toAccount          String?
-  expenseCategoryId  Int?
-  refModule          String?           // "loan" | "material" | "labor" | null
-  refId              Int?
-  description        String
-  attachmentUrl      String?
-  note               String?
-  deletedAt          DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @default(now())
+  id                Int       @id @default(autoincrement())
+  date              DateTime
+  entryType         String // "thu" | "chi" | "chuyen_khoan"
+  amountVnd         Decimal   @db.Decimal(18, 2)
+  fromAccount       String?
+  toAccount         String?
+  expenseCategoryId Int?
+  refModule         String? // "loan" | "material" | "labor" | null
+  refId             Int?
+  description       String
+  attachmentUrl     String?
+  note              String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now())
 
-  expenseCategory    ExpenseCategory?  @relation(fields: [expenseCategoryId], references: [id])
+  expenseCategory ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id])
+
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
   @@index([date, entryType])
   @@index([expenseCategoryId])
+  @@index([importRunId])
   @@map("journal_entries")
 }
 
 model ExpenseCategory {
-  id        Int              @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   code      String
   name      String
   parentId  Int?
-  level     Int              @default(0)
+  level     Int       @default(0)
   deletedAt DateTime?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @default(now())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
 
-  entries   JournalEntry[]
+  entries JournalEntry[]
 
   @@index([parentId])
   @@map("expense_categories")
@@ -589,20 +617,27 @@ model ExpenseCategory {
 model ImportRun {
   id           Int       @id @default(autoincrement())
   fileName     String
-  fileHash     String    // sha256 of uploaded file for idempotency check
-  adapter      String    // "cong-no-vat-tu" | "du-an-xay-dung" | "tai-chinh-nq" | etc
+  fileHash     String // sha256 of uploaded file for idempotency check
+  adapter      String // "cong-no-vat-tu" | "du-an-xay-dung" | "tai-chinh-nq" | etc
   status       String    @default("pending") // pending|preview|committed|failed
   rowsTotal    Int       @default(0)
   rowsImported Int       @default(0)
   rowsSkipped  Int       @default(0)
-  errors       Json?     // array of { row, message }
-  mapping      Json?     // user-resolved conflict mappings { sourceKey: targetId }
+  errors       Json? // array of { row, message }
+  mapping      Json? // user-resolved conflict mappings { sourceKey: targetId }
   createdBy    String
   createdAt    DateTime  @default(now())
   committedAt  DateTime?
 
   ledgerTransactions    LedgerTransaction[]
   ledgerOpeningBalances LedgerOpeningBalance[]
+  projectEstimates      ProjectEstimate[]
+  projectTransactions   ProjectTransaction[]
+  supplierDeliveryDaily SupplierDeliveryDaily[]
+  slDtTargets           SlDtTarget[]
+  paymentSchedules      PaymentSchedule[]
+  loanContracts         LoanContract[]
+  journalEntries        JournalEntry[]
 
   @@index([adapter, status])
   @@index([createdAt])
@@ -610,19 +645,19 @@ model ImportRun {
 }
 
 model PayableReceivableAdjustment {
-  id          Int       @id @default(autoincrement())
-  date        DateTime
-  partyType   String    // "supplier" | "contractor" | "other"
-  partyName   String
-  projectId   Int?
-  type        String    // "payable" | "receivable"
-  amountVnd   Decimal   @db.Decimal(18, 2)
-  dueDate     DateTime?
-  status      String    @default("pending") // pending|paid|cancelled
-  note        String?
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now())
+  id        Int       @id @default(autoincrement())
+  date      DateTime
+  partyType String // "supplier" | "contractor" | "other"
+  partyName String
+  projectId Int?
+  type      String // "payable" | "receivable"
+  amountVnd Decimal   @db.Decimal(18, 2)
+  dueDate   DateTime?
+  status    String    @default("pending") // pending|paid|cancelled
+  note      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now())
 
   @@index([type, status])
   @@index([projectId])

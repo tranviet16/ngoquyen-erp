@@ -1,33 +1,36 @@
 /**
  * Adapter: Hệ thống quản lý tài chính NQ.xlsx
  * Target tables:
- *   - loan_contracts + loan_payments (sheet "Vay")
- *   - journal_entries (sheet "Nhật ký")
- *   - expense_categories (auto-create from category names)
+ *   - loan_contracts (sheet "Hợp đồng vay" — header row 0)
+ *   - journal_entries (sheet "Sổ nhật ký giao dịch" — header row 0)
+ *   - expense_categories (auto-create from "Loại cụ thể" column on demand)
  *
- * Idempotency: skip loan contracts matching (lenderName, startDate, principalVnd).
- * Bulk insert via prisma.$executeRaw — bypasses audit middleware (intentional, historical migration).
+ * Loan rows: skip when "Mã hợp đồng" is empty (template rows). Idempotency via
+ * (lenderName, startDate, principalVnd).
+ *
+ * Journal rows: VND amounts arrive as "100,000,000 ₫" — strip non-digits.
+ * Date format DD/MM/YYYY (Vietnamese). entryType derived from "Loại" prefix.
+ *
+ * importRunId persisted to both tables for full rollback.
  */
 
 import * as XLSX from "xlsx";
+import { parseExcelDate, parseVndNumber, normHeader } from "./excel-utils";
 import type {
   ImportAdapter,
   ParsedData,
   ParsedRow,
   ValidationResult,
-  ResolvedMapping,
   ImportSummary,
 } from "./adapter-types";
 
-function parseExcelDate(val: unknown): Date | null {
-  if (!val) return null;
-  if (typeof val === "number") return new Date((val - 25569) * 86400 * 1000);
-  const d = new Date(String(val));
-  return isNaN(d.getTime()) ? null : d;
-}
-
-function toNum(val: unknown): number {
-  return parseFloat(String(val ?? "0").replace(/[^0-9.-]/g, "")) || 0;
+function findSheet(wb: XLSX.WorkBook, ...hints: string[]): string | null {
+  const want = hints.map((h) => normHeader(h));
+  for (const n of wb.SheetNames) {
+    const norm = normHeader(n);
+    for (const w of want) if (norm.includes(w)) return n;
+  }
+  return null;
 }
 
 export const TaiChinhNqAdapter: ImportAdapter = {
@@ -39,115 +42,127 @@ export const TaiChinhNqAdapter: ImportAdapter = {
     const rows: ParsedRow[] = [];
     let rowIdx = 0;
 
-    for (const sheetName of wb.SheetNames) {
-      const lower = sheetName.toLowerCase();
-      const sheet = wb.Sheets[sheetName];
-      if (!sheet) continue;
-
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null, raw: false });
-
-      if (lower.includes("vay") || lower.includes("loan")) {
-        for (const r of raw) {
-          const lenderName = String(r["Chủ nợ"] ?? r["Bên vay"] ?? r["Lender"] ?? "").trim();
-          if (!lenderName) continue;
-          rows.push({
-            rowIndex: rowIdx++,
-            data: {
-              _type: "loan",
-              lenderName,
-              principalVnd: toNum(r["Số tiền"] ?? r["Principal"] ?? 0),
-              interestRatePct: toNum(r["Lãi suất"] ?? r["Rate"] ?? 0) / 100,
-              startDate: parseExcelDate(r["Ngày bắt đầu"] ?? r["Start"]),
-              endDate: parseExcelDate(r["Ngày kết thúc"] ?? r["End"]),
-              paymentSchedule: String(r["Kỳ hạn"] ?? "monthly").toLowerCase().includes("qu") ? "quarterly" : "monthly",
-              note: String(r["Ghi chú"] ?? "").trim() || undefined,
-            },
-          });
-        }
-      } else if (lower.includes("nhat") || lower.includes("nhật") || lower.includes("journal")) {
-        for (const r of raw) {
-          const date = parseExcelDate(r["Ngày"] ?? r["Date"]);
-          if (!date) continue;
-          const entryType = (() => {
-            const t = String(r["Loại"] ?? r["Type"] ?? "chi").toLowerCase();
-            if (t.includes("thu")) return "thu";
-            if (t.includes("chuy")) return "chuyen_khoan";
-            return "chi";
-          })();
-          rows.push({
-            rowIndex: rowIdx++,
-            data: {
-              _type: "journal",
-              date,
-              entryType,
-              amountVnd: toNum(r["Số tiền"] ?? r["Amount"] ?? 0),
-              fromAccount: String(r["Tài khoản nợ"] ?? r["From"] ?? "").trim() || undefined,
-              toAccount: String(r["Tài khoản có"] ?? r["To"] ?? "").trim() || undefined,
-              categoryName: String(r["Danh mục"] ?? r["Category"] ?? "").trim() || undefined,
-              description: String(r["Nội dung"] ?? r["Desc"] ?? "Chi phí nhập").trim(),
-              note: String(r["Ghi chú"] ?? "").trim() || undefined,
-            },
-          });
-        }
-      } else if (lower.includes("danh") || lower.includes("category") || lower.includes("phan")) {
-        for (const r of raw) {
-          const code = String(r["Mã"] ?? r["Code"] ?? "").trim();
-          const name = String(r["Tên"] ?? r["Name"] ?? "").trim();
-          if (!code || !name) continue;
-          rows.push({
-            rowIndex: rowIdx++,
-            data: {
-              _type: "expense_category",
-              code,
-              name,
-              parentCode: String(r["Mã cha"] ?? "").trim() || undefined,
-            },
-          });
-        }
+    // Loan contracts
+    // Prefer "Hợp đồng vay" over "Thanh toán vay"; only fall back to bare "vay" if neither exists.
+    const loanSheet =
+      findSheet(wb, "hop dong vay") ?? findSheet(wb, "loan") ?? findSheet(wb, "vay");
+    if (loanSheet && wb.Sheets[loanSheet]) {
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[loanSheet], {
+        defval: null,
+        raw: false,
+      });
+      for (const r of raw) {
+        const code = String(r["Mã hợp đồng"] ?? "").trim();
+        const lenderName = String(r["Tên đối tác"] ?? r["Đối tác"] ?? "").trim();
+        if (!code && !lenderName) continue;
+        if (!lenderName) continue;
+        rows.push({
+          rowIndex: rowIdx++,
+          data: {
+            _type: "loan",
+            contractCode: code || undefined,
+            lenderName,
+            principalVnd: parseVndNumber(r["Số tiền gốc ban đầu"] ?? r["Số tiền"] ?? 0),
+            interestRatePct: parseVndNumber(r["Lãi suất"] ?? 0) / 100,
+            startDate: parseExcelDate(r["Ngày bắt đầu"]),
+            endDate: parseExcelDate(r["Ngày đáo hạn"] ?? r["Ngày kết thúc"]),
+            paymentSchedule: String(r["Kỳ hạn thanh toán"] ?? r["Kỳ hạn"] ?? "monthly")
+              .toLowerCase()
+              .includes("qu")
+              ? "quarterly"
+              : "monthly",
+            note: String(r["Phương thức tính"] ?? r["Ghi chú"] ?? "").trim() || undefined,
+          },
+        });
       }
     }
 
-    return { rows, conflicts: [], meta: { sheetCount: wb.SheetNames.length } };
+    // Journal entries
+    const journalSheet = findSheet(wb, "so nhat ky", "nhat ky", "journal");
+    if (journalSheet && wb.Sheets[journalSheet]) {
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[journalSheet], {
+        defval: null,
+        raw: false,
+      });
+      for (const r of raw) {
+        const date = parseExcelDate(r["Ngày"] ?? r["Date"]);
+        if (!date) continue;
+        const loai = String(r["Loại"] ?? "").trim();
+        const entryType = loai.toLowerCase().startsWith("thu")
+          ? "thu"
+          : loai.toLowerCase().startsWith("chuy")
+            ? "chuyen_khoan"
+            : "chi";
+        const amount = parseVndNumber(r["Số tiền"] ?? r["Amount"] ?? 0);
+        if (amount === 0) continue;
+        const description = String(r["Nội dung"] ?? r["Desc"] ?? "").trim();
+        if (!description) continue;
+        const categoryName = String(r["Loại cụ thể"] ?? r["Danh mục"] ?? "").trim() || undefined;
+        rows.push({
+          rowIndex: rowIdx++,
+          data: {
+            _type: "journal",
+            date,
+            entryType,
+            amountVnd: amount,
+            fromAccount: String(r["Nguồn"] ?? r["Tài khoản"] ?? "").trim() || undefined,
+            toAccount: undefined,
+            categoryName,
+            description,
+            contractCode: String(r["Mã hợp đồng"] ?? "").trim() || undefined,
+            note: undefined,
+          },
+        });
+      }
+    }
+
+    return {
+      rows,
+      conflicts: [],
+      meta: { sheetCount: wb.SheetNames.length, loanSheet, journalSheet },
+    };
   },
 
   validate(data: ParsedData): ValidationResult {
     const errors: ValidationResult["errors"] = [];
     for (const row of data.rows) {
       if (row.data._type === "loan" && !row.data.lenderName) {
-        errors.push({ rowIndex: row.rowIndex, field: "lenderName", message: "Tên chủ nợ không được rỗng" });
+        errors.push({
+          rowIndex: row.rowIndex,
+          field: "lenderName",
+          message: "Tên đối tác không được rỗng",
+        });
       }
       if (row.data._type === "journal" && !row.data.description) {
-        errors.push({ rowIndex: row.rowIndex, field: "description", message: "Nội dung không được rỗng" });
+        errors.push({
+          rowIndex: row.rowIndex,
+          field: "description",
+          message: "Nội dung không được rỗng",
+        });
       }
     }
     return { valid: errors.length === 0, errors };
   },
 
-  async apply(data, _mapping, tx): Promise<ImportSummary> {
+  async apply(data, _mapping, tx, importRunId): Promise<ImportSummary> {
     let imported = 0;
     let skipped = 0;
     const errors: ImportSummary["errors"] = [];
-    const prismaRef = tx as typeof import("@/lib/prisma")["prisma"];
+    const db = tx as typeof import("@/lib/prisma")["prisma"];
 
-    // Expense categories cache
     const catCache = new Map<string, number>();
-    async function getOrCreateCategory(code: string, name: string): Promise<number> {
+    async function getOrCreateCategory(name: string): Promise<number> {
+      const code = name.slice(0, 30).replace(/\s+/g, "_").toUpperCase();
       if (catCache.has(code)) return catCache.get(code)!;
-      const existing = await prismaRef.expenseCategory.findFirst({ where: { code, deletedAt: null } });
-      if (existing) { catCache.set(code, existing.id); return existing.id; }
-      const created = await prismaRef.expenseCategory.create({ data: { code, name, level: 0 } });
+      const existing = await db.expenseCategory.findFirst({ where: { code, deletedAt: null } });
+      if (existing) {
+        catCache.set(code, existing.id);
+        return existing.id;
+      }
+      const created = await db.expenseCategory.create({ data: { code, name, level: 0 } });
       catCache.set(code, created.id);
       imported++;
       return created.id;
-    }
-
-    // Expense category rows first
-    for (const row of data.rows.filter((r) => r.data._type === "expense_category")) {
-      try {
-        await getOrCreateCategory(String(row.data.code), String(row.data.name));
-      } catch (err) {
-        errors.push({ rowIndex: row.rowIndex, message: String(err) });
-      }
     }
 
     // Loan contracts
@@ -156,29 +171,35 @@ export const TaiChinhNqAdapter: ImportAdapter = {
         const lenderName = String(row.data.lenderName ?? "");
         const principalVnd = Number(row.data.principalVnd ?? 0);
         const startDate = row.data.startDate as Date | null;
-        if (!startDate) { skipped++; continue; }
-
-        // Idempotency
-        const existing = await prismaRef.$queryRaw<{ id: number }[]>`
+        if (!startDate) {
+          skipped++;
+          continue;
+        }
+        const existing = await db.$queryRaw<{ id: number }[]>`
           SELECT id FROM loan_contracts
           WHERE "lenderName" = ${lenderName}
             AND "startDate"::date = ${startDate}::date
             AND "principalVnd" = ${principalVnd}
+            AND "deletedAt" IS NULL
           LIMIT 1
         `;
-        if (existing.length > 0) { skipped++; continue; }
-
-        const endDate = (row.data.endDate as Date | null) ?? new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate());
+        if (existing.length > 0) {
+          skipped++;
+          continue;
+        }
+        const endDate =
+          (row.data.endDate as Date | null) ??
+          new Date(startDate.getFullYear() + 1, startDate.getMonth(), startDate.getDate());
         const rate = Number(row.data.interestRatePct ?? 0);
         const schedule = String(row.data.paymentSchedule ?? "monthly");
-
-        await prismaRef.$executeRaw`
+        await db.$executeRaw`
           INSERT INTO loan_contracts
             ("lenderName", "principalVnd", "interestRatePct", "startDate", "endDate",
-             "paymentSchedule", status, note, "createdAt", "updatedAt")
+             "paymentSchedule", status, note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${lenderName}, ${principalVnd}, ${rate}, ${startDate}, ${endDate},
-             ${schedule}, 'active', ${String(row.data.note ?? "")}, NOW(), NOW())
+             ${schedule}, 'active', ${row.data.note ? String(row.data.note) : null},
+             ${importRunId ?? null}, NOW(), NOW())
         `;
         imported++;
       } catch (err) {
@@ -196,12 +217,9 @@ export const TaiChinhNqAdapter: ImportAdapter = {
 
         let expenseCategoryId: number | null = null;
         if (row.data.categoryName) {
-          const catCode = String(row.data.categoryName).slice(0, 20).replace(/\s+/g, "_");
-          expenseCategoryId = await getOrCreateCategory(catCode, String(row.data.categoryName));
+          expenseCategoryId = await getOrCreateCategory(String(row.data.categoryName));
         }
-
-        // Idempotency: skip exact duplicate
-        const existing = await prismaRef.$queryRaw<{ id: number }[]>`
+        const existing = await db.$queryRaw<{ id: number }[]>`
           SELECT id FROM journal_entries
           WHERE date::date = ${date}::date
             AND "entryType" = ${entryType}
@@ -210,17 +228,21 @@ export const TaiChinhNqAdapter: ImportAdapter = {
             AND "deletedAt" IS NULL
           LIMIT 1
         `;
-        if (existing.length > 0) { skipped++; continue; }
-
-        await prismaRef.$executeRaw`
+        if (existing.length > 0) {
+          skipped++;
+          continue;
+        }
+        await db.$executeRaw`
           INSERT INTO journal_entries
             (date, "entryType", "amountVnd", "fromAccount", "toAccount",
-             "expenseCategoryId", description, note, "createdAt", "updatedAt")
+             "expenseCategoryId", description, note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${date}, ${entryType}, ${amountVnd},
-             ${String(row.data.fromAccount ?? "")}, ${String(row.data.toAccount ?? "")},
-             ${expenseCategoryId}, ${description}, ${String(row.data.note ?? "")},
-             NOW(), NOW())
+             ${row.data.fromAccount ? String(row.data.fromAccount) : null},
+             ${row.data.toAccount ? String(row.data.toAccount) : null},
+             ${expenseCategoryId}, ${description},
+             ${row.data.note ? String(row.data.note) : null},
+             ${importRunId ?? null}, NOW(), NOW())
         `;
         imported++;
       } catch (err) {

@@ -1,27 +1,39 @@
 /**
  * Adapter: Quang Minh cát, gạch 2025.xlsx
- * Target table: supplier_delivery_daily (supplierId resolved via "Quang Minh" lookup)
+ * Target table: supplier_delivery_daily
  *
- * Sheet structure: 1+ sheets (commonly "Cát" và "Gạch") with same column shape:
- *   Ngày | Mã VT | Tên VT | ĐVT | KL | CB Vật tư | Chỉ huy CT | Ghi chú
- * All sheets are merged — itemName already disambiguates cát vs gạch.
- * Idempotency key: (supplierId, date, itemId, qty)
+ * SOP convention: 1 file = 1 supplier = 1 material.
+ * Sheet "Vật tư ngày" has a 6-row title block, then header row "STT | Ngày/tháng/năm | Khối lượng | ĐVT | ...".
+ * Material name in title row "Tên vật tư: <name>".
+ * Idempotency key: (supplierId, date, itemId, qty).
  */
 
 import * as XLSX from "xlsx";
 import { resolveSupplier, resolveItem } from "../conflict-resolver";
-import { parseExcelDate, num } from "./excel-utils";
+import {
+  parseExcelDate,
+  num,
+  normHeader,
+  findHeaderRow,
+  buildRowsFromMatrix,
+  findLabeledValue,
+} from "./excel-utils";
 import type {
   ImportAdapter,
   ParsedData,
   ParsedRow,
   ConflictItem,
-  ResolvedMapping,
   ValidationResult,
   ImportSummary,
 } from "./adapter-types";
 
 const DEFAULT_SUPPLIER_NAME = "Quang Minh";
+
+function pickSheet(wb: XLSX.WorkBook): string | null {
+  const target = wb.SheetNames.find((n) => normHeader(n).includes("vat tu ngay"));
+  if (target) return target;
+  return wb.SheetNames.find((n) => normHeader(n).includes("ngay")) ?? null;
+}
 
 export const QuangMinhAdapter: ImportAdapter = {
   name: "quang-minh",
@@ -29,41 +41,70 @@ export const QuangMinhAdapter: ImportAdapter = {
 
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-    const rows: ParsedRow[] = [];
-    const itemNames = new Set<string>();
+    const sheetName = pickSheet(wb);
+    if (!sheetName) return { rows: [], conflicts: [], meta: { sheetName: "" } };
+    const sheet = wb.Sheets[sheetName];
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      defval: null,
+      raw: false,
+    });
 
-    for (const sheetName of wb.SheetNames) {
-      const sheet = wb.Sheets[sheetName];
-      if (!sheet) continue;
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-        defval: null,
-        raw: false,
+    const headerIdx = findHeaderRow(matrix, ["stt"]);
+    if (headerIdx < 0) {
+      return { rows: [], conflicts: [], meta: { sheetName, error: "Không tìm thấy header" } };
+    }
+
+    const itemName =
+      findLabeledValue(matrix, "tên vật tư") ??
+      findLabeledValue(matrix, "ten vat tu") ??
+      "";
+    if (!itemName) {
+      return {
+        rows: [],
+        conflicts: [],
+        meta: { sheetName, error: "Không tìm thấy 'Tên vật tư:' trong file" },
+      };
+    }
+
+    const { rows: rawRows } = buildRowsFromMatrix(matrix, headerIdx);
+    const rows: ParsedRow[] = [];
+    const itemNames = new Set<string>([itemName]);
+
+    for (let i = 0; i < rawRows.length; i++) {
+      const r = rawRows[i];
+      const stt = r["STT"];
+      const date = r["Ngày/tháng/năm"] ?? r["Ngày"] ?? null;
+      const qty = r["Khối lượng"] ?? r["Khối\r\n lượng"] ?? r["Khối\n lượng"] ?? r["KL"];
+      if (date == null && (qty == null || qty === "")) continue;
+      if (typeof stt === "string" && !/^\d/.test(stt.trim())) continue;
+      rows.push({
+        rowIndex: headerIdx + 1 + i,
+        data: {
+          sheet: sheetName,
+          date,
+          itemName,
+          unit: String(r["ĐVT"] ?? r["DVT"] ?? "").trim() || "m3",
+          qty: num(qty),
+          cbVatTu: String(r["Cán bộ vật tư"] ?? "").trim() || undefined,
+          chiHuyCt:
+            String(r["Chỉ huy công trường"] ?? r["Chỉ huy \r\ncông trường"] ?? "").trim() ||
+            undefined,
+          keToan:
+            String(r["Kế toán phụ trách"] ?? r["Kế toán\r\n phụ trách"] ?? "").trim() || undefined,
+          note: String(r["Ghi chú"] ?? "").trim() || undefined,
+        },
       });
-      for (let i = 0; i < raw.length; i++) {
-        const r = raw[i];
-        const itemName = String(r["Tên VT"] ?? r["Ten VT"] ?? r["Item"] ?? r["Mặt hàng"] ?? "").trim();
-        if (!itemName) continue;
-        itemNames.add(itemName);
-        rows.push({
-          rowIndex: rows.length,
-          data: {
-            sheet: sheetName,
-            date: r["Ngày"] ?? r["Ngay"] ?? r["Date"] ?? null,
-            itemName,
-            unit: String(r["ĐVT"] ?? r["DVT"] ?? r["Unit"] ?? "").trim() || "m3",
-            qty: num(r["KL"] ?? r["SL"] ?? r["Qty"]),
-            cbVatTu: String(r["CB Vật tư"] ?? r["CB VT"] ?? "").trim() || undefined,
-            chiHuyCt: String(r["Chỉ huy CT"] ?? r["CHCT"] ?? "").trim() || undefined,
-            note: String(r["Ghi chú"] ?? r["Note"] ?? "").trim() || undefined,
-          },
-        });
-      }
     }
 
     const conflicts: ConflictItem[] = [await resolveSupplier(DEFAULT_SUPPLIER_NAME)];
     for (const name of itemNames) conflicts.push(await resolveItem(name));
 
-    return { rows, conflicts, meta: { sheets: wb.SheetNames, defaultSupplier: DEFAULT_SUPPLIER_NAME } };
+    return {
+      rows,
+      conflicts,
+      meta: { sheetName, defaultSupplier: DEFAULT_SUPPLIER_NAME, itemName },
+    };
   },
 
   validate(data: ParsedData): ValidationResult {
@@ -82,7 +123,7 @@ export const QuangMinhAdapter: ImportAdapter = {
     return { valid: errors.length === 0, errors };
   },
 
-  async apply(data, mapping, tx, _importRunId): Promise<ImportSummary> {
+  async apply(data, mapping, tx, importRunId): Promise<ImportSummary> {
     let imported = 0;
     let skipped = 0;
     const errors: ImportSummary["errors"] = [];
@@ -130,13 +171,14 @@ export const QuangMinhAdapter: ImportAdapter = {
 
         await db.$executeRaw`
           INSERT INTO supplier_delivery_daily
-            ("supplierId", date, "itemId", qty, unit, "cbVatTu", "chiHuyCt", note, "createdAt", "updatedAt")
+            ("supplierId", date, "itemId", qty, unit, "cbVatTu", "chiHuyCt", note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${supplierId}, ${date}, ${itemId}, ${qty},
              ${String(row.data.unit ?? "m3")},
              ${row.data.cbVatTu ? String(row.data.cbVatTu) : null},
              ${row.data.chiHuyCt ? String(row.data.chiHuyCt) : null},
              ${row.data.note ? String(row.data.note) : null},
+             ${importRunId ?? null},
              NOW(), NOW())
         `;
         imported++;

@@ -189,11 +189,29 @@ export async function deleteImportRun(id: number) {
  * (runs created before the importRunId column was added will return 0).
  */
 export async function getRollbackInfo(id: number) {
-  const [tx, open] = await Promise.all([
+  const [tx, open, est, ptx, sdd, sld, psc, lc, je] = await Promise.all([
     prisma.ledgerTransaction.count({ where: { importRunId: id } }),
     prisma.ledgerOpeningBalance.count({ where: { importRunId: id } }),
+    prisma.projectEstimate.count({ where: { importRunId: id } }),
+    prisma.projectTransaction.count({ where: { importRunId: id } }),
+    prisma.supplierDeliveryDaily.count({ where: { importRunId: id } }),
+    prisma.slDtTarget.count({ where: { importRunId: id } }),
+    prisma.paymentSchedule.count({ where: { importRunId: id } }),
+    prisma.loanContract.count({ where: { importRunId: id } }),
+    prisma.journalEntry.count({ where: { importRunId: id } }),
   ]);
-  return { ledgerTransactions: tx, ledgerOpeningBalances: open, total: tx + open };
+  return {
+    ledgerTransactions: tx,
+    ledgerOpeningBalances: open,
+    projectEstimates: est,
+    projectTransactions: ptx,
+    supplierDeliveryDaily: sdd,
+    slDtTargets: sld,
+    paymentSchedules: psc,
+    loanContracts: lc,
+    journalEntries: je,
+    total: tx + open + est + ptx + sdd + sld + psc + lc + je,
+  };
 }
 
 /**
@@ -212,11 +230,28 @@ export async function rollbackImportRun(id: number) {
     // is intentional and the ImportRun record is the audit trail.
     const txCount = await tx.$executeRaw`DELETE FROM ledger_transactions WHERE "importRunId" = ${id}`;
     const openCount = await tx.$executeRaw`DELETE FROM ledger_opening_balances WHERE "importRunId" = ${id}`;
+    // Loan payments cascade-delete with their contract via FK; delete contracts first.
+    const lpCount = await tx.$executeRaw`DELETE FROM loan_payments WHERE "loanContractId" IN (SELECT id FROM loan_contracts WHERE "importRunId" = ${id})`;
+    const lcCount = await tx.$executeRaw`DELETE FROM loan_contracts WHERE "importRunId" = ${id}`;
+    const estCount = await tx.$executeRaw`DELETE FROM project_estimates WHERE "importRunId" = ${id}`;
+    const ptxCount = await tx.$executeRaw`DELETE FROM project_transactions WHERE "importRunId" = ${id}`;
+    const sddCount = await tx.$executeRaw`DELETE FROM supplier_delivery_daily WHERE "importRunId" = ${id}`;
+    const sldCount = await tx.$executeRaw`DELETE FROM sl_dt_targets WHERE "importRunId" = ${id}`;
+    const pscCount = await tx.$executeRaw`DELETE FROM payment_schedules WHERE "importRunId" = ${id}`;
+    const jeCount = await tx.$executeRaw`DELETE FROM journal_entries WHERE "importRunId" = ${id}`;
     await tx.importRun.delete({ where: { id } });
     return {
       ledgerTransactions: txCount,
       ledgerOpeningBalances: openCount,
-      total: txCount + openCount,
+      projectEstimates: estCount,
+      projectTransactions: ptxCount,
+      supplierDeliveryDaily: sddCount,
+      slDtTargets: sldCount,
+      paymentSchedules: pscCount,
+      loanContracts: lcCount,
+      loanPayments: lpCount,
+      journalEntries: jeCount,
+      total: txCount + openCount + estCount + ptxCount + sddCount + sldCount + pscCount + lcCount + lpCount + jeCount,
     };
   });
 }

@@ -1,31 +1,62 @@
 /**
  * Adapter: SL - DT 2025.xlsx → sl_dt_targets + payment_schedules
  *
- * Sheet 1 "Chỉ tiêu":   Project | Year | Month | SL Target | DT Target | Note
- *   → INSERT INTO sl_dt_targets, idempotent on (projectId, year, month)
- * Sheet 2 "Tiến độ nộp tiền": Project | Đợt | Ngày KH | Số tiền KH | Ngày TH | Số tiền TH | Note
- *   → INSERT INTO payment_schedules, idempotent on (projectId, batch)
+ * Real SOP layout:
+ *   - "Chỉ tiêu SL DT Tháng XX (năm YYYY)" — multiple monthly sheets.
+ *     Header at row 7 (1-indexed: 8). Row 8 has sub-headers under SL/DT kỳ này.
+ *     Data rows: each "Lô" (lot) is a sub-project. SL target = col 5,
+ *     DT target = col 7.
+ *   - "TIẾN ĐỘ NỘP TIỀN" — pivot matrix. Header at row 3, sub-header row 4.
+ *     Per lot: 4 batches, each batch has (Nộp tiền, Tiến độ) sub-columns.
+ *     planDate is not present → synthesize end-of-quarter for 2025.
+ *
+ * Each "Lô X" name becomes a `projectName` requiring mapping. User maps lots
+ * to existing Project records or creates new ones via /admin/import conflicts UI.
+ *
+ * Idempotency: targets dedup by (projectId, year, month); payments by (projectId, batch).
+ * importRunId persisted for full rollback.
  */
 
 import * as XLSX from "xlsx";
 import { resolveProject } from "../conflict-resolver";
-import { parseExcelDate, num } from "./excel-utils";
+import { num, normHeader, findHeaderRow, buildRowsFromMatrix } from "./excel-utils";
 import type {
   ImportAdapter,
   ParsedData,
   ParsedRow,
   ConflictItem,
-  ResolvedMapping,
   ValidationResult,
   ImportSummary,
 } from "./adapter-types";
 
-const SHEET_TARGETS = "Chỉ tiêu";
-const SHEET_PAYMENTS = "Tiến độ nộp tiền";
+function readMatrix(sheet: XLSX.WorkSheet): unknown[][] {
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: false });
+}
 
-function findSheet(wb: XLSX.WorkBook, hint: string): string | null {
-  const lower = hint.toLowerCase();
-  return wb.SheetNames.find((n) => n.toLowerCase().includes(lower.split(" ")[0])) ?? null;
+/** Parse "Chỉ tiêu SL DT Tháng 07 năm 2025" or "...Tháng 12 năm 202" → { year, month }. */
+function parseTargetSheetName(name: string): { year: number; month: number } | null {
+  const m = name.match(/Tháng\s*(\d{1,2})\s*(?:năm\s*(\d{2,4}))?/i);
+  if (!m) return null;
+  const month = parseInt(m[1], 10);
+  let year = m[2] ? parseInt(m[2], 10) : 2025;
+  if (year < 100) year = 2000 + year;
+  if (year < 1000) year = 2025; // truncated "202" → assume 2025
+  return { year, month };
+}
+
+const QUARTER_END_2025 = [
+  new Date(2025, 2, 31), // Đợt 1 → Q1
+  new Date(2025, 5, 30), // Đợt 2 → Q2
+  new Date(2025, 8, 30), // Đợt 3 → Q3
+  new Date(2025, 11, 31), // Đợt 4 → Q4
+];
+
+function isLotRow(stt: unknown, dm: unknown): boolean {
+  const s = String(stt ?? "").trim();
+  const d = String(dm ?? "").trim();
+  if (!d) return false;
+  // Numeric STT and Danh mục starting with "Lô"
+  return /^\d+$/.test(s) && /^Lô\s/i.test(d);
 }
 
 export const SlDtAdapter: ImportAdapter = {
@@ -37,63 +68,88 @@ export const SlDtAdapter: ImportAdapter = {
     const rows: ParsedRow[] = [];
     const projectNames = new Set<string>();
 
-    const targetsSheet = findSheet(wb, SHEET_TARGETS) ?? wb.SheetNames[0];
-    const paymentsSheet = findSheet(wb, SHEET_PAYMENTS) ?? wb.SheetNames[1] ?? null;
-
-    if (targetsSheet && wb.Sheets[targetsSheet]) {
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[targetsSheet], {
-        defval: null,
-        raw: false,
-      });
-      for (let i = 0; i < raw.length; i++) {
-        const r = raw[i];
-        const projectName = String(r["Dự án"] ?? r["Project"] ?? r["Du an"] ?? "").trim();
-        if (!projectName) continue;
+    // ── Targets: iterate ALL "Chỉ tiêu SL DT Tháng" sheets ──
+    const targetSheets = wb.SheetNames.filter((n) => normHeader(n).includes("chi tieu sl dt"));
+    for (const sheetName of targetSheets) {
+      const ym = parseTargetSheetName(sheetName);
+      if (!ym) continue;
+      const matrix = readMatrix(wb.Sheets[sheetName]);
+      // Header is around row 7-8; fall back to scanning for "STT" + "Danh mục".
+      const headerIdx = findHeaderRow(matrix, ["stt"]);
+      if (headerIdx < 0) continue;
+      // Data starts after header + 2 (subheader + blank).
+      const dataStart = headerIdx + 2;
+      for (let i = dataStart; i < matrix.length; i++) {
+        const r = matrix[i] || [];
+        if (!isLotRow(r[0], r[1])) continue;
+        const projectName = String(r[1]).trim();
         projectNames.add(projectName);
+        // Column layout per inspect: 0:STT 1:Danh mục 2:Dự toán 3:SL luỹ kế đầu 4:DT luỹ kế đầu
+        // 5:SL chỉ tiêu kỳ này 6:SL thực hiện 7:DT chỉ tiêu 8:DT thực hiện
+        const slTarget = num(r[5]);
+        const dtTarget = num(r[7]);
+        if (slTarget === 0 && dtTarget === 0) continue;
         rows.push({
           rowIndex: rows.length,
           data: {
             kind: "target",
             projectName,
-            year: parseInt(String(r["Năm"] ?? r["Year"] ?? "0"), 10) || 0,
-            month: parseInt(String(r["Tháng"] ?? r["Month"] ?? "0"), 10) || 0,
-            slTarget: num(r["SL"] ?? r["SL Target"] ?? r["Sản lượng"]),
-            dtTarget: num(r["DT"] ?? r["DT Target"] ?? r["Doanh thu"]),
-            note: String(r["Ghi chú"] ?? r["Note"] ?? "").trim() || undefined,
+            year: ym.year,
+            month: ym.month,
+            slTarget,
+            dtTarget,
+            note: undefined,
           },
         });
       }
     }
 
-    if (paymentsSheet && wb.Sheets[paymentsSheet]) {
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[paymentsSheet], {
-        defval: null,
-        raw: false,
-      });
-      for (let i = 0; i < raw.length; i++) {
-        const r = raw[i];
-        const projectName = String(r["Dự án"] ?? r["Project"] ?? r["Du an"] ?? "").trim();
-        if (!projectName) continue;
-        projectNames.add(projectName);
-        rows.push({
-          rowIndex: rows.length,
-          data: {
-            kind: "payment",
-            projectName,
-            batch: String(r["Đợt"] ?? r["Batch"] ?? "").trim(),
-            planDate: r["Ngày KH"] ?? r["Ngày kế hoạch"] ?? r["PlanDate"] ?? null,
-            planAmount: num(r["Số tiền KH"] ?? r["Tiền KH"] ?? r["PlanAmount"]),
-            actualDate: r["Ngày TH"] ?? r["Ngày thực hiện"] ?? r["ActualDate"] ?? null,
-            actualAmount: num(r["Số tiền TH"] ?? r["Tiền TH"] ?? r["ActualAmount"]),
-            note: String(r["Ghi chú"] ?? r["Note"] ?? "").trim() || undefined,
-          },
-        });
+    // ── Payments: TIẾN ĐỘ NỘP TIỀN matrix → 4 batches per lot ──
+    const paymentSheet = wb.SheetNames.find((n) => {
+      const norm = normHeader(n);
+      return norm.includes("nop tien") || norm.includes("nộp tiền".toLowerCase());
+    });
+    if (paymentSheet) {
+      const matrix = readMatrix(wb.Sheets[paymentSheet]);
+      const headerIdx = findHeaderRow(matrix, ["stt"]);
+      if (headerIdx >= 0) {
+        const dataStart = headerIdx + 3; // skip subheader + blank
+        for (let i = dataStart; i < matrix.length; i++) {
+          const r = matrix[i] || [];
+          if (!isLotRow(r[0], r[1])) continue;
+          const projectName = String(r[1]).trim();
+          projectNames.add(projectName);
+          // Batch cols: 3,5,7,9 = Nộp tiền; 4,6,8,10 = Tiến độ (milestone)
+          for (let b = 0; b < 4; b++) {
+            const amount = num(r[3 + b * 2]);
+            const milestone = String(r[4 + b * 2] ?? "").trim();
+            if (amount <= 0 && !milestone) continue;
+            rows.push({
+              rowIndex: rows.length,
+              data: {
+                kind: "payment",
+                projectName,
+                batch: `Đợt ${b + 1}`,
+                planDate: QUARTER_END_2025[b],
+                planAmount: amount,
+                actualDate: null,
+                actualAmount: 0,
+                note: milestone || undefined,
+              },
+            });
+          }
+        }
       }
     }
 
     const conflicts: ConflictItem[] = [];
     for (const name of projectNames) conflicts.push(await resolveProject(name));
-    return { rows, conflicts, meta: { targetsSheet, paymentsSheet } };
+
+    return {
+      rows,
+      conflicts,
+      meta: { targetSheets: targetSheets.length, paymentSheet, projects: projectNames.size },
+    };
   },
 
   validate(data: ParsedData): ValidationResult {
@@ -102,17 +158,19 @@ export const SlDtAdapter: ImportAdapter = {
       if (row.data.kind === "target") {
         const y = Number(row.data.year);
         const m = Number(row.data.month);
-        if (y < 2000 || y > 2100) errors.push({ rowIndex: row.rowIndex, field: "year", message: "Năm không hợp lệ" });
-        if (m < 1 || m > 12) errors.push({ rowIndex: row.rowIndex, field: "month", message: "Tháng phải 1–12" });
+        if (y < 2000 || y > 2100)
+          errors.push({ rowIndex: row.rowIndex, field: "year", message: "Năm không hợp lệ" });
+        if (m < 1 || m > 12)
+          errors.push({ rowIndex: row.rowIndex, field: "month", message: "Tháng phải 1–12" });
       } else if (row.data.kind === "payment") {
-        if (!row.data.batch) errors.push({ rowIndex: row.rowIndex, field: "batch", message: "Thiếu Đợt" });
-        if (!parseExcelDate(row.data.planDate)) errors.push({ rowIndex: row.rowIndex, field: "planDate", message: "Ngày KH không hợp lệ" });
+        if (!row.data.batch)
+          errors.push({ rowIndex: row.rowIndex, field: "batch", message: "Thiếu Đợt" });
       }
     }
     return { valid: errors.length === 0, errors };
   },
 
-  async apply(data, mapping, tx, _importRunId): Promise<ImportSummary> {
+  async apply(data, mapping, tx, importRunId): Promise<ImportSummary> {
     let imported = 0;
     let skipped = 0;
     const errors: ImportSummary["errors"] = [];
@@ -142,12 +200,12 @@ export const SlDtAdapter: ImportAdapter = {
           }
           await db.$executeRaw`
             INSERT INTO sl_dt_targets
-              ("projectId", year, month, "slTarget", "dtTarget", note, "createdAt", "updatedAt")
+              ("projectId", year, month, "slTarget", "dtTarget", note, "importRunId", "createdAt", "updatedAt")
             VALUES
               (${projectId}, ${year}, ${month},
                ${Number(row.data.slTarget ?? 0)}, ${Number(row.data.dtTarget ?? 0)},
                ${row.data.note ? String(row.data.note) : null},
-               NOW(), NOW())
+               ${importRunId ?? null}, NOW(), NOW())
           `;
           imported++;
           continue;
@@ -155,12 +213,7 @@ export const SlDtAdapter: ImportAdapter = {
 
         // payment schedule
         const batch = String(row.data.batch ?? "");
-        const planDate = parseExcelDate(row.data.planDate);
-        if (!planDate) {
-          errors.push({ rowIndex: row.rowIndex, message: "Ngày KH không hợp lệ, bỏ qua" });
-          skipped++;
-          continue;
-        }
+        const planDate = row.data.planDate as Date;
         const existing = await db.$queryRaw<{ id: number }[]>`
           SELECT id FROM payment_schedules
           WHERE "projectId" = ${projectId} AND batch = ${batch} AND "deletedAt" IS NULL
@@ -170,19 +223,19 @@ export const SlDtAdapter: ImportAdapter = {
           skipped++;
           continue;
         }
-        const actualDate = parseExcelDate(row.data.actualDate);
         const actualAmount = Number(row.data.actualAmount ?? 0);
-        const status = actualDate && actualAmount > 0 ? "paid" : "pending";
+        const status = actualAmount > 0 ? "paid" : "pending";
 
         await db.$executeRaw`
           INSERT INTO payment_schedules
             ("projectId", batch, "planDate", "planAmount", "actualDate", "actualAmount",
-             status, note, "createdAt", "updatedAt")
+             status, note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${projectId}, ${batch}, ${planDate}, ${Number(row.data.planAmount ?? 0)},
-             ${actualDate}, ${actualAmount > 0 ? actualAmount : null},
+             ${(row.data.actualDate as Date) ?? null},
+             ${actualAmount > 0 ? actualAmount : null},
              ${status}, ${row.data.note ? String(row.data.note) : null},
-             NOW(), NOW())
+             ${importRunId ?? null}, NOW(), NOW())
         `;
         imported++;
       } catch (err) {
