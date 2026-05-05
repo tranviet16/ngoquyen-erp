@@ -1,23 +1,27 @@
 import { getLaborDebtMatrix } from "@/lib/cong-no-nc/labor-ledger-service";
 import { prisma } from "@/lib/prisma";
 import { DebtMatrix, type DebtMatrixRow } from "@/components/ledger/debt-matrix";
-import { SupplierMultiSelect } from "@/components/ledger/supplier-multi-select";
+import { MultiSelectFilter } from "@/components/ledger/multi-select-filter";
 
 interface PageProps {
-  searchParams: Promise<{ supplier?: string }>;
+  searchParams: Promise<{ entity?: string }>;
 }
 
 export default async function ChiTietNcPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const partyIds = sp.supplier
-    ? sp.supplier.split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0)
+  const entityIds = sp.entity
+    ? sp.entity.split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0)
     : [];
 
-  const [matrixRows, entities, contractors] = await Promise.all([
-    getLaborDebtMatrix(partyIds.length > 0 ? { partyIds } : undefined),
+  const [matrixRows, allEntities, contractors] = await Promise.all([
+    getLaborDebtMatrix(entityIds.length > 0 ? { entityIds } : undefined),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.contractor.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
+
+  const visibleEntities = entityIds.length > 0
+    ? allEntities.filter((e) => entityIds.includes(e.id))
+    : allEntities;
 
   const contractorMap = Object.fromEntries(contractors.map((c) => [c.id, c.name]));
   const rows: DebtMatrixRow[] = matrixRows.map((r) => ({
@@ -37,11 +41,11 @@ export default async function ChiTietNcPage({ searchParams }: PageProps) {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-medium">Lọc đội:</span>
-        <SupplierMultiSelect options={contractors} selected={partyIds} paramName="supplier" label="Đội" />
+        <span className="text-sm font-medium">Lọc chủ thể:</span>
+        <MultiSelectFilter options={allEntities} selected={entityIds} paramName="entity" label="chủ thể" />
       </div>
 
-      <DebtMatrix rows={rows} entities={entities} partyLabel="Đội thi công" />
+      <DebtMatrix rows={rows} entities={visibleEntities} partyLabel="Đội thi công" />
     </div>
   );
 }

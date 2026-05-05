@@ -13,11 +13,11 @@ interface Option {
 interface Props {
   options: Option[];
   selected: number[];
-  paramName?: string;
-  label?: string;
+  paramName: string;
+  label: string;
 }
 
-export function SupplierMultiSelect({ options, selected, paramName = "supplier", label = "NCC" }: Props) {
+export function MultiSelectFilter({ options, selected, paramName, label }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);

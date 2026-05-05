@@ -73,53 +73,61 @@ export function DebtMatrix({ rows, entities, partyLabel }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto border rounded-md">
+    <div className="border rounded-md max-h-[80vh] overflow-auto">
       <table className="text-sm border-collapse">
         <thead>
           {/* Tier 1: party label + entity names + Tổng */}
-          <tr className="bg-muted">
+          <tr>
             <th
-              className="border p-2 text-left min-w-[180px] sticky left-0 bg-muted z-10"
+              className="border p-2 text-left min-w-[180px] sticky left-0 top-0 bg-muted z-30"
               rowSpan={3}
             >
               {partyLabel}
             </th>
             {entities.map((e) => (
-              <th key={e.id} className="border p-2 text-center" colSpan={8}>
+              <th key={e.id} className="border p-2 text-center sticky top-0 bg-muted z-20" colSpan={8}>
                 {e.name}
               </th>
             ))}
-            <th className="border p-2 text-center" colSpan={8}>Tổng</th>
+            <th className="border p-2 text-center sticky top-0 bg-muted z-20" colSpan={8}>Tổng</th>
           </tr>
           {/* Tier 2: 4 group labels per entity */}
-          <tr className="bg-muted/70">
+          <tr>
             {entities.map((e) =>
               GROUPS.map((g) => (
-                <th key={`${e.id}-${g.label}`} className="border p-1 text-center text-xs" colSpan={2}>
+                <th
+                  key={`${e.id}-${g.label}`}
+                  className="border p-1 text-center text-xs sticky top-[37px] bg-muted/95 z-20"
+                  colSpan={2}
+                >
                   {g.label}
                 </th>
               )),
             )}
             {GROUPS.map((g) => (
-              <th key={`tot-${g.label}`} className="border p-1 text-center text-xs" colSpan={2}>
+              <th
+                key={`tot-${g.label}`}
+                className="border p-1 text-center text-xs sticky top-[37px] bg-muted/95 z-20"
+                colSpan={2}
+              >
                 {g.label}
               </th>
             ))}
           </tr>
           {/* Tier 3: TT / HĐ */}
-          <tr className="bg-muted/40">
+          <tr>
             {entities.map((e) =>
               GROUPS.map((g) => (
                 <Fragment key={`${e.id}-${g.label}-sub`}>
-                  <th className="border p-1 text-center text-[11px] min-w-[80px]">TT</th>
-                  <th className="border p-1 text-center text-[11px] min-w-[80px]">HĐ</th>
+                  <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">TT</th>
+                  <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">HĐ</th>
                 </Fragment>
               )),
             )}
             {GROUPS.map((g) => (
               <Fragment key={`tot-${g.label}-sub`}>
-                <th className="border p-1 text-center text-[11px] min-w-[80px]">TT</th>
-                <th className="border p-1 text-center text-[11px] min-w-[80px]">HĐ</th>
+                <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">TT</th>
+                <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">HĐ</th>
               </Fragment>
             ))}
           </tr>

@@ -1,23 +1,27 @@
 import { getMaterialDebtMatrix } from "@/lib/cong-no-vt/material-ledger-service";
 import { prisma } from "@/lib/prisma";
 import { DebtMatrix, type DebtMatrixRow } from "@/components/ledger/debt-matrix";
-import { SupplierMultiSelect } from "@/components/ledger/supplier-multi-select";
+import { MultiSelectFilter } from "@/components/ledger/multi-select-filter";
 
 interface PageProps {
-  searchParams: Promise<{ supplier?: string }>;
+  searchParams: Promise<{ entity?: string }>;
 }
 
 export default async function ChiTietPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const partyIds = sp.supplier
-    ? sp.supplier.split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0)
+  const entityIds = sp.entity
+    ? sp.entity.split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0)
     : [];
 
-  const [matrixRows, entities, suppliers] = await Promise.all([
-    getMaterialDebtMatrix(partyIds.length > 0 ? { partyIds } : undefined),
+  const [matrixRows, allEntities, suppliers] = await Promise.all([
+    getMaterialDebtMatrix(entityIds.length > 0 ? { entityIds } : undefined),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.supplier.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
+
+  const visibleEntities = entityIds.length > 0
+    ? allEntities.filter((e) => entityIds.includes(e.id))
+    : allEntities;
 
   const supplierMap = Object.fromEntries(suppliers.map((s) => [s.id, s.name]));
   const rows: DebtMatrixRow[] = matrixRows.map((r) => ({
@@ -37,11 +41,11 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-medium">Lọc NCC:</span>
-        <SupplierMultiSelect options={suppliers} selected={partyIds} paramName="supplier" label="NCC" />
+        <span className="text-sm font-medium">Lọc chủ thể:</span>
+        <MultiSelectFilter options={allEntities} selected={entityIds} paramName="entity" label="chủ thể" />
       </div>
 
-      <DebtMatrix rows={rows} entities={entities} partyLabel="NCC" />
+      <DebtMatrix rows={rows} entities={visibleEntities} partyLabel="NCC" />
     </div>
   );
 }
