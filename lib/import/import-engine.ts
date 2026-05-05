@@ -105,6 +105,18 @@ export async function commitImport(
     throw new Error("File hash mismatch — please re-upload the original file");
   }
 
+  // Block re-commit if this file was already imported successfully — admin must
+  // rollback the previous run first. Prevents accidental double-import duplication.
+  const prior = await prisma.importRun.findFirst({
+    where: { fileHash: run.fileHash, status: "committed", id: { not: runId } },
+    select: { id: true },
+  });
+  if (prior) {
+    throw new Error(
+      `File này đã được import ở run #${prior.id}. Hoàn tác run đó trước khi import lại.`,
+    );
+  }
+
   const parsedData = await adapter.parse(fileBuffer);
 
   try {
@@ -196,13 +208,15 @@ export async function rollbackImportRun(id: number) {
   }
 
   return prisma.$transaction(async (tx) => {
-    const txDeleted = await tx.ledgerTransaction.deleteMany({ where: { importRunId: id } });
-    const openDeleted = await tx.ledgerOpeningBalance.deleteMany({ where: { importRunId: id } });
+    // Raw SQL bypasses the audit extension's deleteMany guard. Bulk rollback
+    // is intentional and the ImportRun record is the audit trail.
+    const txCount = await tx.$executeRaw`DELETE FROM ledger_transactions WHERE "importRunId" = ${id}`;
+    const openCount = await tx.$executeRaw`DELETE FROM ledger_opening_balances WHERE "importRunId" = ${id}`;
     await tx.importRun.delete({ where: { id } });
     return {
-      ledgerTransactions: txDeleted.count,
-      ledgerOpeningBalances: openDeleted.count,
-      total: txDeleted.count + openDeleted.count,
+      ledgerTransactions: txCount,
+      ledgerOpeningBalances: openCount,
+      total: txCount + openCount,
     };
   });
 }

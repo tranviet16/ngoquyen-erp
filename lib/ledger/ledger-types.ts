@@ -71,13 +71,24 @@ export interface CurrentBalance {
   hd: Prisma.Decimal;
 }
 
+export interface MatrixCell {
+  openTt: number;
+  openHd: number;
+  layTt: number;
+  layHd: number;
+  traTt: number;
+  traHd: number;
+  closeTt: number;
+  closeHd: number;
+}
+
 export interface MatrixRow {
   partyId: number;
   partyName: string;
-  // Keyed by entityId: { tt, hd }
-  cells: Record<string, { tt: Prisma.Decimal; hd: Prisma.Decimal }>;
-  totalTt: Prisma.Decimal;
-  totalHd: Prisma.Decimal;
+  // Keyed by entityId
+  cells: Record<string, MatrixCell>;
+  // Per-row totals across all entities (8 metrics)
+  totals: MatrixCell;
 }
 
 export interface OpeningBalanceInput {

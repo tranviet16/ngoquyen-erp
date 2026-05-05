@@ -1,16 +1,28 @@
 "use client";
 
+import { Fragment } from "react";
+
 interface EntityInfo {
   id: number;
   name: string;
 }
 
+export interface DebtMatrixCell {
+  openTt: number;
+  openHd: number;
+  layTt: number;
+  layHd: number;
+  traTt: number;
+  traHd: number;
+  closeTt: number;
+  closeHd: number;
+}
+
 export interface DebtMatrixRow {
   partyId: number;
   partyName: string;
-  cells: Record<string, { tt: number; hd: number }>;
-  totalTt: number;
-  totalHd: number;
+  cells: Record<string, DebtMatrixCell>;
+  totals: DebtMatrixCell;
 }
 
 interface Props {
@@ -20,88 +32,140 @@ interface Props {
 }
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
+  new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(n);
 
-const colorClass = (n: number) => (n < 0 ? "text-destructive" : "");
+const cellCls = (n: number) =>
+  `border p-1 text-right text-xs tabular-nums ${n < 0 ? "text-destructive" : ""}`;
+
+const GROUPS: Array<{ label: string; tt: keyof DebtMatrixCell; hd: keyof DebtMatrixCell }> = [
+  { label: "Đầu kỳ", tt: "openTt", hd: "openHd" },
+  { label: "Lấy hàng", tt: "layTt", hd: "layHd" },
+  { label: "Trả tiền", tt: "traTt", hd: "traHd" },
+  { label: "Cuối kỳ", tt: "closeTt", hd: "closeHd" },
+];
+
+function emptyCell(): DebtMatrixCell {
+  return { openTt: 0, openHd: 0, layTt: 0, layHd: 0, traTt: 0, traHd: 0, closeTt: 0, closeHd: 0 };
+}
+
+function addInto(t: DebtMatrixCell, s: DebtMatrixCell) {
+  t.openTt += s.openTt; t.openHd += s.openHd;
+  t.layTt += s.layTt;  t.layHd += s.layHd;
+  t.traTt += s.traTt;  t.traHd += s.traHd;
+  t.closeTt += s.closeTt; t.closeHd += s.closeHd;
+}
 
 export function DebtMatrix({ rows, entities, partyLabel }: Props) {
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Không có dữ liệu</p>;
   }
 
-  const colTotals: Record<string, { tt: number; hd: number }> = {};
-  for (const e of entities) colTotals[String(e.id)] = { tt: 0, hd: 0 };
-  let grandTt = 0;
-  let grandHd = 0;
+  // Column totals per entity + grand totals
+  const colTotals: Record<string, DebtMatrixCell> = {};
+  for (const e of entities) colTotals[String(e.id)] = emptyCell();
+  const grand: DebtMatrixCell = emptyCell();
   for (const row of rows) {
     for (const e of entities) {
-      const key = String(e.id);
-      const cell = row.cells[key];
-      if (cell) {
-        colTotals[key].tt += cell.tt;
-        colTotals[key].hd += cell.hd;
-      }
+      const cell = row.cells[String(e.id)];
+      if (cell) addInto(colTotals[String(e.id)], cell);
     }
-    grandTt += row.totalTt;
-    grandHd += row.totalHd;
+    addInto(grand, row.totals);
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
+    <div className="overflow-x-auto border rounded-md">
+      <table className="text-sm border-collapse">
         <thead>
+          {/* Tier 1: party label + entity names + Tổng */}
           <tr className="bg-muted">
-            <th className="border p-2 text-left min-w-[140px]" rowSpan={2}>{partyLabel}</th>
+            <th
+              className="border p-2 text-left min-w-[180px] sticky left-0 bg-muted z-10"
+              rowSpan={3}
+            >
+              {partyLabel}
+            </th>
             {entities.map((e) => (
-              <th key={e.id} className="border p-2 text-center" colSpan={2}>{e.name}</th>
+              <th key={e.id} className="border p-2 text-center" colSpan={8}>
+                {e.name}
+              </th>
             ))}
-            <th className="border p-2 text-center" colSpan={2}>Tổng</th>
+            <th className="border p-2 text-center" colSpan={8}>Tổng</th>
           </tr>
-          <tr className="bg-muted/60">
-            {entities.map((e) => (
-              <>
-                <th key={`${e.id}-tt`} className="border p-1 text-center text-xs">TT</th>
-                <th key={`${e.id}-hd`} className="border p-1 text-center text-xs">HĐ</th>
-              </>
+          {/* Tier 2: 4 group labels per entity */}
+          <tr className="bg-muted/70">
+            {entities.map((e) =>
+              GROUPS.map((g) => (
+                <th key={`${e.id}-${g.label}`} className="border p-1 text-center text-xs" colSpan={2}>
+                  {g.label}
+                </th>
+              )),
+            )}
+            {GROUPS.map((g) => (
+              <th key={`tot-${g.label}`} className="border p-1 text-center text-xs" colSpan={2}>
+                {g.label}
+              </th>
             ))}
-            <th className="border p-1 text-center text-xs">TT</th>
-            <th className="border p-1 text-center text-xs">HĐ</th>
+          </tr>
+          {/* Tier 3: TT / HĐ */}
+          <tr className="bg-muted/40">
+            {entities.map((e) =>
+              GROUPS.map((g) => (
+                <Fragment key={`${e.id}-${g.label}-sub`}>
+                  <th className="border p-1 text-center text-[11px] min-w-[80px]">TT</th>
+                  <th className="border p-1 text-center text-[11px] min-w-[80px]">HĐ</th>
+                </Fragment>
+              )),
+            )}
+            {GROUPS.map((g) => (
+              <Fragment key={`tot-${g.label}-sub`}>
+                <th className="border p-1 text-center text-[11px] min-w-[80px]">TT</th>
+                <th className="border p-1 text-center text-[11px] min-w-[80px]">HĐ</th>
+              </Fragment>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.partyId} className="hover:bg-muted/30">
-              <td className="border p-2 font-medium">{row.partyName || `${partyLabel} #${row.partyId}`}</td>
+              <td className="border p-2 font-medium sticky left-0 bg-background z-10">
+                {row.partyName || `${partyLabel} #${row.partyId}`}
+              </td>
               {entities.map((e) => {
-                const cell = row.cells[String(e.id)];
-                const tt = cell?.tt ?? 0;
-                const hd = cell?.hd ?? 0;
-                return (
-                  <>
-                    <td key={`${e.id}-tt`} className={`border p-1 text-right ${colorClass(tt)}`}>{fmt(tt)}</td>
-                    <td key={`${e.id}-hd`} className={`border p-1 text-right ${colorClass(hd)}`}>{fmt(hd)}</td>
-                  </>
-                );
+                const c = row.cells[String(e.id)] ?? emptyCell();
+                return GROUPS.map((g) => (
+                  <Fragment key={`${row.partyId}-${e.id}-${g.label}`}>
+                    <td className={cellCls(c[g.tt])}>{fmt(c[g.tt])}</td>
+                    <td className={cellCls(c[g.hd])}>{fmt(c[g.hd])}</td>
+                  </Fragment>
+                ));
               })}
-              <td className={`border p-1 text-right font-semibold ${colorClass(row.totalTt)}`}>{fmt(row.totalTt)}</td>
-              <td className={`border p-1 text-right font-semibold ${colorClass(row.totalHd)}`}>{fmt(row.totalHd)}</td>
+              {GROUPS.map((g) => (
+                <Fragment key={`${row.partyId}-tot-${g.label}`}>
+                  <td className={`${cellCls(row.totals[g.tt])} font-semibold`}>{fmt(row.totals[g.tt])}</td>
+                  <td className={`${cellCls(row.totals[g.hd])} font-semibold`}>{fmt(row.totals[g.hd])}</td>
+                </Fragment>
+              ))}
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="bg-muted font-semibold">
-            <td className="border p-2">Tổng</td>
+            <td className="border p-2 sticky left-0 bg-muted z-10">Tổng</td>
             {entities.map((e) => {
-              const col = colTotals[String(e.id)];
-              return (
-                <>
-                  <td key={`${e.id}-tt`} className={`border p-1 text-right ${colorClass(col.tt)}`}>{fmt(col.tt)}</td>
-                  <td key={`${e.id}-hd`} className={`border p-1 text-right ${colorClass(col.hd)}`}>{fmt(col.hd)}</td>
-                </>
-              );
+              const c = colTotals[String(e.id)];
+              return GROUPS.map((g) => (
+                <Fragment key={`foot-${e.id}-${g.label}`}>
+                  <td className={cellCls(c[g.tt])}>{fmt(c[g.tt])}</td>
+                  <td className={cellCls(c[g.hd])}>{fmt(c[g.hd])}</td>
+                </Fragment>
+              ));
             })}
-            <td className={`border p-1 text-right ${colorClass(grandTt)}`}>{fmt(grandTt)}</td>
-            <td className={`border p-1 text-right ${colorClass(grandHd)}`}>{fmt(grandHd)}</td>
+            {GROUPS.map((g) => (
+              <Fragment key={`foot-tot-${g.label}`}>
+                <td className={cellCls(grand[g.tt])}>{fmt(grand[g.tt])}</td>
+                <td className={cellCls(grand[g.hd])}>{fmt(grand[g.hd])}</td>
+              </Fragment>
+            ))}
           </tr>
         </tfoot>
       </table>

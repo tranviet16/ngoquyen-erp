@@ -1,6 +1,21 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { LedgerType, SummaryRow, MonthlyReportRow, CurrentBalance, MatrixRow } from "./ledger-types";
+import type { LedgerType, SummaryRow, MonthlyReportRow, CurrentBalance, MatrixRow, MatrixCell } from "./ledger-types";
+
+function emptyCell(): MatrixCell {
+  return { openTt: 0, openHd: 0, layTt: 0, layHd: 0, traTt: 0, traHd: 0, closeTt: 0, closeHd: 0 };
+}
+
+function addInto(target: MatrixCell, src: MatrixCell) {
+  target.openTt += src.openTt;
+  target.openHd += src.openHd;
+  target.layTt += src.layTt;
+  target.layHd += src.layHd;
+  target.traTt += src.traTt;
+  target.traHd += src.traHd;
+  target.closeTt += src.closeTt;
+  target.closeHd += src.closeHd;
+}
 
 // Raw SQL result row shape
 interface SummaryRawRow {
@@ -205,65 +220,90 @@ export async function queryCurrentBalance(
 }
 
 interface MatrixRawRow {
-  party_id: number;
   entity_id: number;
-  balance_tt: Prisma.Decimal;
-  balance_hd: Prisma.Decimal;
+  party_id: number;
+  open_tt: Prisma.Decimal;
+  open_hd: Prisma.Decimal;
+  lay_tt: Prisma.Decimal;
+  lay_hd: Prisma.Decimal;
+  tra_tt: Prisma.Decimal;
+  tra_hd: Prisma.Decimal;
+  close_tt: Prisma.Decimal;
+  close_hd: Prisma.Decimal;
 }
 
 export async function queryDebtMatrix(
   ledgerType: LedgerType,
-  filter: { entityIds?: number[] }
+  filter: { entityIds?: number[]; partyIds?: number[] }
 ): Promise<MatrixRow[]> {
+  const partyIdsArr = filter.partyIds && filter.partyIds.length > 0 ? filter.partyIds : null;
+  const entityIdsArr = filter.entityIds && filter.entityIds.length > 0 ? filter.entityIds : null;
+
   const rows = await prisma.$queryRaw<MatrixRawRow[]>`
     WITH ob AS (
       SELECT "entityId", "partyId",
-        SUM("balanceTt") AS opening_tt,
-        SUM("balanceHd") AS opening_hd
+        SUM("balanceTt") AS open_tt,
+        SUM("balanceHd") AS open_hd
       FROM ledger_opening_balances
       WHERE "ledgerType" = ${ledgerType}
+        AND (${partyIdsArr}::int[] IS NULL OR "partyId" = ANY(${partyIdsArr}::int[]))
+        AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
       GROUP BY "entityId", "partyId"
     ),
     tx AS (
       SELECT "entityId", "partyId",
-        COALESCE(SUM(CASE WHEN "transactionType" = 'thanh_toan' THEN -"totalTt" ELSE "totalTt" END), 0) AS tx_tt,
-        COALESCE(SUM(CASE WHEN "transactionType" = 'thanh_toan' THEN -"totalHd" ELSE "totalHd" END), 0) AS tx_hd
+        COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_tt,
+        COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_hd,
+        COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS tra_tt,
+        COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS tra_hd
       FROM ledger_transactions
-      WHERE "ledgerType" = ${ledgerType} AND "deletedAt" IS NULL
+      WHERE "ledgerType" = ${ledgerType}
+        AND "deletedAt" IS NULL
+        AND (${partyIdsArr}::int[] IS NULL OR "partyId" = ANY(${partyIdsArr}::int[]))
+        AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
       GROUP BY "entityId", "partyId"
-    ),
-    combined AS (
-      SELECT
-        COALESCE(ob."entityId", tx."entityId") AS entity_id,
-        COALESCE(ob."partyId", tx."partyId") AS party_id,
-        COALESCE(ob.opening_tt, 0) + COALESCE(tx.tx_tt, 0) AS balance_tt,
-        COALESCE(ob.opening_hd, 0) + COALESCE(tx.tx_hd, 0) AS balance_hd
-      FROM ob FULL OUTER JOIN tx
-        ON ob."entityId" = tx."entityId" AND ob."partyId" = tx."partyId"
     )
-    SELECT entity_id, party_id, balance_tt, balance_hd FROM combined
+    SELECT
+      COALESCE(ob."entityId", tx."entityId") AS entity_id,
+      COALESCE(ob."partyId", tx."partyId") AS party_id,
+      COALESCE(ob.open_tt, 0) AS open_tt,
+      COALESCE(ob.open_hd, 0) AS open_hd,
+      COALESCE(tx.lay_tt, 0) AS lay_tt,
+      COALESCE(tx.lay_hd, 0) AS lay_hd,
+      COALESCE(tx.tra_tt, 0) AS tra_tt,
+      COALESCE(tx.tra_hd, 0) AS tra_hd,
+      COALESCE(ob.open_tt, 0) + COALESCE(tx.lay_tt, 0) - COALESCE(tx.tra_tt, 0) AS close_tt,
+      COALESCE(ob.open_hd, 0) + COALESCE(tx.lay_hd, 0) - COALESCE(tx.tra_hd, 0) AS close_hd
+    FROM ob FULL OUTER JOIN tx
+      ON ob."entityId" = tx."entityId" AND ob."partyId" = tx."partyId"
     ORDER BY party_id, entity_id
   `;
 
-  // Group by partyId
+  // Group by partyId; convert Decimals to JS number at the server boundary.
   const map = new Map<number, MatrixRow>();
   for (const r of rows) {
     const pid = Number(r.party_id);
     if (!map.has(pid)) {
       map.set(pid, {
         partyId: pid,
-        partyName: "", // caller fills from lookup
+        partyName: "",
         cells: {},
-        totalTt: new Prisma.Decimal(0),
-        totalHd: new Prisma.Decimal(0),
+        totals: emptyCell(),
       });
     }
     const row = map.get(pid)!;
-    const tt = new Prisma.Decimal(r.balance_tt);
-    const hd = new Prisma.Decimal(r.balance_hd);
-    row.cells[String(r.entity_id)] = { tt, hd };
-    row.totalTt = row.totalTt.plus(tt);
-    row.totalHd = row.totalHd.plus(hd);
+    const cell: MatrixCell = {
+      openTt: Number(r.open_tt),
+      openHd: Number(r.open_hd),
+      layTt: Number(r.lay_tt),
+      layHd: Number(r.lay_hd),
+      traTt: Number(r.tra_tt),
+      traHd: Number(r.tra_hd),
+      closeTt: Number(r.close_tt),
+      closeHd: Number(r.close_hd),
+    };
+    row.cells[String(r.entity_id)] = cell;
+    addInto(row.totals, cell);
   }
 
   return Array.from(map.values());

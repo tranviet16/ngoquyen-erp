@@ -159,7 +159,9 @@ export class LedgerService {
     return queryCurrentBalance(this.ledgerType, entityId, partyId, projectId, asOf);
   }
 
-  async detailedDebtMatrix(filter: { entityIds?: number[] } = {}): Promise<MatrixRow[]> {
+  async detailedDebtMatrix(
+    filter: { entityIds?: number[]; partyIds?: number[] } = {}
+  ): Promise<MatrixRow[]> {
     return queryDebtMatrix(this.ledgerType, filter);
   }
 

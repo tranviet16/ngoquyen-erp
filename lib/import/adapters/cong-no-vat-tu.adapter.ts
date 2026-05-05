@@ -184,19 +184,6 @@ export const CongNoVatTuAdapter: ImportAdapter = {
 
         const invoiceNo = String(row.data.invoiceNo ?? "");
         const content = String(row.data.content ?? "");
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM ledger_transactions
-          WHERE "ledgerType" = 'material'
-            AND date::date = ${date}::date
-            AND "entityId" = ${entityId}
-            AND "partyId" = ${partyId}
-            AND "transactionType" = ${txType}
-            AND "totalTt" = ${amountTt}
-            AND COALESCE("invoiceNo", '') = ${invoiceNo}
-            AND COALESCE(content, '') = ${content}
-          LIMIT 1
-        `;
-        if (existing.length > 0) { skipped++; continue; }
 
         await db.$executeRaw`
           INSERT INTO ledger_transactions
