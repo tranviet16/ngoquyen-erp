@@ -3,7 +3,8 @@
 import { createAuthClient } from "better-auth/react";
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000",
+  // Omit baseURL so client uses same-origin relative paths.
+  // This makes auth work whether accessed via localhost, Tailscale, or any other host.
 });
 
 export const { signIn, signOut, useSession } = authClient;

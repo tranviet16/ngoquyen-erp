@@ -1,51 +1,49 @@
 "use client";
 
-import { Prisma } from "@prisma/client";
-import type { MatrixRow } from "@/lib/ledger/ledger-types";
-
 interface EntityInfo {
   id: number;
   name: string;
 }
 
+export interface DebtMatrixRow {
+  partyId: number;
+  partyName: string;
+  cells: Record<string, { tt: number; hd: number }>;
+  totalTt: number;
+  totalHd: number;
+}
+
 interface Props {
-  rows: MatrixRow[];
+  rows: DebtMatrixRow[];
   entities: EntityInfo[];
   partyLabel: string;
 }
 
-function fmt(d: Prisma.Decimal | number): string {
-  const n = typeof d === "number" ? d : d.toNumber();
-  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
-}
+const fmt = (n: number) =>
+  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
 
-function colorClass(d: Prisma.Decimal): string {
-  return d.isNegative() ? "text-destructive" : "";
-}
+const colorClass = (n: number) => (n < 0 ? "text-destructive" : "");
 
 export function DebtMatrix({ rows, entities, partyLabel }: Props) {
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Không có dữ liệu</p>;
   }
 
-  const colTotals: Record<string, { tt: Prisma.Decimal; hd: Prisma.Decimal }> = {};
-  for (const e of entities) {
-    const key = String(e.id);
-    colTotals[key] = { tt: new Prisma.Decimal(0), hd: new Prisma.Decimal(0) };
-  }
-  let grandTt = new Prisma.Decimal(0);
-  let grandHd = new Prisma.Decimal(0);
+  const colTotals: Record<string, { tt: number; hd: number }> = {};
+  for (const e of entities) colTotals[String(e.id)] = { tt: 0, hd: 0 };
+  let grandTt = 0;
+  let grandHd = 0;
   for (const row of rows) {
     for (const e of entities) {
       const key = String(e.id);
       const cell = row.cells[key];
       if (cell) {
-        colTotals[key].tt = colTotals[key].tt.plus(cell.tt);
-        colTotals[key].hd = colTotals[key].hd.plus(cell.hd);
+        colTotals[key].tt += cell.tt;
+        colTotals[key].hd += cell.hd;
       }
     }
-    grandTt = grandTt.plus(row.totalTt);
-    grandHd = grandHd.plus(row.totalHd);
+    grandTt += row.totalTt;
+    grandHd += row.totalHd;
   }
 
   return (
@@ -76,8 +74,8 @@ export function DebtMatrix({ rows, entities, partyLabel }: Props) {
               <td className="border p-2 font-medium">{row.partyName || `${partyLabel} #${row.partyId}`}</td>
               {entities.map((e) => {
                 const cell = row.cells[String(e.id)];
-                const tt = cell?.tt ?? new Prisma.Decimal(0);
-                const hd = cell?.hd ?? new Prisma.Decimal(0);
+                const tt = cell?.tt ?? 0;
+                const hd = cell?.hd ?? 0;
                 return (
                   <>
                     <td key={`${e.id}-tt`} className={`border p-1 text-right ${colorClass(tt)}`}>{fmt(tt)}</td>

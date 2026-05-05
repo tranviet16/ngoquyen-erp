@@ -3,7 +3,8 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { requireRole } from "@/lib/rbac";
-import { previewImport, commitImport, listImportRuns, getImportRun } from "@/lib/import/import-engine";
+import { revalidatePath } from "next/cache";
+import { previewImport, commitImport, listImportRuns, getImportRun, deleteImportRun } from "@/lib/import/import-engine";
 import { listAdapters } from "@/lib/import/adapters/adapter-registry";
 import type { ResolvedMapping } from "@/lib/import/adapters/adapter-types";
 
@@ -42,6 +43,13 @@ export async function startPreview(formData: FormData) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const result = await previewImport(buffer, adapterName, file.name, session!.user!.id);
   return result;
+}
+
+export async function deleteRun(id: number) {
+  const session = await getSession();
+  requireRole(session?.user?.role, "admin");
+  await deleteImportRun(id);
+  revalidatePath("/admin/import");
 }
 
 export async function doCommit(

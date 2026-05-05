@@ -3,6 +3,9 @@
 import { AgGridReact } from "ag-grid-react";
 import { ModuleRegistry, AllCommunityModule, type ColDef, type GridOptions } from "ag-grid-community";
 import { useRef } from "react";
+import { vndFormatter, numberFormatter } from "@/lib/format";
+
+export { vndFormatter, numberFormatter };
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -40,25 +43,6 @@ const VI_LOCALE: Record<string, string> = {
   sortAscending: "Sắp xếp tăng dần",
   sortDescending: "Sắp xếp giảm dần",
 };
-
-/** Format number as VND: 1234567 → "1.234.567 ₫" */
-export function vndFormatter(value: number | null | undefined): string {
-  if (value == null) return "";
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-/** Format plain number with vi-VN separators */
-export function numberFormatter(value: number | null | undefined, decimals = 2): string {
-  if (value == null) return "";
-  return new Intl.NumberFormat("vi-VN", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: decimals,
-  }).format(value);
-}
 
 export const VND_COL_DEF: Partial<ColDef> = {
   valueFormatter: (p) => vndFormatter(p.value),

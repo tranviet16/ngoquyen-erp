@@ -3,6 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Database,
+  Building2,
+  Package,
+  Receipt,
+  HardHat,
+  TrendingUp,
+  Wallet,
+  Upload,
+  type LucideIcon,
+} from "lucide-react";
+import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -15,47 +26,15 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 
-const NAV_ITEMS = [
-  {
-    label: "Du lieu nen tang",
-    href: "/master-data",
-    icon: "DB",
-  },
-  {
-    label: "Du an Xay dung",
-    href: "/du-an",
-    icon: "DA",
-  },
-  {
-    label: "Vat tu Nha cung cap",
-    href: "/vat-tu-ncc",
-    icon: "VT",
-  },
-  {
-    label: "Cong no Vat tu",
-    href: "/cong-no-vt",
-    icon: "CV",
-  },
-  {
-    label: "Cong no Nhan cong",
-    href: "/cong-no-nc",
-    icon: "CN",
-  },
-  {
-    label: "San luong - Doanh thu",
-    href: "/sl-dt",
-    icon: "SL",
-  },
-  {
-    label: "Tai chinh NQ",
-    href: "/tai-chinh",
-    icon: "TC",
-  },
-  {
-    label: "Nhap du lieu (Admin)",
-    href: "/admin/import",
-    icon: "IM",
-  },
+const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: "Du lieu nen tang", href: "/master-data", icon: Database },
+  { label: "Du an Xay dung", href: "/du-an", icon: Building2 },
+  { label: "Vat tu Nha cung cap", href: "/vat-tu-ncc", icon: Package },
+  { label: "Cong no Vat tu", href: "/cong-no-vt", icon: Receipt },
+  { label: "Cong no Nhan cong", href: "/cong-no-nc", icon: HardHat },
+  { label: "San luong - Doanh thu", href: "/sl-dt", icon: TrendingUp },
+  { label: "Tai chinh NQ", href: "/tai-chinh", icon: Wallet },
+  { label: "Nhap du lieu (Admin)", href: "/admin/import", icon: Upload },
 ];
 
 export function AppSidebar() {
@@ -74,22 +53,23 @@ export function AppSidebar() {
           <SidebarGroupLabel>Phan he</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    render={
-                      <Link href={item.href} className="flex items-center gap-2" />
-                    }
-                    isActive={pathname.startsWith(item.href)}
-                    tooltip={item.label}
-                  >
-                    <span className="text-xs font-mono bg-muted rounded px-1">
-                      {item.icon}
-                    </span>
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={
+                        <Link href={item.href} className="flex items-center gap-2" />
+                      }
+                      isActive={pathname.startsWith(item.href)}
+                      tooltip={item.label}
+                    >
+                      <Icon className="size-4 shrink-0" aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

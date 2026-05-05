@@ -10,6 +10,7 @@ const envSchema = z.object({
     .string()
     .url("NEXT_PUBLIC_BETTER_AUTH_URL must be a valid URL")
     .optional(),
+  TRUSTED_ORIGINS: z.string().optional(),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

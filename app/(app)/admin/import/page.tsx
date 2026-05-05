@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/rbac";
 import { getRuns, getAdapters } from "./import-actions";
 import { ImportUploadForm } from "./import-upload-form";
+import { DeleteRunButton } from "./delete-run-button";
 
 export default async function AdminImportPage() {
   const h = await headers();
@@ -55,6 +56,7 @@ export default async function AdminImportPage() {
                   <th className="p-2 text-right">Bỏ qua</th>
                   <th className="p-2">Thời gian</th>
                   <th className="p-2">Chi tiết</th>
+                  <th className="p-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -77,6 +79,9 @@ export default async function AdminImportPage() {
                       <a href={`/admin/import/${r.id}`} className="text-blue-600 hover:underline text-xs">
                         Xem
                       </a>
+                    </td>
+                    <td className="p-2">
+                      <DeleteRunButton id={r.id} status={r.status} />
                     </td>
                   </tr>
                 ))}

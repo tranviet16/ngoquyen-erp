@@ -158,3 +158,16 @@ export async function listImportRuns(limit = 50) {
 export async function getImportRun(id: number) {
   return prisma.importRun.findUnique({ where: { id } });
 }
+
+/**
+ * Delete a preview/failed import run. Refuses to delete committed runs
+ * (those have data in the DB — would need a separate rollback flow).
+ */
+export async function deleteImportRun(id: number) {
+  const run = await prisma.importRun.findUnique({ where: { id } });
+  if (!run) throw new Error(`ImportRun #${id} không tồn tại`);
+  if (run.status === "committed") {
+    throw new Error("Không thể xóa lần import đã commit. Dữ liệu đã ghi vào DB.");
+  }
+  await prisma.importRun.delete({ where: { id } });
+}

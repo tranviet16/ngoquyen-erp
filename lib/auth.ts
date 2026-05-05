@@ -7,6 +7,7 @@ import { env } from "./env";
 import { prisma } from "./prisma";
 
 const isProduction = env.NODE_ENV === "production";
+const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -14,7 +15,10 @@ export const auth = betterAuth({
   }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.BETTER_AUTH_URL],
+  trustedOrigins: [
+    env.BETTER_AUTH_URL,
+    ...(env.TRUSTED_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
+  ],
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
@@ -29,11 +33,11 @@ export const auth = betterAuth({
   },
   advanced: {
     cookiePrefix: "nqerp",
-    useSecureCookies: isProduction,
+    useSecureCookies,
     defaultCookieAttributes: {
       httpOnly: true,
       sameSite: "lax",
-      secure: isProduction,
+      secure: useSecureCookies,
       path: "/",
     },
   },

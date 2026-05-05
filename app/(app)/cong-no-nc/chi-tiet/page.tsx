@@ -1,6 +1,6 @@
 import { getLaborDebtMatrix } from "@/lib/cong-no-nc/labor-ledger-service";
 import { prisma } from "@/lib/prisma";
-import { DebtMatrix } from "@/components/ledger/debt-matrix";
+import { DebtMatrix, type DebtMatrixRow } from "@/components/ledger/debt-matrix";
 
 export default async function ChiTietNcPage() {
   const [matrixRows, entities, contractors] = await Promise.all([
@@ -10,7 +10,15 @@ export default async function ChiTietNcPage() {
   ]);
 
   const contractorMap = Object.fromEntries(contractors.map((c) => [c.id, c.name]));
-  const rows = matrixRows.map((r) => ({ ...r, partyName: contractorMap[r.partyId] ?? `Đội #${r.partyId}` }));
+  const rows: DebtMatrixRow[] = matrixRows.map((r) => ({
+    partyId: r.partyId,
+    partyName: contractorMap[r.partyId] ?? `Đội #${r.partyId}`,
+    cells: Object.fromEntries(
+      Object.entries(r.cells).map(([k, v]) => [k, { tt: Number(v.tt), hd: Number(v.hd) }]),
+    ),
+    totalTt: Number(r.totalTt),
+    totalHd: Number(r.totalHd),
+  }));
 
   return (
     <div className="space-y-4">

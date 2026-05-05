@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getProjectDashboard } from "@/lib/du-an/dashboard-service";
-import { vndFormatter } from "@/components/ag-grid-base";
+import { vndFormatter } from "@/lib/format";
 
 interface Props {
   params: Promise<{ id: string }>;

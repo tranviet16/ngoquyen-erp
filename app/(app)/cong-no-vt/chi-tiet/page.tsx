@@ -1,6 +1,6 @@
 import { getMaterialDebtMatrix } from "@/lib/cong-no-vt/material-ledger-service";
 import { prisma } from "@/lib/prisma";
-import { DebtMatrix } from "@/components/ledger/debt-matrix";
+import { DebtMatrix, type DebtMatrixRow } from "@/components/ledger/debt-matrix";
 
 export default async function ChiTietPage() {
   const [matrixRows, entities, suppliers] = await Promise.all([
@@ -10,7 +10,15 @@ export default async function ChiTietPage() {
   ]);
 
   const supplierMap = Object.fromEntries(suppliers.map((s) => [s.id, s.name]));
-  const rows = matrixRows.map((r) => ({ ...r, partyName: supplierMap[r.partyId] ?? `NCC #${r.partyId}` }));
+  const rows: DebtMatrixRow[] = matrixRows.map((r) => ({
+    partyId: r.partyId,
+    partyName: supplierMap[r.partyId] ?? `NCC #${r.partyId}`,
+    cells: Object.fromEntries(
+      Object.entries(r.cells).map(([k, v]) => [k, { tt: Number(v.tt), hd: Number(v.hd) }]),
+    ),
+    totalTt: Number(r.totalTt),
+    totalHd: Number(r.totalHd),
+  }));
 
   return (
     <div className="space-y-4">
