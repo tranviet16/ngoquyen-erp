@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { requireRole } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
-import { previewImport, commitImport, listImportRuns, getImportRun, deleteImportRun } from "@/lib/import/import-engine";
+import { previewImport, commitImport, listImportRuns, getImportRun, deleteImportRun, rollbackImportRun, getRollbackInfo } from "@/lib/import/import-engine";
 import { listAdapters } from "@/lib/import/adapters/adapter-registry";
 import type { ResolvedMapping } from "@/lib/import/adapters/adapter-types";
 
@@ -50,6 +50,20 @@ export async function deleteRun(id: number) {
   requireRole(session?.user?.role, "admin");
   await deleteImportRun(id);
   revalidatePath("/admin/import");
+}
+
+export async function rollbackRun(id: number) {
+  const session = await getSession();
+  requireRole(session?.user?.role, "admin");
+  const result = await rollbackImportRun(id);
+  revalidatePath("/admin/import");
+  return result;
+}
+
+export async function getRunRollbackInfo(id: number) {
+  const session = await getSession();
+  requireRole(session?.user?.role, "admin");
+  return getRollbackInfo(id);
 }
 
 export async function doCommit(

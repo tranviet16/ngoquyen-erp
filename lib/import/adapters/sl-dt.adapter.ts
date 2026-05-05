@@ -112,7 +112,7 @@ export const SlDtAdapter: ImportAdapter = {
     return { valid: errors.length === 0, errors };
   },
 
-  async apply(data, mapping, tx): Promise<ImportSummary> {
+  async apply(data, mapping, tx, _importRunId): Promise<ImportSummary> {
     let imported = 0;
     let skipped = 0;
     const errors: ImportSummary["errors"] = [];

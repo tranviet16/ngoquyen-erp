@@ -111,7 +111,7 @@ export async function commitImport(
     // Each commit runs inside a single transaction per adapter
     const summary = await prisma.$transaction(async (tx) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return adapter.apply(parsedData, mapping, tx as any);
+      return adapter.apply(parsedData, mapping, tx as any, runId);
     });
 
     await prisma.importRun.update({
@@ -161,13 +161,48 @@ export async function getImportRun(id: number) {
 
 /**
  * Delete a preview/failed import run. Refuses to delete committed runs
- * (those have data in the DB — would need a separate rollback flow).
+ * (those have data in the DB — use rollbackImportRun for that).
  */
 export async function deleteImportRun(id: number) {
   const run = await prisma.importRun.findUnique({ where: { id } });
   if (!run) throw new Error(`ImportRun #${id} không tồn tại`);
   if (run.status === "committed") {
-    throw new Error("Không thể xóa lần import đã commit. Dữ liệu đã ghi vào DB.");
+    throw new Error("Không thể xóa lần import đã commit. Dùng Hoàn tác.");
   }
   await prisma.importRun.delete({ where: { id } });
+}
+
+/**
+ * Count rows tagged with this run — used to decide whether rollback is supported
+ * (runs created before the importRunId column was added will return 0).
+ */
+export async function getRollbackInfo(id: number) {
+  const [tx, open] = await Promise.all([
+    prisma.ledgerTransaction.count({ where: { importRunId: id } }),
+    prisma.ledgerOpeningBalance.count({ where: { importRunId: id } }),
+  ]);
+  return { ledgerTransactions: tx, ledgerOpeningBalances: open, total: tx + open };
+}
+
+/**
+ * Rollback a committed import run: delete every ledger row tagged with its id,
+ * then delete the run itself. Master data (Supplier/Entity/Project) is preserved.
+ */
+export async function rollbackImportRun(id: number) {
+  const run = await prisma.importRun.findUnique({ where: { id } });
+  if (!run) throw new Error(`ImportRun #${id} không tồn tại`);
+  if (run.status !== "committed") {
+    throw new Error("Chỉ có thể hoàn tác run đã commit");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const txDeleted = await tx.ledgerTransaction.deleteMany({ where: { importRunId: id } });
+    const openDeleted = await tx.ledgerOpeningBalance.deleteMany({ where: { importRunId: id } });
+    await tx.importRun.delete({ where: { id } });
+    return {
+      ledgerTransactions: txDeleted.count,
+      ledgerOpeningBalances: openDeleted.count,
+      total: txDeleted.count + openDeleted.count,
+    };
+  });
 }

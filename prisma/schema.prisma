@@ -427,11 +427,14 @@ model LedgerTransaction {
   content         String?
   status          String    @default("pending") // pending|approved|paid
   note            String?
+  importRunId     Int?
+  importRun       ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
   deletedAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([ledgerType, entityId, partyId, projectId, date])
+  @@index([importRunId])
   @@map("ledger_transactions")
 }
 
@@ -445,11 +448,14 @@ model LedgerOpeningBalance {
   balanceHd   Decimal  @db.Decimal(18, 2)
   asOfDate    DateTime
   note        String?
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Opening balance is set once per (ledgerType, entity, party, project) — not soft-deletable
   @@unique([ledgerType, entityId, partyId, projectId])
+  @@index([importRunId])
   @@map("ledger_opening_balances")
 }
 
@@ -594,6 +600,9 @@ model ImportRun {
   createdBy    String
   createdAt    DateTime  @default(now())
   committedAt  DateTime?
+
+  ledgerTransactions    LedgerTransaction[]
+  ledgerOpeningBalances LedgerOpeningBalance[]
 
   @@index([adapter, status])
   @@index([createdAt])

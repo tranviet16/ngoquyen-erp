@@ -81,7 +81,7 @@ export const CongNoVatTuAdapter: ImportAdapter = {
     return { valid: errors.length === 0, errors };
   },
 
-  async apply(data, mapping, tx): Promise<ImportSummary> {
+  async apply(data, mapping, tx, importRunId): Promise<ImportSummary> {
     type TxClient = typeof import("@/lib/prisma")["prisma"];
     const db = tx as unknown as TxClient;
     let imported = 0;
@@ -122,7 +122,12 @@ export const CongNoVatTuAdapter: ImportAdapter = {
       if (fromMap) { projectCache.set(name, fromMap); return fromMap; }
       const found = await db.project.findFirst({ where: { name, deletedAt: null }, select: { id: true } });
       if (found) { projectCache.set(name, found.id); return found.id; }
-      return null;
+      // Auto-create with a deterministic code derived from the name
+      const code = name.normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || `proj-${Date.now()}`;
+      const created = await db.project.create({ data: { code, name }, select: { id: true } });
+      projectCache.set(name, created.id);
+      return created.id;
     }
 
     for (const row of data.rows) {
@@ -158,10 +163,10 @@ export const CongNoVatTuAdapter: ImportAdapter = {
           await db.$executeRaw`
             INSERT INTO ledger_opening_balances
               ("ledgerType", "entityId", "partyId", "projectId",
-               "balanceTt", "balanceHd", "asOfDate", "createdAt", "updatedAt")
+               "balanceTt", "balanceHd", "asOfDate", "importRunId", "createdAt", "updatedAt")
             VALUES
               ('material', ${entityId}, ${partyId}, ${projectId},
-               ${balTt}, ${balHd}, ${asOfDate}, NOW(), NOW())
+               ${balTt}, ${balHd}, ${asOfDate}, ${importRunId}, NOW(), NOW())
           `;
           imported++;
           continue;
@@ -177,6 +182,8 @@ export const CongNoVatTuAdapter: ImportAdapter = {
         const amountTt = Number(row.data.amountTt ?? 0);
         const amountHd = Number(row.data.amountHd ?? 0);
 
+        const invoiceNo = String(row.data.invoiceNo ?? "");
+        const content = String(row.data.content ?? "");
         const existing = await db.$queryRaw<{ id: number }[]>`
           SELECT id FROM ledger_transactions
           WHERE "ledgerType" = 'material'
@@ -185,6 +192,8 @@ export const CongNoVatTuAdapter: ImportAdapter = {
             AND "partyId" = ${partyId}
             AND "transactionType" = ${txType}
             AND "totalTt" = ${amountTt}
+            AND COALESCE("invoiceNo", '') = ${invoiceNo}
+            AND COALESCE(content, '') = ${content}
           LIMIT 1
         `;
         if (existing.length > 0) { skipped++; continue; }
@@ -194,13 +203,13 @@ export const CongNoVatTuAdapter: ImportAdapter = {
             ("ledgerType", date, "transactionType", "entityId", "partyId",
              "amountTt", "vatPctTt", "vatTt", "totalTt",
              "amountHd", "vatPctHd", "vatHd", "totalHd",
-             "invoiceNo", content, status, "createdAt", "updatedAt")
+             "invoiceNo", content, status, "importRunId", "createdAt", "updatedAt")
           VALUES
             ('material', ${date}, ${txType}, ${entityId}, ${partyId},
              ${amountTt}, 0, 0, ${amountTt},
              ${amountHd}, 0, 0, ${amountHd},
-             ${String(row.data.invoiceNo ?? "")}, ${String(row.data.content ?? "")},
-             'approved', NOW(), NOW())
+             ${invoiceNo}, ${content},
+             'approved', ${importRunId}, NOW(), NOW())
         `;
         imported++;
       } catch (err) {

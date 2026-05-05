@@ -81,7 +81,8 @@ export interface ImportAdapter {
    * This is intentional for one-shot historical migration — documented bypass.
    * @param mapping User-resolved conflict mappings from ConflictItem resolution
    * @param tx Prisma transaction client (or base client during direct calls)
+   * @param importRunId ID of the parent ImportRun — written onto inserted rows for rollback
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  apply(data: ParsedData, mapping: ResolvedMapping, tx: any): Promise<ImportSummary>;
+  apply(data: ParsedData, mapping: ResolvedMapping, tx: any, importRunId: number): Promise<ImportSummary>;
 }
