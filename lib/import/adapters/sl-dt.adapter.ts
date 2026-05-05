@@ -18,16 +18,26 @@
  */
 
 import * as XLSX from "xlsx";
-import { resolveProject } from "../conflict-resolver";
-import { num, normHeader, findHeaderRow, buildRowsFromMatrix } from "./excel-utils";
+import { num, normHeader, findHeaderRow } from "./excel-utils";
 import type {
   ImportAdapter,
   ParsedData,
   ParsedRow,
-  ConflictItem,
   ValidationResult,
   ImportSummary,
 } from "./adapter-types";
+
+function slugifyName(s: string): string {
+  return (
+    s
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60) || `lot-${Date.now()}`
+  );
+}
 
 function readMatrix(sheet: XLSX.WorkSheet): unknown[][] {
   return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: false });
@@ -142,12 +152,11 @@ export const SlDtAdapter: ImportAdapter = {
       }
     }
 
-    const conflicts: ConflictItem[] = [];
-    for (const name of projectNames) conflicts.push(await resolveProject(name));
-
+    // Lots are auto-created in apply() (find-or-create by name) — no manual mapping needed.
+    // Users can rename / re-parent the auto-created Project records via /admin/projects later.
     return {
       rows,
-      conflicts,
+      conflicts: [],
       meta: { targetSheets: targetSheets.length, paymentSheet, projects: projectNames.size },
     };
   },
@@ -177,14 +186,38 @@ export const SlDtAdapter: ImportAdapter = {
     type Tx = typeof import("@/lib/prisma")["prisma"];
     const db = tx as Tx;
 
+    const projectCache = new Map<string, number>();
+    async function getOrCreateProject(name: string): Promise<number> {
+      if (projectCache.has(name)) return projectCache.get(name)!;
+      const fromMap = mapping[`project:${name}`];
+      if (fromMap) {
+        projectCache.set(name, fromMap);
+        return fromMap;
+      }
+      const found = await db.project.findFirst({
+        where: { name, deletedAt: null },
+        select: { id: true },
+      });
+      if (found) {
+        projectCache.set(name, found.id);
+        return found.id;
+      }
+      const created = await db.project.create({
+        data: { code: slugifyName(name), name },
+        select: { id: true },
+      });
+      projectCache.set(name, created.id);
+      return created.id;
+    }
+
     for (const row of data.rows) {
       try {
         const projectName = String(row.data.projectName ?? "");
-        const projectId = mapping[`project:${projectName}`];
-        if (!projectId) {
+        if (!projectName) {
           skipped++;
           continue;
         }
+        const projectId = await getOrCreateProject(projectName);
 
         if (row.data.kind === "target") {
           const year = Number(row.data.year);
