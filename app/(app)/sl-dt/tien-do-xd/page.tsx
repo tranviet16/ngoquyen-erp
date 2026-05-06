@@ -1,123 +1,95 @@
-import { prisma } from "@/lib/prisma";
-import { getTienDoXd } from "@/lib/sl-dt/report-service";
+import { getTienDoXdReport, getAvailableMonths } from "@/lib/sl-dt/report-service";
 
 interface Props {
-  searchParams: Promise<{ year?: string; projectId?: string }>;
+  searchParams: Promise<{ year?: string; month?: string }>;
 }
 
-function fmtPct(v: number): string {
-  return `${(v * 100).toFixed(1)}%`;
-}
+const STATUS_COLS = [
+  { key: "khungBtct" as const, label: "Khung BTCT" },
+  { key: "xayTuong" as const, label: "Xây tường" },
+  { key: "tratNgoai" as const, label: "Trát ngoài" },
+  { key: "xayTho" as const, label: "Xây thô" },
+  { key: "tratHoanThien" as const, label: "Trát HT" },
+  { key: "hoSoQuyetToan" as const, label: "Hồ sơ QT" },
+];
 
 export default async function TienDoXdPage({ searchParams }: Props) {
   const params = await searchParams;
-  const year = params.year ? parseInt(params.year, 10) : new Date().getFullYear();
-  const projectId = params.projectId ? parseInt(params.projectId, 10) : undefined;
+  const now = new Date();
+  const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
+  const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
 
-  const [rows, projects] = await Promise.all([
-    getTienDoXd({ year, projectId }),
-    prisma.project.findMany({
-      where: { deletedAt: null },
-      select: { id: true, code: true, name: true },
-      orderBy: { code: "asc" },
-    }),
+  const [rows, availableMonths] = await Promise.all([
+    getTienDoXdReport(year, month),
+    getAvailableMonths(),
   ]);
 
-  const projectMap = Object.fromEntries(projects.map((p) => [p.id, p]));
+  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
+  const yearOptions = [...new Set([year - 1, year, year + 1, ...availableMonths.map((m) => m.year)])].sort();
 
-  // Build matrix: project × month
-  const projectIds = [...new Set(rows.map((r) => r.projectId))].sort((a, b) => a - b);
-  const months = Array.from({ length: 12 }, (_, i) => i + 1);
-
-  type MatrixKey = `${number}-${number}`;
-  const matrix = new Map<MatrixKey, number>();
-  for (const r of rows) {
-    matrix.set(`${r.projectId}-${r.month}`, r.avgPctComplete);
-  }
+  let stt = 0;
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Tiến độ XD</h1>
-        <p className="text-sm text-muted-foreground">
-          % hoàn thành trung bình theo dự án và tháng (dựa trên lịch thi công)
-        </p>
+        <h1 className="text-2xl font-bold">Tiến độ Xây dựng</h1>
+        <p className="text-sm text-muted-foreground">Tháng {month}/{year} — Read-only, nguồn từ bảng Chỉ tiêu</p>
       </div>
 
       <form className="flex gap-3 items-end flex-wrap">
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Năm</label>
           <select name="year" defaultValue={year} className="border rounded px-2 py-1.5 text-sm">
-            {[-1, 0, 1].map((off) => {
-              const y = new Date().getFullYear() + off;
-              return <option key={y} value={y}>{y}</option>;
-            })}
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">Dự án</label>
-          <select name="projectId" defaultValue={projectId ?? ""} className="border rounded px-2 py-1.5 text-sm min-w-[180px]">
-            <option value="">Tất cả</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
-            ))}
+          <label className="text-xs text-muted-foreground block mb-1">Tháng</label>
+          <select name="month" defaultValue={month} className="border rounded px-2 py-1.5 text-sm">
+            {monthOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
           </select>
         </div>
-        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Lọc</button>
+        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Xem</button>
       </form>
 
-      {projectIds.length === 0 ? (
-        <div className="border rounded-lg p-8 text-center text-muted-foreground">
-          Chưa có lịch thi công cho năm {year}. Vào Dự án → Tiến độ để nhập.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left p-2 sticky left-0 bg-muted/50">Dự án</th>
-                {months.map((m) => (
-                  <th key={m} className="text-center p-2 min-w-[70px]">T{m}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {projectIds.map((pid) => {
-                const proj = projectMap[pid];
-                return (
-                  <tr key={pid} className="border-b hover:bg-muted/20">
-                    <td className="p-2 sticky left-0 bg-background font-medium">
-                      {proj ? `[${proj.code}] ${proj.name}` : `#${pid}`}
-                    </td>
-                    {months.map((m) => {
-                      const pct = matrix.get(`${pid}-${m}`);
-                      return (
-                        <td key={m} className="p-2 text-center">
-                          {pct != null ? (
-                            <span
-                              className={`text-xs font-medium ${
-                                pct >= 1
-                                  ? "text-green-600"
-                                  : pct >= 0.7
-                                  ? "text-blue-600"
-                                  : "text-orange-500"
-                              }`}
-                            >
-                              {fmtPct(pct)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-muted border-b">
+              <th className="p-2 text-center w-10">STT</th>
+              <th className="p-2 text-left min-w-[180px]">Lô</th>
+              <th className="p-2 text-left min-w-[100px]">Giai đoạn</th>
+              <th className="p-2 text-left min-w-[180px]">Tiến độ hiện tại</th>
+              <th className="p-2 text-left min-w-[120px]">Trạng thái QT</th>
+              {STATUS_COLS.map((c) => (
+                <th key={c.key} className="p-2 text-left min-w-[120px]">{c.label}</th>
+              ))}
+              <th className="p-2 text-left min-w-[150px]">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              stt++;
+              return (
+                <tr key={r.lotId} className="border-b hover:bg-muted/10">
+                  <td className="p-2 text-center">{stt}</td>
+                  <td className="p-2 font-medium">{r.lotName}</td>
+                  <td className="p-2 text-muted-foreground">{r.phaseCode}</td>
+                  <td className="p-2">{r.milestoneText ?? "—"}</td>
+                  <td className="p-2">{r.settlementStatus ?? "—"}</td>
+                  {STATUS_COLS.map((c) => (
+                    <td key={c.key} className="p-2">{r[c.key] ?? "—"}</td>
+                  ))}
+                  <td className="p-2 text-muted-foreground">{r.ghiChu ?? ""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && (
+          <div className="p-8 text-center text-muted-foreground">Chưa có dữ liệu cho tháng {month}/{year}.</div>
+        )}
+      </div>
     </div>
   );
 }

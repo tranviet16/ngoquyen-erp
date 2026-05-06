@@ -1,124 +1,101 @@
-import { prisma } from "@/lib/prisma";
-import { getSlDtReport } from "@/lib/sl-dt/report-service";
-import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
+import { getSanLuongReport, getAvailableMonths } from "@/lib/sl-dt/report-service";
+import { fmtNum, fmtPct } from "@/lib/sl-dt/format";
+import type { SanLuongRow } from "@/lib/sl-dt/rollup";
 
 interface Props {
-  searchParams: Promise<{ year?: string; month?: string; projectId?: string }>;
+  searchParams: Promise<{ year?: string; month?: string }>;
 }
 
-function fmtVnd(v: { toString(): string } | null | undefined): string {
-  if (v == null) return "—";
-  const n = parseFloat(v.toString());
-  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
-}
-
-function fmtPct(v: number | null): string {
-  return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
+function rowClass(kind: SanLuongRow["kind"]) {
+  if (kind === "grand") return "border-b bg-muted font-bold text-sm";
+  if (kind === "phase") return "border-b bg-muted/70 font-semibold text-sm";
+  if (kind === "group") return "border-b bg-muted/30 font-medium text-sm";
+  return "border-b hover:bg-muted/10 text-sm";
 }
 
 export default async function BaoCaoSlPage({ searchParams }: Props) {
   const params = await searchParams;
-  const year = params.year ? parseInt(params.year, 10) : new Date().getFullYear();
-  const month = params.month ? parseInt(params.month, 10) : undefined;
-  const projectId = params.projectId ? parseInt(params.projectId, 10) : undefined;
+  const now = new Date();
+  const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
+  const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
 
-  const [rows, projects] = await Promise.all([
-    getSlDtReport({ year, month, projectId }),
-    prisma.project.findMany({
-      where: { deletedAt: null },
-      select: { id: true, code: true, name: true },
-      orderBy: { code: "asc" },
-    }),
+  const [rows, availableMonths] = await Promise.all([
+    getSanLuongReport(year, month),
+    getAvailableMonths(),
   ]);
 
-  const projectMap = Object.fromEntries(projects.map((p) => [p.id, p]));
+  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
+  const yearOptions = [...new Set([year - 1, year, year + 1, ...availableMonths.map((m) => m.year)])].sort();
+
+  let stt = 0;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
-          <p className="text-sm text-muted-foreground">So sánh SL kế hoạch vs thực hiện — SL = giá trị nghiệm thu nội bộ</p>
-        </div>
-        <div className="flex gap-2">
-          <ExcelExportButton
-            template="sl-dt"
-            params={{ year, month, projectId }}
-            label="Xuất Excel"
-            filename={`sl-dt-${year}.xlsx`}
-          />
-          <PrintButton />
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
+        <p className="text-sm text-muted-foreground">Tháng {month}/{year} — SL nghiệm thu nội bộ theo lô</p>
       </div>
 
       <form className="flex gap-3 items-end flex-wrap">
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Năm</label>
           <select name="year" defaultValue={year} className="border rounded px-2 py-1.5 text-sm">
-            {[-1, 0, 1].map((off) => { const y = new Date().getFullYear() + off; return <option key={y} value={y}>{y}</option>; })}
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
           <label className="text-xs text-muted-foreground block mb-1">Tháng</label>
-          <select name="month" defaultValue={month ?? ""} className="border rounded px-2 py-1.5 text-sm">
-            <option value="">Tất cả</option>
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-              <option key={m} value={m}>Tháng {m}</option>
-            ))}
+          <select name="month" defaultValue={month} className="border rounded px-2 py-1.5 text-sm">
+            {monthOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
           </select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Dự án</label>
-          <select name="projectId" defaultValue={projectId ?? ""} className="border rounded px-2 py-1.5 text-sm min-w-[180px]">
-            <option value="">Tất cả</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>)}
-          </select>
-        </div>
-        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Lọc</button>
+        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Xem</button>
       </form>
 
-      {rows.length === 0 ? (
-        <div className="border rounded-lg p-8 text-center text-muted-foreground">
-          Không có dữ liệu cho bộ lọc đã chọn.
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left p-2">Dự án</th>
-                <th className="text-center p-2">Năm</th>
-                <th className="text-center p-2">Tháng</th>
-                <th className="text-right p-2">SL Kế hoạch</th>
-                <th className="text-right p-2">SL Thực hiện</th>
-                <th className="text-right p-2">Chênh lệch</th>
-                <th className="text-right p-2">% Hoàn thành</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const proj = projectMap[r.projectId];
-                const diffPos = r.slDiff.gte(0);
-                return (
-                  <tr key={`${r.projectId}-${r.year}-${r.month}`} className="border-b hover:bg-muted/20">
-                    <td className="p-2">{proj ? `[${proj.code}] ${proj.name}` : `#${r.projectId}`}</td>
-                    <td className="p-2 text-center">{r.year}</td>
-                    <td className="p-2 text-center">{r.month}</td>
-                    <td className="p-2 text-right">{fmtVnd(r.slTarget)}</td>
-                    <td className="p-2 text-right">{fmtVnd(r.slActual)}</td>
-                    <td className={`p-2 text-right ${diffPos ? "text-green-600" : "text-red-500"}`}>
-                      {fmtVnd(r.slDiff)}
-                    </td>
-                    <td className={`p-2 text-right font-medium ${r.slPct != null && r.slPct >= 1 ? "text-green-600" : r.slPct != null && r.slPct < 0.8 ? "text-red-500" : ""}`}>
-                      {fmtPct(r.slPct)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-muted border-b">
+              <th className="p-2 text-center w-10">STT</th>
+              <th className="p-2 text-left min-w-[200px]">Danh mục / Lô</th>
+              <th className="p-2 text-right min-w-[120px]">C — Dự toán</th>
+              <th className="p-2 text-right min-w-[110px]">D — KH kỳ</th>
+              <th className="p-2 text-right min-w-[110px]">E — Thực kỳ</th>
+              <th className="p-2 text-right min-w-[110px]">F — Lũy kế thô</th>
+              <th className="p-2 text-right min-w-[110px]">G — Trát</th>
+              <th className="p-2 text-right min-w-[120px]">H = F+G</th>
+              <th className="p-2 text-right min-w-[120px]">I = C-F</th>
+              <th className="p-2 text-right min-w-[80px]">J = E/D</th>
+              <th className="p-2 text-right min-w-[80px]">K = F/C</th>
+              <th className="p-2 text-left min-w-[120px]">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => {
+              if (r.kind === "lot") stt++;
+              return (
+                <tr key={`${r.kind}-${idx}`} className={rowClass(r.kind)}>
+                  <td className="p-2 text-center">{r.kind === "lot" ? stt : ""}</td>
+                  <td className={`p-2 ${r.kind !== "lot" ? "pl-2" : "pl-4"}`}>{r.lotName}</td>
+                  <td className="p-2 text-right">{fmtNum(r.estimateValue)}</td>
+                  <td className="p-2 text-right">{fmtNum(r.slKeHoachKy)}</td>
+                  <td className="p-2 text-right">{fmtNum(r.slThucKyTho)}</td>
+                  <td className="p-2 text-right">{fmtNum(r.slLuyKeTho)}</td>
+                  <td className="p-2 text-right">{fmtNum(r.slTrat)}</td>
+                  <td className="p-2 text-right">{fmtNum(r.tongThoTrat)}</td>
+                  <td className="p-2 text-right">{fmtNum(r.conPhaiTH)}</td>
+                  <td className="p-2 text-right">{fmtPct(r.pctKy)}</td>
+                  <td className="p-2 text-right">{fmtPct(r.pctLuyKe)}</td>
+                  <td className="p-2">{r.kind === "lot" ? (r.ghiChu ?? "") : ""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && (
+          <div className="p-8 text-center text-muted-foreground">Chưa có dữ liệu cho tháng {month}/{year}.</div>
+        )}
+      </div>
     </div>
   );
 }

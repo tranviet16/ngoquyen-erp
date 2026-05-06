@@ -1,84 +1,50 @@
-import { prisma } from "@/lib/prisma";
-import { listTargets } from "@/lib/sl-dt/target-service";
-import { SlDtGrid } from "@/components/sl-dt/sl-dt-grid";
+import { getChiTieuReport, getMilestoneScores, getAvailableMonths } from "@/lib/sl-dt/report-service";
+import { ChiTieuClient } from "./chi-tieu-client";
 
 interface Props {
-  searchParams: Promise<{ year?: string; projectId?: string }>;
+  searchParams: Promise<{ year?: string; month?: string }>;
 }
 
 export default async function ChiTieuPage({ searchParams }: Props) {
   const params = await searchParams;
-  const year = params.year ? parseInt(params.year, 10) : new Date().getFullYear();
-  const projectId = params.projectId ? parseInt(params.projectId, 10) : undefined;
+  const now = new Date();
+  const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
+  const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
 
-  const projects = await prisma.project.findMany({
-    where: { deletedAt: null },
-    select: { id: true, code: true, name: true },
-    orderBy: { code: "asc" },
-  });
+  const [rows, scores, availableMonths] = await Promise.all([
+    getChiTieuReport(year, month),
+    getMilestoneScores(),
+    getAvailableMonths(),
+  ]);
 
-  const selectedProjectId = projectId ?? (projects[0]?.id ?? null);
-  const selectedProject = projects.find((p) => p.id === selectedProjectId);
-
-  const targets = selectedProjectId
-    ? await listTargets({ projectId: selectedProjectId, year })
-    : [];
+  const milestoneOptions = scores.map((s) => s.milestoneText);
+  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
+  const yearOptions = [...new Set([year - 1, year, year + 1, ...availableMonths.map((m) => m.year)])].sort();
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Chỉ tiêu SL/DT</h1>
-        <p className="text-sm text-muted-foreground">Nhập chỉ tiêu sản lượng & doanh thu theo tháng</p>
+        <p className="text-sm text-muted-foreground">Tháng {month}/{year} — Tiến độ + phải nộp tiền</p>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex gap-3 items-end flex-wrap">
-        <form className="flex gap-3 items-end">
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Dự án</label>
-            <select
-              name="projectId"
-              defaultValue={selectedProjectId ?? ""}
-              className="border rounded px-2 py-1.5 text-sm min-w-[200px]"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  [{p.code}] {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">Năm</label>
-            <select
-              name="year"
-              defaultValue={year}
-              className="border rounded px-2 py-1.5 text-sm"
-            >
-              {[-1, 0, 1].map((offset) => {
-                const y = new Date().getFullYear() + offset;
-                return <option key={y} value={y}>{y}</option>;
-              })}
-            </select>
-          </div>
-          <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">
-            Xem
-          </button>
-        </form>
-      </div>
-
-      {selectedProjectId && selectedProject ? (
-        <SlDtGrid
-          targets={targets}
-          projectId={selectedProjectId}
-          year={year}
-          projectName={`[${selectedProject.code}] ${selectedProject.name}`}
-        />
-      ) : (
-        <div className="border rounded-lg p-8 text-center text-muted-foreground">
-          Chưa có dự án. Vui lòng tạo dự án trong Dữ liệu nền tảng.
+      <form className="flex gap-3 items-end flex-wrap">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Năm</label>
+          <select name="year" defaultValue={year} className="border rounded px-2 py-1.5 text-sm">
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
         </div>
-      )}
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Tháng</label>
+          <select name="month" defaultValue={month} className="border rounded px-2 py-1.5 text-sm">
+            {monthOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+          </select>
+        </div>
+        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Xem</button>
+      </form>
+
+      <ChiTieuClient rows={rows} year={year} month={month} milestoneOptions={milestoneOptions} />
     </div>
   );
 }
