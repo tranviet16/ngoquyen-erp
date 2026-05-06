@@ -127,9 +127,13 @@ export const SlDtAdapter: ImportAdapter = {
         cur.sortOrder = row.data.sortOrder;
         cur.estimateValue = row.data.estimateValue;
       }
-      // doanh_thu provides contractValue
-      if (row.data.source === "doanh_thu" && row.data.contractValue != null) {
-        cur.contractValue = row.data.contractValue;
+      // doanh_thu: provides contractValue, plus phase/group fallback for lots
+      // that don't appear in sản_luong sheets (commercial-only entries).
+      if (row.data.source === "doanh_thu") {
+        if (row.data.contractValue != null) cur.contractValue = row.data.contractValue;
+        if (cur.phaseCode == null && row.data.phaseCode) cur.phaseCode = row.data.phaseCode;
+        if (cur.groupCode == null && row.data.groupCode) cur.groupCode = row.data.groupCode;
+        if (cur.sortOrder == null && row.data.sortOrder != null) cur.sortOrder = row.data.sortOrder;
       }
       lotMetaByName.set(name, cur);
     }
@@ -204,6 +208,7 @@ export const SlDtAdapter: ImportAdapter = {
         cur.slThucKyTho = Number(row.data.slThucKyTho ?? 0);
         cur.slLuyKeTho = Number(row.data.slLuyKeTho ?? 0);
         cur.slTrat = Number(row.data.slTrat ?? 0);
+        cur.estimateValue = row.data.estimateValue != null ? Number(row.data.estimateValue) : null;
       } else {
         cur.dtKeHoachKy = Number(row.data.dtKeHoachKy ?? 0);
         cur.dtThoKy = Number(row.data.dtThoKy ?? 0);
@@ -211,6 +216,7 @@ export const SlDtAdapter: ImportAdapter = {
         cur.qtTratChua = Number(row.data.qtTratChua ?? 0);
         cur.dtTratKy = Number(row.data.dtTratKy ?? 0);
         cur.dtTratLuyKe = Number(row.data.dtTratLuyKe ?? 0);
+        cur.contractValue = row.data.contractValue != null ? Number(row.data.contractValue) : null;
       }
       inputs.set(key, cur);
     }
@@ -220,11 +226,13 @@ export const SlDtAdapter: ImportAdapter = {
           INSERT INTO sl_dt_monthly_inputs ("lotId", year, month,
             "slKeHoachKy", "slThucKyTho", "slLuyKeTho", "slTrat",
             "dtKeHoachKy", "dtThoKy", "dtThoLuyKe", "qtTratChua", "dtTratKy", "dtTratLuyKe",
+            "estimateValue", "contractValue",
             "createdAt", "updatedAt")
           VALUES (${cur.lotId}, ${cur.year}, ${cur.month},
             ${cur.slKeHoachKy ?? 0}, ${cur.slThucKyTho ?? 0}, ${cur.slLuyKeTho ?? 0}, ${cur.slTrat ?? 0},
             ${cur.dtKeHoachKy ?? 0}, ${cur.dtThoKy ?? 0}, ${cur.dtThoLuyKe ?? 0},
             ${cur.qtTratChua ?? 0}, ${cur.dtTratKy ?? 0}, ${cur.dtTratLuyKe ?? 0},
+            ${cur.estimateValue ?? null}, ${cur.contractValue ?? null},
             NOW(), NOW())
           ON CONFLICT ("lotId", year, month) DO UPDATE
             SET "slKeHoachKy" = EXCLUDED."slKeHoachKy", "slThucKyTho" = EXCLUDED."slThucKyTho",
@@ -232,6 +240,7 @@ export const SlDtAdapter: ImportAdapter = {
                 "dtKeHoachKy" = EXCLUDED."dtKeHoachKy", "dtThoKy" = EXCLUDED."dtThoKy",
                 "dtThoLuyKe" = EXCLUDED."dtThoLuyKe", "qtTratChua" = EXCLUDED."qtTratChua",
                 "dtTratKy" = EXCLUDED."dtTratKy", "dtTratLuyKe" = EXCLUDED."dtTratLuyKe",
+                "estimateValue" = EXCLUDED."estimateValue", "contractValue" = EXCLUDED."contractValue",
                 "updatedAt" = NOW()
         `;
         imported++;

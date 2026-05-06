@@ -109,6 +109,7 @@ export function parseSanLuong(matrix: unknown[][], year: number, month: number) 
         lotName, year, month,
         slKeHoachKy: num(r[3]), slThucKyTho: num(r[4]),
         slLuyKeTho: num(r[5]), slTrat: num(r[6]),
+        estimateValue: estimate || null,
       },
     });
   }
@@ -127,7 +128,10 @@ export function parseDoanhThu(matrix: unknown[][], year: number, month: number) 
     const contractValue = num(r[3]);
     out.push({
       kind: "lot_meta",
-      data: { lotName, contractValue: contractValue || null, source: "doanh_thu" },
+      data: {
+        lotName, contractValue: contractValue || null, source: "doanh_thu",
+        phaseCode: state.phaseCode, groupCode: state.groupCode, sortOrder: state.sortOrder,
+      },
     });
     out.push({
       kind: "monthly_input_dt",
@@ -135,6 +139,7 @@ export function parseDoanhThu(matrix: unknown[][], year: number, month: number) 
         lotName, year, month,
         dtKeHoachKy: num(r[4]), dtThoKy: num(r[5]), dtThoLuyKe: num(r[6]),
         qtTratChua: num(r[8]), dtTratKy: num(r[9]), dtTratLuyKe: num(r[10]),
+        contractValue: contractValue || null,
       },
     });
   }

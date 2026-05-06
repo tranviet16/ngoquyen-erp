@@ -195,7 +195,6 @@ export async function getRollbackInfo(id: number) {
     est,
     ptx,
     sdd,
-    sld,
     psc,
     lc,
     je,
@@ -215,7 +214,6 @@ export async function getRollbackInfo(id: number) {
     prisma.projectEstimate.count({ where: { importRunId: id } }),
     prisma.projectTransaction.count({ where: { importRunId: id } }),
     prisma.supplierDeliveryDaily.count({ where: { importRunId: id } }),
-    prisma.slDtTarget.count({ where: { importRunId: id } }),
     prisma.paymentSchedule.count({ where: { importRunId: id } }),
     prisma.loanContract.count({ where: { importRunId: id } }),
     prisma.journalEntry.count({ where: { importRunId: id } }),
@@ -236,7 +234,6 @@ export async function getRollbackInfo(id: number) {
     projectEstimates: est,
     projectTransactions: ptx,
     supplierDeliveryDaily: sdd,
-    slDtTargets: sld,
     paymentSchedules: psc,
     loanContracts: lc,
     journalEntries: je,
@@ -251,7 +248,7 @@ export async function getRollbackInfo(id: number) {
     expenseClassifications: eclass,
     projectSupplierDebtSnapshots: psds,
     total:
-      tx + open + est + ptx + sdd + sld + psc + lc + je +
+      tx + open + est + ptx + sdd + psc + lc + je +
       psch + pacc + pco + pcon + p3wf + srec + lpay + pra + eclass + psds,
   };
 }
@@ -280,7 +277,6 @@ export async function rollbackImportRun(id: number) {
     const estCount = await tx.$executeRaw`DELETE FROM project_estimates WHERE "importRunId" = ${id}`;
     const ptxCount = await tx.$executeRaw`DELETE FROM project_transactions WHERE "importRunId" = ${id}`;
     const sddCount = await tx.$executeRaw`DELETE FROM supplier_delivery_daily WHERE "importRunId" = ${id}`;
-    const sldCount = await tx.$executeRaw`DELETE FROM sl_dt_targets WHERE "importRunId" = ${id}`;
     const pscCount = await tx.$executeRaw`DELETE FROM payment_schedules WHERE "importRunId" = ${id}`;
     const jeCount = await tx.$executeRaw`DELETE FROM journal_entries WHERE "importRunId" = ${id}`;
     const pschCount = await tx.$executeRaw`DELETE FROM project_schedules WHERE "importRunId" = ${id}`;
@@ -299,7 +295,6 @@ export async function rollbackImportRun(id: number) {
       projectEstimates: estCount,
       projectTransactions: ptxCount,
       supplierDeliveryDaily: sddCount,
-      slDtTargets: sldCount,
       paymentSchedules: pscCount,
       loanContracts: lcCount,
       loanPayments: lpCount,
@@ -314,7 +309,7 @@ export async function rollbackImportRun(id: number) {
       expenseClassifications: eclassCount,
       projectSupplierDebtSnapshots: psdsCount,
       total:
-        txCount + openCount + estCount + ptxCount + sddCount + sldCount + pscCount + lcCount + lpCount + jeCount +
+        txCount + openCount + estCount + ptxCount + sddCount + pscCount + lcCount + lpCount + jeCount +
         pschCount + paccCount + pcoCount + pconCount + p3wfCount + srecCount + praCount + eclassCount + psdsCount,
     };
   });

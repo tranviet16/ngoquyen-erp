@@ -50,8 +50,8 @@ export interface DoanhThuComputed {
 
 export function computeDoanhThu(inputs: DoanhThuInputs): DoanhThuComputed {
   const { contractValue: D, dtKeHoachKy: E, dtThoKy: F, dtThoLuyKe: G, qtTratChua: I, dtTratKy: J, dtTratLuyKe: K } = inputs;
-  const H = D - G;
-  const L = I - K;
+  const H = D === 0 ? 0 : D - G;
+  const L = I === 0 ? 0 : I - K;
   return {
     cnTho: H,
     cnTrat: L,

@@ -1,23 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { computeSanLuong, computeDoanhThu, computeChiTieu, computePaidStatus } from "./compute";
 import { rollupSanLuong, rollupDoanhThu, type SanLuongRow, type DoanhThuRow } from "./rollup";
 
-// ─── Legacy type export (used by orphaned payment-schedule-client.tsx) ─────────
-export interface PaymentScheduleSummary {
-  id: number;
-  projectId: number;
-  batch: string;
-  planDate: Date;
-  planAmount: Prisma.Decimal;
-  actualDate: Date | null;
-  actualAmount: Prisma.Decimal | null;
-  status: string;
-  note: string | null;
-  isOverdue: boolean;
-}
-
-// ─── Public re-exports for rollup types ───────────────────────────────────────
 export type { SanLuongRow, DoanhThuRow };
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -46,7 +30,7 @@ export async function getSanLuongReport(year: number, month: number): Promise<Sa
 
   const lotRows: SanLuongRow[] = lots.map((lot) => {
     const inp = lot.monthlyInputs[0];
-    const estimateValue = toNum(lot.estimateValue);
+    const estimateValue = toNum(inp?.estimateValue ?? lot.estimateValue);
     const slKeHoachKy = toNum(inp?.slKeHoachKy);
     const slThucKyTho = toNum(inp?.slThucKyTho);
     const slLuyKeTho = toNum(inp?.slLuyKeTho);
@@ -87,7 +71,7 @@ export async function getDoanhThuReport(year: number, month: number): Promise<Do
 
   const lotRows: DoanhThuRow[] = lots.map((lot) => {
     const inp = lot.monthlyInputs[0];
-    const contractValue = toNum(lot.contractValue);
+    const contractValue = toNum(inp?.contractValue ?? lot.contractValue);
     const dtKeHoachKy = toNum(inp?.dtKeHoachKy);
     const dtThoKy = toNum(inp?.dtThoKy);
     const dtThoLuyKe = toNum(inp?.dtThoLuyKe);
@@ -155,8 +139,8 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
     const status = lot.progressStatus[0];
     const plan = lot.paymentPlan;
     const inp = lot.monthlyInputs[0];
-    const estimateValue = toNum(lot.estimateValue);
-    const contractValue = toNum(lot.contractValue);
+    const estimateValue = toNum(inp?.estimateValue ?? lot.estimateValue);
+    const contractValue = toNum(inp?.contractValue ?? lot.contractValue);
     const tienDaDong = toNum(inp?.dtThoLuyKe) + toNum(inp?.dtTratLuyKe);
 
     const { phaiNop } = computeChiTieu(

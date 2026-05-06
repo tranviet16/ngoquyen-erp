@@ -497,46 +497,16 @@ model LedgerOpeningBalance {
   @@map("ledger_opening_balances")
 }
 
-// ─── SL-DT Models (Phase 7 — Sản lượng / Doanh thu) ────────────────────────
-
-model SlDtTarget {
-  // Chỉ tiêu sản lượng & doanh thu theo (project, year, month)
-  // SL = giá trị nghiệm thu nội bộ (amountInternalVnd)
-  // DT = giá trị nghiệm thu CĐT   (amountCdtVnd) + thu tiền CĐT
-  id                 Int      @id @default(autoincrement())
-  projectId          Int
-  year               Int
-  month              Int // 1–12
-  slTarget           Decimal  @db.Decimal(18, 2) // sản lượng kế hoạch (VNĐ)
-  dtTarget           Decimal  @db.Decimal(18, 2) // doanh thu kế hoạch (VNĐ)
-  slActualThisPeriod Decimal? @db.Decimal(18, 2) // sản lượng thực hiện trong tháng
-  slActualCumulative Decimal? @db.Decimal(18, 2) // sản lượng luỹ kế đến cuối tháng
-  dtActualThisPeriod Decimal? @db.Decimal(18, 2) // doanh thu thực hiện trong tháng
-  dtActualCumulative Decimal? @db.Decimal(18, 2) // doanh thu luỹ kế đến cuối tháng
-  noteActual         String?
-  note               String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @default(now())
-
-  importRunId Int?
-  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
-
-  // Partial unique enforced via raw SQL: sl_dt_targets_project_year_month_unique WHERE 1=1
-  @@index([projectId, year, month])
-  @@index([importRunId])
-  @@map("sl_dt_targets")
-}
-
 model PaymentSchedule {
-  // Tiến độ nộp tiền của chủ đầu tư theo từng đợt
+  // Tiến độ nộp tiền của chủ đầu tư theo từng đợt — read by tai-chinh cashflow forecast.
   id           Int       @id @default(autoincrement())
   projectId    Int
-  batch        String // "Đợt 1", "Đợt 2", …
+  batch        String
   planDate     DateTime
   planAmount   Decimal   @db.Decimal(18, 2)
   actualDate   DateTime?
   actualAmount Decimal?  @db.Decimal(18, 2)
-  status       String    @default("pending") // pending|paid|overdue
+  status       String    @default("pending")
   note         String?
   deletedAt    DateTime?
   createdAt    DateTime  @default(now())
@@ -669,7 +639,6 @@ model ImportRun {
   projectEstimates             ProjectEstimate[]
   projectTransactions          ProjectTransaction[]
   supplierDeliveryDaily        SupplierDeliveryDaily[]
-  slDtTargets                  SlDtTarget[]
   paymentSchedules             PaymentSchedule[]
   loanContracts                LoanContract[]
   journalEntries               JournalEntry[]
@@ -830,6 +799,8 @@ model SlDtMonthlyInput {
   qtTratChua    Decimal  @db.Decimal(18, 2) @default(0)
   dtTratKy      Decimal  @db.Decimal(18, 2) @default(0)
   dtTratLuyKe   Decimal  @db.Decimal(18, 2) @default(0)
+  estimateValue Decimal? @db.Decimal(18, 2)
+  contractValue Decimal? @db.Decimal(18, 2)
   ghiChu        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
