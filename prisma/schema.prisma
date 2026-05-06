@@ -13,14 +13,32 @@ model User {
   emailVerified Boolean  @default(false)
   image         String?
   role          String   @default("viewer")
+  departmentId  Int?
+  isLeader      Boolean  @default(false)
+  isDirector    Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions  Session[]
-  accounts  Account[]
-  auditLogs AuditLog[]
+  sessions   Session[]
+  accounts   Account[]
+  auditLogs  AuditLog[]
+  department Department? @relation(fields: [departmentId], references: [id])
 
+  @@index([departmentId])
   @@map("users")
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members User[]
+
+  @@map("departments")
 }
 
 model Session {
@@ -715,9 +733,12 @@ model ProjectSupplierDebtSnapshot {
   qty          Decimal?  @db.Decimal(18, 4)
   unit         String?
   unitPrice    Decimal?  @db.Decimal(18, 2)
-  amountTaken  Decimal?  @db.Decimal(18, 2) // Đã lấy hàng
-  amountPaid   Decimal?  @db.Decimal(18, 2) // Đã trả tiền
-  balance      Decimal?  @db.Decimal(18, 2) // Còn nợ
+  amountTaken  Decimal?  @db.Decimal(18, 2) // Đã lấy hàng (TT)
+  amountPaid   Decimal?  @db.Decimal(18, 2) // Đã trả tiền (TT)
+  balance      Decimal?  @db.Decimal(18, 2) // Còn nợ (TT)
+  amountTakenHd Decimal? @db.Decimal(18, 2) // Đã lấy hàng (HĐ)
+  amountPaidHd  Decimal? @db.Decimal(18, 2) // Đã trả tiền (HĐ)
+  balanceHd     Decimal? @db.Decimal(18, 2) // Còn nợ (HĐ)
   asOfDate     DateTime?
   note         String?
   deletedAt    DateTime?
@@ -816,6 +837,7 @@ model SlDtProgressStatus {
   year             Int
   month            Int
   milestoneText    String?
+  targetMilestone  String?
   settlementStatus String?
   khungBtct        String?
   xayTuong         String?

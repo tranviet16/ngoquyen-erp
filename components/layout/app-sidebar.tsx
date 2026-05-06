@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Wallet,
   Upload,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -35,6 +36,7 @@ const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "San luong - Doanh thu", href: "/sl-dt", icon: TrendingUp },
   { label: "Tai chinh NQ", href: "/tai-chinh", icon: Wallet },
   { label: "Nhap du lieu (Admin)", href: "/admin/import", icon: Upload },
+  { label: "Phong ban (Admin)", href: "/admin/phong-ban", icon: Users },
 ];
 
 export function AppSidebar() {
