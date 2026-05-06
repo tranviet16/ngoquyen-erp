@@ -763,3 +763,100 @@ model ProjectSupplierDebtSnapshot {
   @@index([importRunId])
   @@map("project_supplier_debt_snapshots")
 }
+
+// ─── SL-DT Independent Module (Phase 2 rewrite) ────────────────────────────
+// Replaces SlDtTarget+PaymentSchedule. Lots no longer reuse Project entity.
+
+model SlDtLot {
+  id            Int       @id @default(autoincrement())
+  code          String    @unique
+  lotName       String
+  phaseCode     String    @default("?")
+  groupCode     String    @default("?")
+  sortOrder     Int       @default(0)
+  estimateValue Decimal   @db.Decimal(18, 2) @default(0)
+  contractValue Decimal?  @db.Decimal(18, 2)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  paymentPlan    SlDtPaymentPlan?
+  monthlyInputs  SlDtMonthlyInput[]
+  progressStatus SlDtProgressStatus[]
+
+  @@index([phaseCode, groupCode, sortOrder])
+  @@map("sl_dt_lots")
+}
+
+model SlDtMilestoneScore {
+  id            Int      @id @default(autoincrement())
+  milestoneText String   @unique
+  score         Int
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt    DateTime  @updatedAt
+  @@map("sl_dt_milestone_scores")
+}
+
+model SlDtPaymentPlan {
+  id            Int      @id @default(autoincrement())
+  lotId         Int      @unique
+  dot1Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot1Milestone String?
+  dot2Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot2Milestone String?
+  dot3Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot3Milestone String?
+  dot4Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot4Milestone String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lot           SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  @@map("sl_dt_payment_plans")
+}
+
+model SlDtMonthlyInput {
+  id            Int      @id @default(autoincrement())
+  lotId         Int
+  year          Int
+  month         Int
+  slKeHoachKy   Decimal  @db.Decimal(18, 2) @default(0)
+  slThucKyTho   Decimal  @db.Decimal(18, 2) @default(0)
+  slLuyKeTho    Decimal  @db.Decimal(18, 2) @default(0)
+  slTrat        Decimal  @db.Decimal(18, 2) @default(0)
+  dtKeHoachKy   Decimal  @db.Decimal(18, 2) @default(0)
+  dtThoKy       Decimal  @db.Decimal(18, 2) @default(0)
+  dtThoLuyKe    Decimal  @db.Decimal(18, 2) @default(0)
+  qtTratChua    Decimal  @db.Decimal(18, 2) @default(0)
+  dtTratKy      Decimal  @db.Decimal(18, 2) @default(0)
+  dtTratLuyKe   Decimal  @db.Decimal(18, 2) @default(0)
+  ghiChu        String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lot           SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  @@unique([lotId, year, month])
+  @@index([year, month])
+  @@map("sl_dt_monthly_inputs")
+}
+
+model SlDtProgressStatus {
+  id               Int      @id @default(autoincrement())
+  lotId            Int
+  year             Int
+  month            Int
+  milestoneText    String?
+  settlementStatus String?
+  khungBtct        String?
+  xayTuong         String?
+  tratNgoai        String?
+  xayTho           String?
+  tratHoanThien    String?
+  hoSoQuyetToan    String?
+  ghiChu           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lot              SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  @@unique([lotId, year, month])
+  @@index([year, month])
+  @@map("sl_dt_progress_statuses")
+}
