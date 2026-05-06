@@ -94,6 +94,69 @@ export function buildRowsFromMatrix(
   return { headers, rows };
 }
 
+/**
+ * Parse a "Đối chiếu công nợ" sheet (Nam Hương / Quang Minh layout).
+ * Header at the row containing STT + Ngày + Khối lượng. Item name from
+ * "Tên vật tư:". Project name from "Công trình:". Returns line-item rows
+ * with date/qty/unit/unitPrice/totalAmount, plus header info for aggregate.
+ */
+export interface ReconciliationData {
+  itemName: string | null;
+  projectName: string | null;
+  rows: {
+    rowIndex: number;
+    date: unknown;
+    qty: number;
+    unit: string;
+    unitPrice: number;
+    totalAmount: number;
+  }[];
+}
+
+export function parseReconciliationSheet(matrix: unknown[][]): ReconciliationData {
+  const itemName = findLabeledValue(matrix, "ten vat tu");
+  const projectName = findLabeledValue(matrix, "cong trinh");
+  const headerIdx = findHeaderRow(matrix, ["stt"]);
+  const rows: ReconciliationData["rows"] = [];
+  if (headerIdx < 0) return { itemName, projectName, rows };
+
+  // Resolve column positions from header row
+  const header = (matrix[headerIdx] || []).map(normHeader);
+  const findCol = (...keys: string[]): number => {
+    for (const k of keys) {
+      const wanted = normHeader(k);
+      const idx = header.findIndex((h) => h.includes(wanted));
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  };
+  const cDate = findCol("ngay/thang", "ngay");
+  const cQty = findCol("khoi luong", "kl");
+  const cUnit = findCol("dvt", "don vi");
+  const cPrice = findCol("don gia");
+  const cTotal = findCol("thanh tien");
+
+  for (let i = headerIdx + 1; i < matrix.length; i++) {
+    const r = matrix[i] || [];
+    if (r.every((c) => c == null || c === "")) continue;
+    const stt = r[0];
+    // Skip total/footer rows: STT must be numeric or have a date
+    const dateVal = cDate >= 0 ? r[cDate] : null;
+    if (typeof stt === "string" && !/^\d/.test(stt.trim()) && !dateVal) continue;
+    const qty = cQty >= 0 ? num(r[cQty]) : 0;
+    if (qty <= 0 && !dateVal) continue;
+    rows.push({
+      rowIndex: i,
+      date: dateVal,
+      qty,
+      unit: cUnit >= 0 ? String(r[cUnit] ?? "").trim() : "",
+      unitPrice: cPrice >= 0 ? num(r[cPrice]) : 0,
+      totalAmount: cTotal >= 0 ? num(r[cTotal]) : 0,
+    });
+  }
+  return { itemName, projectName, rows };
+}
+
 /** Find a value like "Tên vật tư: Gạch đặc A1" anywhere in the matrix; return everything after the colon. */
 export function findLabeledValue(matrix: unknown[][], labelHint: string): string | null {
   const want = normHeader(labelHint);

@@ -54,6 +54,24 @@ function parseTargetSheetName(name: string): { year: number; month: number } | n
   return { year, month };
 }
 
+/** Parse "Báo cáo sản lượng Tháng 07 năm" or "Báo cáo doanh thu Tháng 09 năm" → { year, month, kind }. */
+function parseActualSheetName(
+  name: string,
+): { year: number; month: number; kind: "sl" | "dt" } | null {
+  const norm = normHeader(name);
+  let kind: "sl" | "dt" | null = null;
+  if (norm.includes("bao cao san luong")) kind = "sl";
+  else if (norm.includes("bao cao doanh thu")) kind = "dt";
+  if (!kind) return null;
+  const m = name.match(/Tháng\s*(\d{1,2})(?:\s*năm\s*(\d{2,4}))?/i);
+  if (!m) return null;
+  const month = parseInt(m[1], 10);
+  let year = m[2] ? parseInt(m[2], 10) : 2025;
+  if (year < 100) year = 2000 + year;
+  if (year < 1000) year = 2025;
+  return { year, month, kind };
+}
+
 const QUARTER_END_2025 = [
   new Date(2025, 2, 31), // Đợt 1 → Q1
   new Date(2025, 5, 30), // Đợt 2 → Q2
@@ -109,6 +127,55 @@ export const SlDtAdapter: ImportAdapter = {
             slTarget,
             dtTarget,
             note: undefined,
+          },
+        });
+      }
+    }
+
+    // ── Actuals: "Báo cáo sản lượng/doanh thu Tháng XX" sheets ──
+    const actualSheets = wb.SheetNames.filter((n) => parseActualSheetName(n) != null);
+    for (const sheetName of actualSheets) {
+      const meta = parseActualSheetName(sheetName)!;
+      const matrix = readMatrix(wb.Sheets[sheetName]);
+      const headerIdx = findHeaderRow(matrix, ["stt"]);
+      if (headerIdx < 0) continue;
+      const dataStart = headerIdx + 3; // skip 2 sub-header rows
+      for (let i = dataStart; i < matrix.length; i++) {
+        const r = matrix[i] || [];
+        // SL report: col 1 = Danh mục (Lô)
+        // DT report: col 1 = Danh mục, col 2 = Tên lô (Lô X). Try col 2 first.
+        const candidate2 = String(r[2] ?? "").trim();
+        const candidate1 = String(r[1] ?? "").trim();
+        const projectName =
+          /^Lô\s/i.test(candidate2) && /^\d+$/.test(String(r[0] ?? "").trim())
+            ? candidate2
+            : isLotRow(r[0], r[1])
+              ? candidate1
+              : "";
+        if (!projectName) continue;
+        projectNames.add(projectName);
+        let thisPeriod = 0;
+        let cumulative = 0;
+        if (meta.kind === "sl") {
+          // SL: col 4 = kỳ này, col 5 = lũy kế
+          thisPeriod = num(r[4]);
+          cumulative = num(r[5]);
+        } else {
+          // DT: col 5 = Thô kỳ này, col 6 = Thô lũy kế, col 9 = Trát kỳ này, col 10 = Trát lũy kế
+          thisPeriod = num(r[5]) + num(r[9]);
+          cumulative = num(r[6]) + num(r[10]);
+        }
+        if (thisPeriod === 0 && cumulative === 0) continue;
+        rows.push({
+          rowIndex: rows.length,
+          data: {
+            kind: "actual",
+            actualKind: meta.kind,
+            projectName,
+            year: meta.year,
+            month: meta.month,
+            thisPeriod,
+            cumulative,
           },
         });
       }
@@ -218,6 +285,53 @@ export const SlDtAdapter: ImportAdapter = {
           continue;
         }
         const projectId = await getOrCreateProject(projectName);
+
+        if (row.data.kind === "actual") {
+          const year = Number(row.data.year);
+          const month = Number(row.data.month);
+          const thisPeriod = Number(row.data.thisPeriod ?? 0);
+          const cumulative = Number(row.data.cumulative ?? 0);
+          const isSl = row.data.actualKind === "sl";
+          const existing = await db.$queryRaw<{ id: number }[]>`
+            SELECT id FROM sl_dt_targets
+            WHERE "projectId" = ${projectId} AND year = ${year} AND month = ${month}
+            LIMIT 1
+          `;
+          if (existing.length > 0) {
+            if (isSl) {
+              await db.$executeRaw`
+                UPDATE sl_dt_targets
+                SET "slActualThisPeriod" = ${thisPeriod},
+                    "slActualCumulative" = ${cumulative},
+                    "updatedAt" = NOW()
+                WHERE id = ${existing[0].id}
+              `;
+            } else {
+              await db.$executeRaw`
+                UPDATE sl_dt_targets
+                SET "dtActualThisPeriod" = ${thisPeriod},
+                    "dtActualCumulative" = ${cumulative},
+                    "updatedAt" = NOW()
+                WHERE id = ${existing[0].id}
+              `;
+            }
+          } else {
+            await db.$executeRaw`
+              INSERT INTO sl_dt_targets
+                ("projectId", year, month, "slTarget", "dtTarget",
+                 "slActualThisPeriod", "slActualCumulative",
+                 "dtActualThisPeriod", "dtActualCumulative",
+                 "importRunId", "createdAt", "updatedAt")
+              VALUES
+                (${projectId}, ${year}, ${month}, 0, 0,
+                 ${isSl ? thisPeriod : null}, ${isSl ? cumulative : null},
+                 ${!isSl ? thisPeriod : null}, ${!isSl ? cumulative : null},
+                 ${importRunId ?? null}, NOW(), NOW())
+            `;
+          }
+          imported++;
+          continue;
+        }
 
         if (row.data.kind === "target") {
           const year = Number(row.data.year);

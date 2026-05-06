@@ -13,6 +13,7 @@ const TABS = [
   { href: "/giao-dich", label: "Giao Dịch" },
   { href: "/hop-dong", label: "Hợp Đồng" },
   { href: "/dong-tien-3-ben", label: "Dòng Tiền 3 Bên" },
+  { href: "/cong-no", label: "Công Nợ NCC" },
   { href: "/cai-dat", label: "Cài Đặt" },
 ];
 

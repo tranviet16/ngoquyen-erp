@@ -13,6 +13,7 @@ export default async function TaiChinhDashboardPage() {
     { href: "/tai-chinh/vay", label: "Hợp đồng vay" },
     { href: "/tai-chinh/nhat-ky", label: "Nhật ký giao dịch" },
     { href: "/tai-chinh/phan-loai-chi-phi", label: "Phân loại chi phí" },
+    { href: "/tai-chinh/phan-loai-giao-dich", label: "Phân loại giao dịch" },
     { href: "/tai-chinh/phai-thu-tra", label: "Phải thu / Phải trả" },
     { href: "/tai-chinh/bao-cao-thanh-khoan", label: "Báo cáo thanh khoản" },
   ];

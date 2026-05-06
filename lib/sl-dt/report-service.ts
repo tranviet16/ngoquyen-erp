@@ -75,8 +75,8 @@ export async function getSlDtReport(filter: {
       t."month"      AS month,
       t."slTarget"   AS sl_target,
       t."dtTarget"   AS dt_target,
-      COALESCE(v.sl_actual, 0) AS sl_actual,
-      COALESCE(v.dt_actual, 0) AS dt_actual
+      COALESCE(t."slActualThisPeriod", v.sl_actual, 0) AS sl_actual,
+      COALESCE(t."dtActualThisPeriod", v.dt_actual, 0) AS dt_actual
     FROM sl_dt_targets t
     LEFT JOIN vw_sl_dt_actual v
       ON v.project_id = t."projectId"
@@ -142,8 +142,8 @@ export async function getSlDtSummary(year: number): Promise<SlDtSummaryRow[]> {
       t."projectId"            AS project_id,
       SUM(t."slTarget")        AS sl_target,
       SUM(t."dtTarget")        AS dt_target,
-      COALESCE(SUM(v.sl_actual), 0) AS sl_actual,
-      COALESCE(SUM(v.dt_actual), 0) AS dt_actual
+      COALESCE(SUM(COALESCE(t."slActualThisPeriod", v.sl_actual, 0)), 0) AS sl_actual,
+      COALESCE(SUM(COALESCE(t."dtActualThisPeriod", v.dt_actual, 0)), 0) AS dt_actual
     FROM sl_dt_targets t
     LEFT JOIN vw_sl_dt_actual v
       ON v.project_id = t."projectId"

@@ -18,6 +18,7 @@ import {
   findHeaderRow,
   buildRowsFromMatrix,
   findLabeledValue,
+  parseReconciliationSheet,
 } from "./excel-utils";
 import type {
   ImportAdapter,
@@ -98,10 +99,45 @@ export const GachNamHuongAdapter: ImportAdapter = {
       });
     }
 
+    // Parse "Đối chiếu công nợ" sheet (price/total per delivery line)
+    const reconSheet = wb.SheetNames.find((n) => normHeader(n).includes("doi chieu cong no"));
+    let reconCount = 0;
+    if (reconSheet) {
+      const reconMatrix = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[reconSheet], {
+        header: 1,
+        defval: null,
+        raw: false,
+      });
+      const recon = parseReconciliationSheet(reconMatrix);
+      const reconItemName = recon.itemName ?? itemName;
+      itemNames.add(reconItemName);
+      for (const r of recon.rows) {
+        if (!r.date && r.qty <= 0) continue;
+        rows.push({
+          rowIndex: r.rowIndex,
+          data: {
+            _kind: "reconciliation",
+            date: r.date,
+            itemName: reconItemName,
+            unit: r.unit || "viên",
+            qty: r.qty,
+            unitPrice: r.unitPrice,
+            totalAmount: r.totalAmount,
+            note: undefined,
+          },
+        });
+        reconCount++;
+      }
+    }
+
     const conflicts: ConflictItem[] = [await resolveSupplier(DEFAULT_SUPPLIER_NAME)];
     for (const name of itemNames) conflicts.push(await resolveItem(name));
 
-    return { rows, conflicts, meta: { sheetName, defaultSupplier: DEFAULT_SUPPLIER_NAME, itemName } };
+    return {
+      rows,
+      conflicts,
+      meta: { sheetName, defaultSupplier: DEFAULT_SUPPLIER_NAME, itemName, reconSheet, reconCount },
+    };
   },
 
   validate(data: ParsedData): ValidationResult {
@@ -152,6 +188,10 @@ export const GachNamHuongAdapter: ImportAdapter = {
         }
         const qty = Number(row.data.qty ?? 0);
 
+        const isRecon = row.data._kind === "reconciliation";
+        const unitPrice = isRecon ? Number(row.data.unitPrice ?? 0) : null;
+        const totalAmount = isRecon ? Number(row.data.totalAmount ?? 0) : null;
+
         const existing = await db.$queryRaw<{ id: number }[]>`
           SELECT id FROM supplier_delivery_daily
           WHERE "supplierId" = ${supplierId}
@@ -162,16 +202,29 @@ export const GachNamHuongAdapter: ImportAdapter = {
           LIMIT 1
         `;
         if (existing.length > 0) {
-          skipped++;
+          // Reconciliation row → enrich existing record with price info if missing
+          if (isRecon && (unitPrice ?? 0) > 0) {
+            await db.$executeRaw`
+              UPDATE supplier_delivery_daily
+              SET "unitPrice" = ${unitPrice},
+                  "totalAmount" = ${totalAmount},
+                  "updatedAt" = NOW()
+              WHERE id = ${existing[0].id}
+            `;
+            imported++;
+          } else {
+            skipped++;
+          }
           continue;
         }
 
         await db.$executeRaw`
           INSERT INTO supplier_delivery_daily
-            ("supplierId", date, "itemId", qty, unit, "cbVatTu", "chiHuyCt", note, "importRunId", "createdAt", "updatedAt")
+            ("supplierId", date, "itemId", qty, unit, "unitPrice", "totalAmount", "cbVatTu", "chiHuyCt", note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${supplierId}, ${date}, ${itemId}, ${qty},
              ${String(row.data.unit ?? "viên")},
+             ${unitPrice}, ${totalAmount},
              ${row.data.cbVatTu ? String(row.data.cbVatTu) : null},
              ${row.data.chiHuyCt ? String(row.data.chiHuyCt) : null},
              ${row.data.note ? String(row.data.note) : null},

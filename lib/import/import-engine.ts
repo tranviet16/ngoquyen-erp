@@ -189,7 +189,27 @@ export async function deleteImportRun(id: number) {
  * (runs created before the importRunId column was added will return 0).
  */
 export async function getRollbackInfo(id: number) {
-  const [tx, open, est, ptx, sdd, sld, psc, lc, je] = await Promise.all([
+  const [
+    tx,
+    open,
+    est,
+    ptx,
+    sdd,
+    sld,
+    psc,
+    lc,
+    je,
+    psch,
+    pacc,
+    pco,
+    pcon,
+    p3wf,
+    srec,
+    lpay,
+    pra,
+    eclass,
+    psds,
+  ] = await Promise.all([
     prisma.ledgerTransaction.count({ where: { importRunId: id } }),
     prisma.ledgerOpeningBalance.count({ where: { importRunId: id } }),
     prisma.projectEstimate.count({ where: { importRunId: id } }),
@@ -199,6 +219,16 @@ export async function getRollbackInfo(id: number) {
     prisma.paymentSchedule.count({ where: { importRunId: id } }),
     prisma.loanContract.count({ where: { importRunId: id } }),
     prisma.journalEntry.count({ where: { importRunId: id } }),
+    prisma.projectSchedule.count({ where: { importRunId: id } }),
+    prisma.projectAcceptance.count({ where: { importRunId: id } }),
+    prisma.projectChangeOrder.count({ where: { importRunId: id } }),
+    prisma.projectContract.count({ where: { importRunId: id } }),
+    prisma.project3WayCashflow.count({ where: { importRunId: id } }),
+    prisma.supplierReconciliation.count({ where: { importRunId: id } }),
+    prisma.loanPayment.count({ where: { importRunId: id } }),
+    prisma.payableReceivableAdjustment.count({ where: { importRunId: id } }),
+    prisma.expenseClassification.count({ where: { importRunId: id } }),
+    prisma.projectSupplierDebtSnapshot.count({ where: { importRunId: id } }),
   ]);
   return {
     ledgerTransactions: tx,
@@ -210,7 +240,19 @@ export async function getRollbackInfo(id: number) {
     paymentSchedules: psc,
     loanContracts: lc,
     journalEntries: je,
-    total: tx + open + est + ptx + sdd + sld + psc + lc + je,
+    projectSchedules: psch,
+    projectAcceptances: pacc,
+    projectChangeOrders: pco,
+    projectContracts: pcon,
+    project3WayCashflows: p3wf,
+    supplierReconciliations: srec,
+    loanPayments: lpay,
+    payableReceivableAdjustments: pra,
+    expenseClassifications: eclass,
+    projectSupplierDebtSnapshots: psds,
+    total:
+      tx + open + est + ptx + sdd + sld + psc + lc + je +
+      psch + pacc + pco + pcon + p3wf + srec + lpay + pra + eclass + psds,
   };
 }
 
@@ -230,8 +272,10 @@ export async function rollbackImportRun(id: number) {
     // is intentional and the ImportRun record is the audit trail.
     const txCount = await tx.$executeRaw`DELETE FROM ledger_transactions WHERE "importRunId" = ${id}`;
     const openCount = await tx.$executeRaw`DELETE FROM ledger_opening_balances WHERE "importRunId" = ${id}`;
-    // Loan payments cascade-delete with their contract via FK; delete contracts first.
-    const lpCount = await tx.$executeRaw`DELETE FROM loan_payments WHERE "loanContractId" IN (SELECT id FROM loan_contracts WHERE "importRunId" = ${id})`;
+    // Delete loan_payments tagged directly first, then any leftover under contracts being removed.
+    const lpDirect = await tx.$executeRaw`DELETE FROM loan_payments WHERE "importRunId" = ${id}`;
+    const lpCascaded = await tx.$executeRaw`DELETE FROM loan_payments WHERE "loanContractId" IN (SELECT id FROM loan_contracts WHERE "importRunId" = ${id})`;
+    const lpCount = lpDirect + lpCascaded;
     const lcCount = await tx.$executeRaw`DELETE FROM loan_contracts WHERE "importRunId" = ${id}`;
     const estCount = await tx.$executeRaw`DELETE FROM project_estimates WHERE "importRunId" = ${id}`;
     const ptxCount = await tx.$executeRaw`DELETE FROM project_transactions WHERE "importRunId" = ${id}`;
@@ -239,6 +283,15 @@ export async function rollbackImportRun(id: number) {
     const sldCount = await tx.$executeRaw`DELETE FROM sl_dt_targets WHERE "importRunId" = ${id}`;
     const pscCount = await tx.$executeRaw`DELETE FROM payment_schedules WHERE "importRunId" = ${id}`;
     const jeCount = await tx.$executeRaw`DELETE FROM journal_entries WHERE "importRunId" = ${id}`;
+    const pschCount = await tx.$executeRaw`DELETE FROM project_schedules WHERE "importRunId" = ${id}`;
+    const paccCount = await tx.$executeRaw`DELETE FROM project_acceptances WHERE "importRunId" = ${id}`;
+    const pcoCount = await tx.$executeRaw`DELETE FROM project_change_orders WHERE "importRunId" = ${id}`;
+    const pconCount = await tx.$executeRaw`DELETE FROM project_contracts WHERE "importRunId" = ${id}`;
+    const p3wfCount = await tx.$executeRaw`DELETE FROM project_3way_cashflows WHERE "importRunId" = ${id}`;
+    const srecCount = await tx.$executeRaw`DELETE FROM supplier_reconciliations WHERE "importRunId" = ${id}`;
+    const praCount = await tx.$executeRaw`DELETE FROM payable_receivable_adjustments WHERE "importRunId" = ${id}`;
+    const eclassCount = await tx.$executeRaw`DELETE FROM expense_classifications WHERE "importRunId" = ${id}`;
+    const psdsCount = await tx.$executeRaw`DELETE FROM project_supplier_debt_snapshots WHERE "importRunId" = ${id}`;
     await tx.importRun.delete({ where: { id } });
     return {
       ledgerTransactions: txCount,
@@ -251,7 +304,18 @@ export async function rollbackImportRun(id: number) {
       loanContracts: lcCount,
       loanPayments: lpCount,
       journalEntries: jeCount,
-      total: txCount + openCount + estCount + ptxCount + sddCount + sldCount + pscCount + lcCount + lpCount + jeCount,
+      projectSchedules: pschCount,
+      projectAcceptances: paccCount,
+      projectChangeOrders: pcoCount,
+      projectContracts: pconCount,
+      project3WayCashflows: p3wfCount,
+      supplierReconciliations: srecCount,
+      payableReceivableAdjustments: praCount,
+      expenseClassifications: eclassCount,
+      projectSupplierDebtSnapshots: psdsCount,
+      total:
+        txCount + openCount + estCount + ptxCount + sddCount + sldCount + pscCount + lcCount + lpCount + jeCount +
+        pschCount + paccCount + pcoCount + pconCount + p3wfCount + srecCount + praCount + eclassCount + psdsCount,
     };
   });
 }

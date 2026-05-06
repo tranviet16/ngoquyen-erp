@@ -202,7 +202,11 @@ model ProjectSchedule {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
+  @@index([importRunId])
   @@map("project_schedules")
 }
 
@@ -226,7 +230,11 @@ model ProjectAcceptance {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
+  @@index([importRunId])
   @@map("project_acceptances")
 }
 
@@ -275,7 +283,11 @@ model ProjectChangeOrder {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
+  @@index([importRunId])
   @@map("project_change_orders")
 }
 
@@ -325,7 +337,11 @@ model ProjectContract {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId])
+  @@index([importRunId])
   @@map("project_contracts")
 }
 
@@ -345,7 +361,11 @@ model Project3WayCashflow {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([projectId, date])
+  @@index([importRunId])
   @@map("project_3way_cashflows")
 }
 
@@ -366,20 +386,22 @@ model ProjectSettings {
 // ─── Vật tư theo NCC Models (Phase 4) ────────────────────────────────────────
 
 model SupplierDeliveryDaily {
-  id         Int       @id @default(autoincrement())
-  supplierId Int
-  projectId  Int?
-  date       DateTime
-  itemId     Int
-  qty        Decimal   @db.Decimal(18, 4)
-  unit       String // snapshot from Item.unit at entry time
-  cbVatTu    String? // Cán bộ vật tư
-  chiHuyCt   String? // Chỉ huy công trường
-  keToan     String? // Kế toán
-  note       String?
-  deletedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @default(now())
+  id          Int       @id @default(autoincrement())
+  supplierId  Int
+  projectId   Int?
+  date        DateTime
+  itemId      Int
+  qty         Decimal   @db.Decimal(18, 4)
+  unit        String // snapshot from Item.unit at entry time
+  unitPrice   Decimal?  @db.Decimal(18, 2)
+  totalAmount Decimal?  @db.Decimal(18, 2)
+  cbVatTu     String? // Cán bộ vật tư
+  chiHuyCt    String? // Chỉ huy công trường
+  keToan      String? // Kế toán
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
@@ -406,7 +428,11 @@ model SupplierReconciliation {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([supplierId, periodFrom])
+  @@index([importRunId])
   @@map("supplier_reconciliations")
 }
 
@@ -477,15 +503,20 @@ model SlDtTarget {
   // Chỉ tiêu sản lượng & doanh thu theo (project, year, month)
   // SL = giá trị nghiệm thu nội bộ (amountInternalVnd)
   // DT = giá trị nghiệm thu CĐT   (amountCdtVnd) + thu tiền CĐT
-  id        Int      @id @default(autoincrement())
-  projectId Int
-  year      Int
-  month     Int // 1–12
-  slTarget  Decimal  @db.Decimal(18, 2) // sản lượng kế hoạch (VNĐ)
-  dtTarget  Decimal  @db.Decimal(18, 2) // doanh thu kế hoạch (VNĐ)
-  note      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  projectId          Int
+  year               Int
+  month              Int // 1–12
+  slTarget           Decimal  @db.Decimal(18, 2) // sản lượng kế hoạch (VNĐ)
+  dtTarget           Decimal  @db.Decimal(18, 2) // doanh thu kế hoạch (VNĐ)
+  slActualThisPeriod Decimal? @db.Decimal(18, 2) // sản lượng thực hiện trong tháng
+  slActualCumulative Decimal? @db.Decimal(18, 2) // sản lượng luỹ kế đến cuối tháng
+  dtActualThisPeriod Decimal? @db.Decimal(18, 2) // doanh thu thực hiện trong tháng
+  dtActualCumulative Decimal? @db.Decimal(18, 2) // doanh thu luỹ kế đến cuối tháng
+  noteActual         String?
+  note               String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now())
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
@@ -563,8 +594,12 @@ model LoanPayment {
 
   loanContract LoanContract @relation(fields: [loanContractId], references: [id])
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([loanContractId, dueDate])
   @@index([dueDate, status])
+  @@index([importRunId])
   @@map("loan_payments")
 }
 
@@ -629,15 +664,25 @@ model ImportRun {
   createdAt    DateTime  @default(now())
   committedAt  DateTime?
 
-  ledgerTransactions    LedgerTransaction[]
-  ledgerOpeningBalances LedgerOpeningBalance[]
-  projectEstimates      ProjectEstimate[]
-  projectTransactions   ProjectTransaction[]
-  supplierDeliveryDaily SupplierDeliveryDaily[]
-  slDtTargets           SlDtTarget[]
-  paymentSchedules      PaymentSchedule[]
-  loanContracts         LoanContract[]
-  journalEntries        JournalEntry[]
+  ledgerTransactions           LedgerTransaction[]
+  ledgerOpeningBalances        LedgerOpeningBalance[]
+  projectEstimates             ProjectEstimate[]
+  projectTransactions          ProjectTransaction[]
+  supplierDeliveryDaily        SupplierDeliveryDaily[]
+  slDtTargets                  SlDtTarget[]
+  paymentSchedules             PaymentSchedule[]
+  loanContracts                LoanContract[]
+  journalEntries               JournalEntry[]
+  projectSchedules             ProjectSchedule[]
+  projectAcceptances           ProjectAcceptance[]
+  projectChangeOrders          ProjectChangeOrder[]
+  projectContracts             ProjectContract[]
+  project3WayCashflows         Project3WayCashflow[]
+  supplierReconciliations      SupplierReconciliation[]
+  loanPayments                 LoanPayment[]
+  payableReceivableAdjustments PayableReceivableAdjustment[]
+  expenseClassifications       ExpenseClassification[]
+  projectSupplierDebtSnapshots ProjectSupplierDebtSnapshot[]
 
   @@index([adapter, status])
   @@index([createdAt])
@@ -659,7 +704,62 @@ model PayableReceivableAdjustment {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @default(now())
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   @@index([type, status])
   @@index([projectId])
+  @@index([importRunId])
   @@map("payable_receivable_adjustments")
+}
+
+// ─── Phân loại chi phí (separate from JournalEntry — line items per category) ──
+
+model ExpenseClassification {
+  id           Int       @id @default(autoincrement())
+  date         DateTime
+  categoryName String // Loại cụ thể từ file SOP
+  amountVnd    Decimal   @db.Decimal(18, 2)
+  description  String?
+  projectId    Int?
+  note         String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now())
+
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([categoryName])
+  @@index([importRunId])
+  @@map("expense_classifications")
+}
+
+// ─── Snapshot công nợ NCC theo dự án (line-item Công Nợ tab) ───────────────────
+
+model ProjectSupplierDebtSnapshot {
+  id           Int       @id @default(autoincrement())
+  projectId    Int
+  supplierName String
+  itemName     String?
+  qty          Decimal?  @db.Decimal(18, 4)
+  unit         String?
+  unitPrice    Decimal?  @db.Decimal(18, 2)
+  amountTaken  Decimal?  @db.Decimal(18, 2) // Đã lấy hàng
+  amountPaid   Decimal?  @db.Decimal(18, 2) // Đã trả tiền
+  balance      Decimal?  @db.Decimal(18, 2) // Còn nợ
+  asOfDate     DateTime?
+  note         String?
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now())
+
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([supplierName])
+  @@index([importRunId])
+  @@map("project_supplier_debt_snapshots")
 }
