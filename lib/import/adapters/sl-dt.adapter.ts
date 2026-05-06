@@ -1,24 +1,16 @@
 /**
- * Adapter: SL - DT 2025.xlsx → sl_dt_targets + payment_schedules
+ * Adapter: SL - DT 2025.xlsx → sl_dt_lots + sl_dt_monthly_inputs +
+ *  sl_dt_progress_statuses + sl_dt_payment_plans + sl_dt_milestone_scores.
  *
- * Real SOP layout:
- *   - "Chỉ tiêu SL DT Tháng XX (năm YYYY)" — multiple monthly sheets.
- *     Header at row 7 (1-indexed: 8). Row 8 has sub-headers under SL/DT kỳ này.
- *     Data rows: each "Lô" (lot) is a sub-project. SL target = col 5,
- *     DT target = col 7.
- *   - "TIẾN ĐỘ NỘP TIỀN" — pivot matrix. Header at row 3, sub-header row 4.
- *     Per lot: 4 batches, each batch has (Nộp tiền, Tiến độ) sub-columns.
- *     planDate is not present → synthesize end-of-quarter for 2025.
+ * Phase 3 rewrite — independent SL-DT module. Only INPUTS are imported;
+ * compute cols (H,I,J,K of sản lượng; H,L,M,N,O,P,Q of doanh thu; L,O of
+ * chỉ tiêu) are derived at read-time by the report service.
  *
- * Each "Lô X" name becomes a `projectName` requiring mapping. User maps lots
- * to existing Project records or creates new ones via /admin/import conflicts UI.
- *
- * Idempotency: targets dedup by (projectId, year, month); payments by (projectId, batch).
- * importRunId persisted for full rollback.
+ * Idempotent: re-import overwrites monthly_inputs / progress_statuses /
+ * payment_plans by their unique keys; lots are upserted by `code`.
  */
 
 import * as XLSX from "xlsx";
-import { num, normHeader, findHeaderRow } from "./excel-utils";
 import type {
   ImportAdapter,
   ParsedData,
@@ -26,66 +18,18 @@ import type {
   ValidationResult,
   ImportSummary,
 } from "./adapter-types";
-
-function slugifyName(s: string): string {
-  return (
-    s
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 60) || `lot-${Date.now()}`
-  );
-}
-
-function readMatrix(sheet: XLSX.WorkSheet): unknown[][] {
-  return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null, raw: false });
-}
-
-/** Parse "Chỉ tiêu SL DT Tháng 07 năm 2025" or "...Tháng 12 năm 202" → { year, month }. */
-function parseTargetSheetName(name: string): { year: number; month: number } | null {
-  const m = name.match(/Tháng\s*(\d{1,2})\s*(?:năm\s*(\d{2,4}))?/i);
-  if (!m) return null;
-  const month = parseInt(m[1], 10);
-  let year = m[2] ? parseInt(m[2], 10) : 2025;
-  if (year < 100) year = 2000 + year;
-  if (year < 1000) year = 2025; // truncated "202" → assume 2025
-  return { year, month };
-}
-
-/** Parse "Báo cáo sản lượng Tháng 07 năm" or "Báo cáo doanh thu Tháng 09 năm" → { year, month, kind }. */
-function parseActualSheetName(
-  name: string,
-): { year: number; month: number; kind: "sl" | "dt" } | null {
-  const norm = normHeader(name);
-  let kind: "sl" | "dt" | null = null;
-  if (norm.includes("bao cao san luong")) kind = "sl";
-  else if (norm.includes("bao cao doanh thu")) kind = "dt";
-  if (!kind) return null;
-  const m = name.match(/Tháng\s*(\d{1,2})(?:\s*năm\s*(\d{2,4}))?/i);
-  if (!m) return null;
-  const month = parseInt(m[1], 10);
-  let year = m[2] ? parseInt(m[2], 10) : 2025;
-  if (year < 100) year = 2000 + year;
-  if (year < 1000) year = 2025;
-  return { year, month, kind };
-}
-
-const QUARTER_END_2025 = [
-  new Date(2025, 2, 31), // Đợt 1 → Q1
-  new Date(2025, 5, 30), // Đợt 2 → Q2
-  new Date(2025, 8, 30), // Đợt 3 → Q3
-  new Date(2025, 11, 31), // Đợt 4 → Q4
-];
-
-function isLotRow(stt: unknown, dm: unknown): boolean {
-  const s = String(stt ?? "").trim();
-  const d = String(dm ?? "").trim();
-  if (!d) return false;
-  // Numeric STT and Danh mục starting with "Lô"
-  return /^\d+$/.test(s) && /^Lô\s/i.test(d);
-}
+import {
+  classifySheet,
+  normalizeLotCode,
+  parseCauHinh,
+  parseChiTieu,
+  parseDoanhThu,
+  parseMonthSheetName,
+  parseSanLuong,
+  parseTienDoNopTien,
+  parseTienDoXd,
+  readMatrix,
+} from "./sl-dt-sheet-parsers";
 
 export const SlDtAdapter: ImportAdapter = {
   name: "sl-dt",
@@ -94,302 +38,249 @@ export const SlDtAdapter: ImportAdapter = {
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const rows: ParsedRow[] = [];
-    const projectNames = new Set<string>();
-
-    // ── Targets: iterate ALL "Chỉ tiêu SL DT Tháng" sheets ──
-    const targetSheets = wb.SheetNames.filter((n) => normHeader(n).includes("chi tieu sl dt"));
-    for (const sheetName of targetSheets) {
-      const ym = parseTargetSheetName(sheetName);
-      if (!ym) continue;
-      const matrix = readMatrix(wb.Sheets[sheetName]);
-      // Header is around row 7-8; fall back to scanning for "STT" + "Danh mục".
-      const headerIdx = findHeaderRow(matrix, ["stt"]);
-      if (headerIdx < 0) continue;
-      // Data starts after header + 2 (subheader + blank).
-      const dataStart = headerIdx + 2;
-      for (let i = dataStart; i < matrix.length; i++) {
-        const r = matrix[i] || [];
-        if (!isLotRow(r[0], r[1])) continue;
-        const projectName = String(r[1]).trim();
-        projectNames.add(projectName);
-        // Column layout per inspect: 0:STT 1:Danh mục 2:Dự toán 3:SL luỹ kế đầu 4:DT luỹ kế đầu
-        // 5:SL chỉ tiêu kỳ này 6:SL thực hiện 7:DT chỉ tiêu 8:DT thực hiện
-        const slTarget = num(r[5]);
-        const dtTarget = num(r[7]);
-        if (slTarget === 0 && dtTarget === 0) continue;
-        rows.push({
-          rowIndex: rows.length,
-          data: {
-            kind: "target",
-            projectName,
-            year: ym.year,
-            month: ym.month,
-            slTarget,
-            dtTarget,
-            note: undefined,
-          },
-        });
-      }
-    }
-
-    // ── Actuals: "Báo cáo sản lượng/doanh thu Tháng XX" sheets ──
-    const actualSheets = wb.SheetNames.filter((n) => parseActualSheetName(n) != null);
-    for (const sheetName of actualSheets) {
-      const meta = parseActualSheetName(sheetName)!;
-      const matrix = readMatrix(wb.Sheets[sheetName]);
-      const headerIdx = findHeaderRow(matrix, ["stt"]);
-      if (headerIdx < 0) continue;
-      const dataStart = headerIdx + 3; // skip 2 sub-header rows
-      for (let i = dataStart; i < matrix.length; i++) {
-        const r = matrix[i] || [];
-        // SL report: col 1 = Danh mục (Lô)
-        // DT report: col 1 = Danh mục, col 2 = Tên lô (Lô X). Try col 2 first.
-        const candidate2 = String(r[2] ?? "").trim();
-        const candidate1 = String(r[1] ?? "").trim();
-        const projectName =
-          /^Lô\s/i.test(candidate2) && /^\d+$/.test(String(r[0] ?? "").trim())
-            ? candidate2
-            : isLotRow(r[0], r[1])
-              ? candidate1
-              : "";
-        if (!projectName) continue;
-        projectNames.add(projectName);
-        let thisPeriod = 0;
-        let cumulative = 0;
-        if (meta.kind === "sl") {
-          // SL: col 4 = kỳ này, col 5 = lũy kế
-          thisPeriod = num(r[4]);
-          cumulative = num(r[5]);
-        } else {
-          // DT: col 5 = Thô kỳ này, col 6 = Thô lũy kế, col 9 = Trát kỳ này, col 10 = Trát lũy kế
-          thisPeriod = num(r[5]) + num(r[9]);
-          cumulative = num(r[6]) + num(r[10]);
-        }
-        if (thisPeriod === 0 && cumulative === 0) continue;
-        rows.push({
-          rowIndex: rows.length,
-          data: {
-            kind: "actual",
-            actualKind: meta.kind,
-            projectName,
-            year: meta.year,
-            month: meta.month,
-            thisPeriod,
-            cumulative,
-          },
-        });
-      }
-    }
-
-    // ── Payments: TIẾN ĐỘ NỘP TIỀN matrix → 4 batches per lot ──
-    const paymentSheet = wb.SheetNames.find((n) => {
-      const norm = normHeader(n);
-      return norm.includes("nop tien") || norm.includes("nộp tiền".toLowerCase());
-    });
-    if (paymentSheet) {
-      const matrix = readMatrix(wb.Sheets[paymentSheet]);
-      const headerIdx = findHeaderRow(matrix, ["stt"]);
-      if (headerIdx >= 0) {
-        const dataStart = headerIdx + 3; // skip subheader + blank
-        for (let i = dataStart; i < matrix.length; i++) {
-          const r = matrix[i] || [];
-          if (!isLotRow(r[0], r[1])) continue;
-          const projectName = String(r[1]).trim();
-          projectNames.add(projectName);
-          // Batch cols: 3,5,7,9 = Nộp tiền; 4,6,8,10 = Tiến độ (milestone)
-          for (let b = 0; b < 4; b++) {
-            const amount = num(r[3 + b * 2]);
-            const milestone = String(r[4 + b * 2] ?? "").trim();
-            if (amount <= 0 && !milestone) continue;
-            rows.push({
-              rowIndex: rows.length,
-              data: {
-                kind: "payment",
-                projectName,
-                batch: `Đợt ${b + 1}`,
-                planDate: QUARTER_END_2025[b],
-                planAmount: amount,
-                actualDate: null,
-                actualAmount: 0,
-                note: milestone || undefined,
-              },
-            });
-          }
-        }
-      }
-    }
-
-    // Lots are auto-created in apply() (find-or-create by name) — no manual mapping needed.
-    // Users can rename / re-parent the auto-created Project records via /admin/projects later.
-    return {
-      rows,
-      conflicts: [],
-      meta: { targetSheets: targetSheets.length, paymentSheet, projects: projectNames.size },
+    const meta: Record<string, number> = {
+      san_luong: 0, doanh_thu: 0, chi_tieu: 0, tien_do_xd: 0,
+      tien_do_nop_tien: 0, cau_hinh: 0,
     };
+
+    for (const sheetName of wb.SheetNames) {
+      const cat = classifySheet(sheetName);
+      if (!cat) continue;
+      const sheet = wb.Sheets[sheetName];
+      if (!sheet) continue;
+      const matrix = readMatrix(sheet);
+      let parsed: { kind: string; data: Record<string, unknown> }[] = [];
+      if (cat === "cau_hinh") {
+        parsed = parseCauHinh(matrix);
+      } else if (cat === "tien_do_nop_tien") {
+        parsed = parseTienDoNopTien(matrix);
+      } else if (cat === "tien_do_xd") {
+        const ym = parseMonthSheetName(sheetName);
+        if (!ym) continue;
+        parsed = parseTienDoXd(matrix, ym.year, ym.month);
+      } else {
+        const ym = parseMonthSheetName(sheetName);
+        if (!ym) continue;
+        if (cat === "san_luong") parsed = parseSanLuong(matrix, ym.year, ym.month);
+        else if (cat === "doanh_thu") parsed = parseDoanhThu(matrix, ym.year, ym.month);
+        else if (cat === "chi_tieu") parsed = parseChiTieu(matrix, ym.year, ym.month);
+      }
+      meta[cat] += 1;
+      for (const p of parsed) {
+        rows.push({ rowIndex: rows.length, data: { ...p.data, kind: p.kind } });
+      }
+    }
+
+    return { rows, conflicts: [], meta };
   },
 
   validate(data: ParsedData): ValidationResult {
     const errors: ValidationResult["errors"] = [];
     for (const row of data.rows) {
-      if (row.data.kind === "target") {
+      const k = row.data.kind;
+      if (k === "monthly_input_sl" || k === "monthly_input_dt" || k === "progress_status" || k === "tien_do_xd") {
         const y = Number(row.data.year);
         const m = Number(row.data.month);
-        if (y < 2000 || y > 2100)
-          errors.push({ rowIndex: row.rowIndex, field: "year", message: "Năm không hợp lệ" });
-        if (m < 1 || m > 12)
-          errors.push({ rowIndex: row.rowIndex, field: "month", message: "Tháng phải 1–12" });
-      } else if (row.data.kind === "payment") {
-        if (!row.data.batch)
-          errors.push({ rowIndex: row.rowIndex, field: "batch", message: "Thiếu Đợt" });
+        if (y < 2000 || y > 2100) errors.push({ rowIndex: row.rowIndex, field: "year", message: "Năm không hợp lệ" });
+        if (m < 1 || m > 12) errors.push({ rowIndex: row.rowIndex, field: "month", message: "Tháng phải 1–12" });
+      }
+      if (k === "milestone_score") {
+        if (!row.data.milestoneText) errors.push({ rowIndex: row.rowIndex, field: "milestoneText", message: "Thiếu mốc" });
       }
     }
     return { valid: errors.length === 0, errors };
   },
 
-  async apply(data, mapping, tx, importRunId): Promise<ImportSummary> {
+  async apply(data, _mapping, tx, importRunId): Promise<ImportSummary> {
     let imported = 0;
     let skipped = 0;
     const errors: ImportSummary["errors"] = [];
     type Tx = typeof import("@/lib/prisma")["prisma"];
     const db = tx as Tx;
 
-    const projectCache = new Map<string, number>();
-    async function getOrCreateProject(name: string): Promise<number> {
-      if (projectCache.has(name)) return projectCache.get(name)!;
-      const fromMap = mapping[`project:${name}`];
-      if (fromMap) {
-        projectCache.set(name, fromMap);
-        return fromMap;
-      }
-      const found = await db.project.findFirst({
-        where: { name, deletedAt: null },
-        select: { id: true },
-      });
-      if (found) {
-        projectCache.set(name, found.id);
-        return found.id;
-      }
-      const created = await db.project.create({
-        data: { code: slugifyName(name), name },
-        select: { id: true },
-      });
-      projectCache.set(name, created.id);
-      return created.id;
-    }
-
-    for (const row of data.rows) {
+    // 1. Milestone scores (CauHinh)
+    for (const row of data.rows.filter((r) => r.data.kind === "milestone_score")) {
       try {
-        const projectName = String(row.data.projectName ?? "");
-        if (!projectName) {
-          skipped++;
-          continue;
-        }
-        const projectId = await getOrCreateProject(projectName);
-
-        if (row.data.kind === "actual") {
-          const year = Number(row.data.year);
-          const month = Number(row.data.month);
-          const thisPeriod = Number(row.data.thisPeriod ?? 0);
-          const cumulative = Number(row.data.cumulative ?? 0);
-          const isSl = row.data.actualKind === "sl";
-          const existing = await db.$queryRaw<{ id: number }[]>`
-            SELECT id FROM sl_dt_targets
-            WHERE "projectId" = ${projectId} AND year = ${year} AND month = ${month}
-            LIMIT 1
-          `;
-          if (existing.length > 0) {
-            if (isSl) {
-              await db.$executeRaw`
-                UPDATE sl_dt_targets
-                SET "slActualThisPeriod" = ${thisPeriod},
-                    "slActualCumulative" = ${cumulative},
-                    "updatedAt" = NOW()
-                WHERE id = ${existing[0].id}
-              `;
-            } else {
-              await db.$executeRaw`
-                UPDATE sl_dt_targets
-                SET "dtActualThisPeriod" = ${thisPeriod},
-                    "dtActualCumulative" = ${cumulative},
-                    "updatedAt" = NOW()
-                WHERE id = ${existing[0].id}
-              `;
-            }
-          } else {
-            await db.$executeRaw`
-              INSERT INTO sl_dt_targets
-                ("projectId", year, month, "slTarget", "dtTarget",
-                 "slActualThisPeriod", "slActualCumulative",
-                 "dtActualThisPeriod", "dtActualCumulative",
-                 "importRunId", "createdAt", "updatedAt")
-              VALUES
-                (${projectId}, ${year}, ${month}, 0, 0,
-                 ${isSl ? thisPeriod : null}, ${isSl ? cumulative : null},
-                 ${!isSl ? thisPeriod : null}, ${!isSl ? cumulative : null},
-                 ${importRunId ?? null}, NOW(), NOW())
-            `;
-          }
-          imported++;
-          continue;
-        }
-
-        if (row.data.kind === "target") {
-          const year = Number(row.data.year);
-          const month = Number(row.data.month);
-          const existing = await db.$queryRaw<{ id: number }[]>`
-            SELECT id FROM sl_dt_targets
-            WHERE "projectId" = ${projectId} AND year = ${year} AND month = ${month}
-            LIMIT 1
-          `;
-          if (existing.length > 0) {
-            skipped++;
-            continue;
-          }
-          await db.$executeRaw`
-            INSERT INTO sl_dt_targets
-              ("projectId", year, month, "slTarget", "dtTarget", note, "importRunId", "createdAt", "updatedAt")
-            VALUES
-              (${projectId}, ${year}, ${month},
-               ${Number(row.data.slTarget ?? 0)}, ${Number(row.data.dtTarget ?? 0)},
-               ${row.data.note ? String(row.data.note) : null},
-               ${importRunId ?? null}, NOW(), NOW())
-          `;
-          imported++;
-          continue;
-        }
-
-        // payment schedule
-        const batch = String(row.data.batch ?? "");
-        const planDate = row.data.planDate as Date;
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM payment_schedules
-          WHERE "projectId" = ${projectId} AND batch = ${batch} AND "deletedAt" IS NULL
-          LIMIT 1
-        `;
-        if (existing.length > 0) {
-          skipped++;
-          continue;
-        }
-        const actualAmount = Number(row.data.actualAmount ?? 0);
-        const status = actualAmount > 0 ? "paid" : "pending";
-
+        const text = String(row.data.milestoneText);
+        const score = Number(row.data.score);
+        const order = Number(row.data.sortOrder);
         await db.$executeRaw`
-          INSERT INTO payment_schedules
-            ("projectId", batch, "planDate", "planAmount", "actualDate", "actualAmount",
-             status, note, "importRunId", "createdAt", "updatedAt")
-          VALUES
-            (${projectId}, ${batch}, ${planDate}, ${Number(row.data.planAmount ?? 0)},
-             ${(row.data.actualDate as Date) ?? null},
-             ${actualAmount > 0 ? actualAmount : null},
-             ${status}, ${row.data.note ? String(row.data.note) : null},
-             ${importRunId ?? null}, NOW(), NOW())
+          INSERT INTO sl_dt_milestone_scores ("milestoneText", score, "sortOrder", "createdAt", "updatedAt")
+          VALUES (${text}, ${score}, ${order}, NOW(), NOW())
+          ON CONFLICT ("milestoneText") DO UPDATE
+            SET score = EXCLUDED.score, "sortOrder" = EXCLUDED."sortOrder", "updatedAt" = NOW()
         `;
         imported++;
-      } catch (err) {
-        errors.push({ rowIndex: row.rowIndex, message: String(err) });
-      }
+      } catch (e) { errors.push({ rowIndex: row.rowIndex, message: String(e) }); }
     }
 
+    // 2. Lot meta — collapse by lotName, prefer sản_luong source for hierarchy/estimate
+    const lotMetaByName = new Map<string, Record<string, unknown>>();
+    for (const row of data.rows.filter((r) => r.data.kind === "lot_meta")) {
+      const name = normalizeLotCode(row.data.lotName);
+      if (!name) continue;
+      const cur = lotMetaByName.get(name) ?? {};
+      // sản_luong wins for phaseCode/groupCode/sortOrder/estimateValue
+      if (row.data.source === "san_luong") {
+        cur.phaseCode = row.data.phaseCode;
+        cur.groupCode = row.data.groupCode;
+        cur.sortOrder = row.data.sortOrder;
+        cur.estimateValue = row.data.estimateValue;
+      }
+      // doanh_thu provides contractValue
+      if (row.data.source === "doanh_thu" && row.data.contractValue != null) {
+        cur.contractValue = row.data.contractValue;
+      }
+      lotMetaByName.set(name, cur);
+    }
+
+    const lotIdByName = new Map<string, number>();
+    for (const [name, m] of lotMetaByName) {
+      try {
+        const phaseCode = String(m.phaseCode ?? "?");
+        const groupCode = String(m.groupCode ?? "?");
+        const sortOrder = Number(m.sortOrder ?? 0);
+        const estimateValue = Number(m.estimateValue ?? 0);
+        const contractValue = m.contractValue != null ? Number(m.contractValue) : null;
+        const result = await db.$queryRaw<{ id: number }[]>`
+          INSERT INTO sl_dt_lots (code, "lotName", "phaseCode", "groupCode", "sortOrder", "estimateValue", "contractValue", "createdAt", "updatedAt")
+          VALUES (${name}, ${name}, ${phaseCode}, ${groupCode}, ${sortOrder}, ${estimateValue}, ${contractValue}, NOW(), NOW())
+          ON CONFLICT (code) DO UPDATE
+            SET "phaseCode" = EXCLUDED."phaseCode",
+                "groupCode" = EXCLUDED."groupCode",
+                "sortOrder" = EXCLUDED."sortOrder",
+                "estimateValue" = EXCLUDED."estimateValue",
+                "contractValue" = COALESCE(EXCLUDED."contractValue", sl_dt_lots."contractValue"),
+                "updatedAt" = NOW()
+          RETURNING id
+        `;
+        lotIdByName.set(name, result[0].id);
+        imported++;
+      } catch (e) { errors.push({ rowIndex: 0, message: `lot ${name}: ${e}` }); }
+    }
+
+    const resolveLotId = (lotName: unknown): number | null => {
+      const k = normalizeLotCode(lotName);
+      return lotIdByName.get(k) ?? null;
+    };
+
+    // 3. Payment plans
+    for (const row of data.rows.filter((r) => r.data.kind === "payment_plan")) {
+      try {
+        const lotId = resolveLotId(row.data.lotName);
+        if (!lotId) { skipped++; continue; }
+        await db.$executeRaw`
+          INSERT INTO sl_dt_payment_plans ("lotId", "dot1Amount", "dot1Milestone", "dot2Amount", "dot2Milestone", "dot3Amount", "dot3Milestone", "dot4Amount", "dot4Milestone", "createdAt", "updatedAt")
+          VALUES (${lotId},
+            ${Number(row.data.dot1Amount ?? 0)}, ${row.data.dot1Milestone as string | null},
+            ${Number(row.data.dot2Amount ?? 0)}, ${row.data.dot2Milestone as string | null},
+            ${Number(row.data.dot3Amount ?? 0)}, ${row.data.dot3Milestone as string | null},
+            ${Number(row.data.dot4Amount ?? 0)}, ${row.data.dot4Milestone as string | null},
+            NOW(), NOW())
+          ON CONFLICT ("lotId") DO UPDATE
+            SET "dot1Amount" = EXCLUDED."dot1Amount", "dot1Milestone" = EXCLUDED."dot1Milestone",
+                "dot2Amount" = EXCLUDED."dot2Amount", "dot2Milestone" = EXCLUDED."dot2Milestone",
+                "dot3Amount" = EXCLUDED."dot3Amount", "dot3Milestone" = EXCLUDED."dot3Milestone",
+                "dot4Amount" = EXCLUDED."dot4Amount", "dot4Milestone" = EXCLUDED."dot4Milestone",
+                "updatedAt" = NOW()
+        `;
+        imported++;
+      } catch (e) { errors.push({ rowIndex: row.rowIndex, message: String(e) }); }
+    }
+
+    // 4. Monthly inputs — merge SL + DT by (lotId, year, month)
+    type MonthlyKey = string;
+    const inputs = new Map<MonthlyKey, Record<string, number | null>>();
+    const ym = (lotId: number, y: number, m: number): MonthlyKey => `${lotId}|${y}|${m}`;
+    for (const row of data.rows) {
+      if (row.data.kind !== "monthly_input_sl" && row.data.kind !== "monthly_input_dt") continue;
+      const lotId = resolveLotId(row.data.lotName);
+      if (!lotId) { skipped++; continue; }
+      const y = Number(row.data.year), mo = Number(row.data.month);
+      const key = ym(lotId, y, mo);
+      const cur = inputs.get(key) ?? { lotId, year: y, month: mo };
+      if (row.data.kind === "monthly_input_sl") {
+        cur.slKeHoachKy = Number(row.data.slKeHoachKy ?? 0);
+        cur.slThucKyTho = Number(row.data.slThucKyTho ?? 0);
+        cur.slLuyKeTho = Number(row.data.slLuyKeTho ?? 0);
+        cur.slTrat = Number(row.data.slTrat ?? 0);
+      } else {
+        cur.dtKeHoachKy = Number(row.data.dtKeHoachKy ?? 0);
+        cur.dtThoKy = Number(row.data.dtThoKy ?? 0);
+        cur.dtThoLuyKe = Number(row.data.dtThoLuyKe ?? 0);
+        cur.qtTratChua = Number(row.data.qtTratChua ?? 0);
+        cur.dtTratKy = Number(row.data.dtTratKy ?? 0);
+        cur.dtTratLuyKe = Number(row.data.dtTratLuyKe ?? 0);
+      }
+      inputs.set(key, cur);
+    }
+    for (const cur of inputs.values()) {
+      try {
+        await db.$executeRaw`
+          INSERT INTO sl_dt_monthly_inputs ("lotId", year, month,
+            "slKeHoachKy", "slThucKyTho", "slLuyKeTho", "slTrat",
+            "dtKeHoachKy", "dtThoKy", "dtThoLuyKe", "qtTratChua", "dtTratKy", "dtTratLuyKe",
+            "createdAt", "updatedAt")
+          VALUES (${cur.lotId}, ${cur.year}, ${cur.month},
+            ${cur.slKeHoachKy ?? 0}, ${cur.slThucKyTho ?? 0}, ${cur.slLuyKeTho ?? 0}, ${cur.slTrat ?? 0},
+            ${cur.dtKeHoachKy ?? 0}, ${cur.dtThoKy ?? 0}, ${cur.dtThoLuyKe ?? 0},
+            ${cur.qtTratChua ?? 0}, ${cur.dtTratKy ?? 0}, ${cur.dtTratLuyKe ?? 0},
+            NOW(), NOW())
+          ON CONFLICT ("lotId", year, month) DO UPDATE
+            SET "slKeHoachKy" = EXCLUDED."slKeHoachKy", "slThucKyTho" = EXCLUDED."slThucKyTho",
+                "slLuyKeTho" = EXCLUDED."slLuyKeTho", "slTrat" = EXCLUDED."slTrat",
+                "dtKeHoachKy" = EXCLUDED."dtKeHoachKy", "dtThoKy" = EXCLUDED."dtThoKy",
+                "dtThoLuyKe" = EXCLUDED."dtThoLuyKe", "qtTratChua" = EXCLUDED."qtTratChua",
+                "dtTratKy" = EXCLUDED."dtTratKy", "dtTratLuyKe" = EXCLUDED."dtTratLuyKe",
+                "updatedAt" = NOW()
+        `;
+        imported++;
+      } catch (e) { errors.push({ rowIndex: 0, message: `monthly_input ${cur.lotId}/${cur.year}/${cur.month}: ${e}` }); }
+    }
+
+    // 5. Progress status — merge chỉ_tiêu + tien_do_xd by (lotId, year, month)
+    const statuses = new Map<MonthlyKey, Record<string, unknown>>();
+    for (const row of data.rows) {
+      if (row.data.kind !== "progress_status" && row.data.kind !== "tien_do_xd") continue;
+      const lotId = resolveLotId(row.data.lotName);
+      if (!lotId) { skipped++; continue; }
+      const y = Number(row.data.year), mo = Number(row.data.month);
+      const key = ym(lotId, y, mo);
+      const cur = statuses.get(key) ?? { lotId, year: y, month: mo };
+      for (const k of ["milestoneText", "settlementStatus", "khungBtct", "xayTuong", "tratNgoai", "xayTho", "tratHoanThien", "hoSoQuyetToan"] as const) {
+        if (row.data[k] != null) cur[k] = row.data[k];
+      }
+      statuses.set(key, cur);
+    }
+    for (const cur of statuses.values()) {
+      try {
+        await db.$executeRaw`
+          INSERT INTO sl_dt_progress_statuses ("lotId", year, month,
+            "milestoneText", "settlementStatus",
+            "khungBtct", "xayTuong", "tratNgoai", "xayTho", "tratHoanThien", "hoSoQuyetToan",
+            "createdAt", "updatedAt")
+          VALUES (${cur.lotId as number}, ${cur.year as number}, ${cur.month as number},
+            ${(cur.milestoneText as string) ?? null}, ${(cur.settlementStatus as string) ?? null},
+            ${(cur.khungBtct as string) ?? null}, ${(cur.xayTuong as string) ?? null},
+            ${(cur.tratNgoai as string) ?? null}, ${(cur.xayTho as string) ?? null},
+            ${(cur.tratHoanThien as string) ?? null}, ${(cur.hoSoQuyetToan as string) ?? null},
+            NOW(), NOW())
+          ON CONFLICT ("lotId", year, month) DO UPDATE
+            SET "milestoneText" = COALESCE(EXCLUDED."milestoneText", sl_dt_progress_statuses."milestoneText"),
+                "settlementStatus" = COALESCE(EXCLUDED."settlementStatus", sl_dt_progress_statuses."settlementStatus"),
+                "khungBtct" = COALESCE(EXCLUDED."khungBtct", sl_dt_progress_statuses."khungBtct"),
+                "xayTuong" = COALESCE(EXCLUDED."xayTuong", sl_dt_progress_statuses."xayTuong"),
+                "tratNgoai" = COALESCE(EXCLUDED."tratNgoai", sl_dt_progress_statuses."tratNgoai"),
+                "xayTho" = COALESCE(EXCLUDED."xayTho", sl_dt_progress_statuses."xayTho"),
+                "tratHoanThien" = COALESCE(EXCLUDED."tratHoanThien", sl_dt_progress_statuses."tratHoanThien"),
+                "hoSoQuyetToan" = COALESCE(EXCLUDED."hoSoQuyetToan", sl_dt_progress_statuses."hoSoQuyetToan"),
+                "updatedAt" = NOW()
+        `;
+        imported++;
+      } catch (e) { errors.push({ rowIndex: 0, message: `progress ${(cur.lotId as number)}/${cur.year}/${cur.month}: ${e}` }); }
+    }
+
+    void importRunId; // SL-DT idempotent upserts — no per-run rollback (overwrites latest)
     return { rowsTotal: data.rows.length, rowsImported: imported, rowsSkipped: skipped, errors };
   },
 };
