@@ -10,5 +10,10 @@ export default async function NhatKyPage() {
     listExpenseCategories(),
   ]);
 
-  return <JournalGridClient rows={items} categories={categories} />;
+  const rows = items.map((it) => ({
+    ...it,
+    amountVnd: it.amountVnd.toString(),
+  }));
+
+  return <JournalGridClient rows={rows} categories={categories} />;
 }

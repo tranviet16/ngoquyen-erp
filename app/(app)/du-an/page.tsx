@@ -13,11 +13,21 @@ export default async function DuAnPage({ searchParams }: Props) {
   const status = params.status;
 
   const result = await listProjects({ search, page, pageSize: 20, status });
+  const items = result.items.map((p) => ({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    ownerInvestor: p.ownerInvestor,
+    status: p.status,
+    startDate: p.startDate,
+    endDate: p.endDate,
+    _count: p._count,
+  }));
 
   return (
     <Suspense>
       <DuAnListClient
-        data={result.items}
+        data={items}
         total={result.total}
         page={result.page}
         pageSize={result.pageSize}

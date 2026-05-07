@@ -10,14 +10,13 @@ import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createJournalEntry, updateJournalEntry, softDeleteJournalEntry } from "@/lib/tai-chinh/journal-service";
-import type { Prisma } from "@prisma/client";
 
 interface CategoryOption { id: number; name: string; code: string }
 interface JournalRow {
   id: number;
   date: Date;
   entryType: string;
-  amountVnd: Prisma.Decimal;
+  amountVnd: string;
   fromAccount: string | null;
   toAccount: string | null;
   description: string;

@@ -14,7 +14,7 @@ interface ConsolidatedRow {
   source: "material_ledger" | "labor_ledger" | "manual";
   partyName: string;
   type: "payable" | "receivable";
-  amountVnd: Prisma.Decimal;
+  amountVnd: string;
   dueDate: Date | null;
   status: string;
   note: string | null;
