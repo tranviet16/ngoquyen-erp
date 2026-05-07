@@ -37,8 +37,39 @@ export function NotificationBell() {
 
   useEffect(() => {
     fetchData();
-    const id = setInterval(fetchData, 30_000);
-    return () => clearInterval(id);
+
+    // SSE for live push; EventSource auto-reconnects on transient drops.
+    const es = new EventSource("/api/notifications/stream");
+    es.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.type !== "notification") return;
+        setItems((prev) => {
+          if (prev.some((x) => x.id === payload.id)) return prev;
+          const next: NotificationItem = {
+            id: payload.id,
+            type: "notification",
+            title: payload.title,
+            body: payload.body,
+            link: payload.link,
+            readAt: null,
+            createdAt: payload.createdAt,
+          };
+          return [next, ...prev].slice(0, 50);
+        });
+        setUnread((u) => u + 1);
+      } catch {
+        // ignore malformed payload
+      }
+    });
+
+    // Safety-net poll every 2 minutes in case SSE silently dies behind a proxy.
+    const poll = setInterval(fetchData, 120_000);
+
+    return () => {
+      es.close();
+      clearInterval(poll);
+    };
   }, []);
 
   function handleClick(n: NotificationItem) {

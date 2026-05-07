@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { broadcastToUser } from "./sse-emitter";
 
 export type NotificationType =
   | "form_submitted"
@@ -26,7 +27,7 @@ export async function createNotification(
   tx?: TxClient,
 ): Promise<void> {
   const client = tx ?? prisma;
-  await client.notification.create({
+  const created = await client.notification.create({
     data: {
       userId: input.userId,
       type: input.type,
@@ -34,6 +35,14 @@ export async function createNotification(
       body: input.body,
       link: input.link ?? null,
     },
+  });
+  broadcastToUser(input.userId, {
+    type: "notification",
+    id: created.id,
+    title: created.title,
+    body: created.body,
+    link: created.link,
+    createdAt: created.createdAt.toISOString(),
   });
 }
 
@@ -44,7 +53,7 @@ export async function createNotificationsBulk(
   if (inputs.length === 0) return;
   const client = tx ?? prisma;
   for (const input of inputs) {
-    await client.notification.create({
+    const created = await client.notification.create({
       data: {
         userId: input.userId,
         type: input.type,
@@ -52,6 +61,14 @@ export async function createNotificationsBulk(
         body: input.body,
         link: input.link ?? null,
       },
+    });
+    broadcastToUser(input.userId, {
+      type: "notification",
+      id: created.id,
+      title: created.title,
+      body: created.body,
+      link: created.link,
+      createdAt: created.createdAt.toISOString(),
     });
   }
 }
