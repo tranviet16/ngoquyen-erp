@@ -10,7 +10,8 @@ export type NotificationType =
   | "form_revising"
   | "task_assigned"
   | "task_status_changed"
-  | "task_unassigned";
+  | "task_unassigned"
+  | "comment_mention";
 
 type TxClient = Pick<typeof prisma, "notification">;
 

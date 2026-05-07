@@ -5,6 +5,7 @@ import { getUserContext, type UserContext } from "@/lib/department-rbac";
 import { broadcastToUser } from "@/lib/notification/sse-emitter";
 import { createNotification } from "@/lib/notification/notification-service";
 import { canEditComment, canDeleteComment, COMMENT_EDIT_WINDOW_MS } from "./comment-rbac";
+import { extractMentions } from "./mention-parser";
 
 export interface CommentRow {
   id: number;
@@ -107,6 +108,37 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
     if (task.assigneeId && task.assigneeId !== ctx.userId) recipients.add(task.assigneeId);
     if (task.creatorId && task.creatorId !== ctx.userId) recipients.add(task.creatorId);
 
+    const authorLabel = created.author?.name ?? "Người dùng";
+
+    // Resolve @email mentions; mentions are explicit so they bypass the
+    // 5-min coalesce check and are always notified.
+    const mentionEmails = extractMentions(body);
+    const mentionedIds = new Set<string>();
+    if (mentionEmails.length > 0) {
+      const mentionedUsers = await tx.user.findMany({
+        where: { email: { in: mentionEmails, mode: "insensitive" } },
+        select: { id: true },
+      });
+      for (const u of mentionedUsers) {
+        if (u.id !== ctx.userId) mentionedIds.add(u.id);
+      }
+    }
+
+    for (const userId of mentionedIds) {
+      await createNotification(
+        {
+          userId,
+          type: "comment_mention",
+          title: `${authorLabel} đã nhắc bạn trong "${task.title}"`,
+          body: shorten(body),
+          link: `/cong-viec?taskId=${taskId}`,
+        },
+        tx,
+      );
+      // Don't double-notify mentioned recipients via the coalesced path.
+      recipients.delete(userId);
+    }
+
     if (recipients.size > 0) {
       // Coalesce: skip if same actor commented on same task within 5 min.
       const since = new Date(Date.now() - 5 * 60 * 1000);
@@ -120,7 +152,6 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
         select: { id: true },
       });
       if (!recent) {
-        const authorLabel = created.author?.name ?? "Người dùng";
         for (const userId of recipients) {
           await createNotification(
             {
@@ -150,9 +181,17 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
       createdAt: created.createdAt.toISOString(),
       editedAt: null,
     };
-    if (task.assigneeId) broadcastToUser(task.assigneeId, ssePayload);
-    if (task.creatorId && task.creatorId !== task.assigneeId) {
+    const sseSent = new Set<string>();
+    if (task.assigneeId) {
+      broadcastToUser(task.assigneeId, ssePayload);
+      sseSent.add(task.assigneeId);
+    }
+    if (task.creatorId && !sseSent.has(task.creatorId)) {
       broadcastToUser(task.creatorId, ssePayload);
+      sseSent.add(task.creatorId);
+    }
+    for (const uid of mentionedIds) {
+      if (!sseSent.has(uid)) broadcastToUser(uid, ssePayload);
     }
 
     return {

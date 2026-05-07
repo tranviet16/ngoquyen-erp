@@ -135,6 +135,38 @@ export async function deleteSubtask(id: number): Promise<void> {
   });
 }
 
+export async function reorderSubtasks(parentId: number, orderedIds: number[]): Promise<void> {
+  const { ctx, role } = await requireContext();
+
+  await prisma.$transaction(async (tx) => {
+    const parent = await tx.task.findUnique({
+      where: { id: parentId },
+      select: { id: true, deptId: true, creatorId: true },
+    });
+    if (!parent) throw new Error("Không tìm thấy task cha");
+    if (!canEditTask(parent, ctx, role)) throw new Error("Bạn không có quyền sắp xếp việc nhỏ");
+
+    const children = await tx.task.findMany({
+      where: { parentId },
+      select: { id: true },
+    });
+    const childIds = new Set(children.map((c) => c.id));
+    if (orderedIds.length !== childIds.size) {
+      throw new Error("Danh sách sắp xếp không khớp số việc nhỏ");
+    }
+    for (const id of orderedIds) {
+      if (!childIds.has(id)) throw new Error("ID việc nhỏ không hợp lệ");
+    }
+
+    for (let i = 0; i < orderedIds.length; i++) {
+      await tx.task.update({
+        where: { id: orderedIds[i] },
+        data: { orderInColumn: i },
+      });
+    }
+  });
+}
+
 export async function createSubtask(
   parentId: number,
   input: { title: string; assigneeId?: string | null; priority?: string },

@@ -2,6 +2,21 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TASK_STATUSES, taskStatusLabel, type TaskStatus } from "@/lib/task/state-machine";
@@ -10,6 +25,7 @@ import {
   deleteSubtaskAction,
   listChildrenAction,
   moveSubtaskAction,
+  reorderSubtasksAction,
 } from "@/app/(app)/cong-viec/subtasks-actions";
 
 interface SubtaskRow {
@@ -92,6 +108,27 @@ export function SubtaskSection({ parentId, members, canEditParent }: Props) {
     });
   }
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIdx = items.findIndex((i) => i.id === active.id);
+    const newIdx = items.findIndex((i) => i.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const next = arrayMove(items, oldIdx, newIdx);
+    const prev = items;
+    setItems(next);
+    startBusy(async () => {
+      try {
+        await reorderSubtasksAction(parentId, next.map((s) => s.id));
+      } catch (err) {
+        setItems(prev);
+        toast.error(err instanceof Error ? err.message : String(err));
+      }
+    });
+  }
+
   function doDelete(id: number) {
     if (!confirm("Xoá việc nhỏ này?")) return;
     startBusy(async () => {
@@ -117,36 +154,22 @@ export function SubtaskSection({ parentId, members, canEditParent }: Props) {
       ) : items.length === 0 ? (
         <p className="text-xs text-muted-foreground mb-2">Chưa có việc nhỏ.</p>
       ) : (
-        <ul className="space-y-1 mb-2">
-          {items.map((s) => (
-            <li key={s.id} className="flex items-center gap-2 rounded border bg-slate-50 px-2 py-1 text-sm">
-              <select
-                className={`h-6 rounded border-0 px-1 text-[11px] font-medium ${STATUS_PILL[s.status] ?? ""}`}
-                value={s.status}
-                onChange={(e) => changeStatus(s.id, e.target.value as TaskStatus)}
-                disabled={busy}
-              >
-                {TASK_STATUSES.map((st) => (
-                  <option key={st} value={st}>{taskStatusLabel(st)}</option>
-                ))}
-              </select>
-              <span className="flex-1 truncate" title={s.title}>{s.title}</span>
-              {s.assigneeName && (
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap">{s.assigneeName}</span>
-              )}
-              {canEditParent && (
-                <button
-                  type="button"
-                  className="text-[11px] text-red-600 hover:underline"
-                  onClick={() => doDelete(s.id)}
-                  disabled={busy}
-                >
-                  ✕
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            <ul className="space-y-1 mb-2">
+              {items.map((s) => (
+                <SortableSubtaskRow
+                  key={s.id}
+                  row={s}
+                  busy={busy}
+                  canEditParent={canEditParent}
+                  onChangeStatus={changeStatus}
+                  onDelete={doDelete}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
 
       {canEditParent && (
@@ -183,5 +206,65 @@ export function SubtaskSection({ parentId, members, canEditParent }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+interface RowProps {
+  row: SubtaskRow;
+  busy: boolean;
+  canEditParent: boolean;
+  onChangeStatus: (id: number, to: TaskStatus) => void;
+  onDelete: (id: number) => void;
+}
+
+function SortableSubtaskRow({ row, busy, canEditParent, onChangeStatus, onDelete }: RowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 rounded border bg-slate-50 px-2 py-1 text-sm"
+    >
+      {canEditParent && (
+        <button
+          type="button"
+          className="cursor-grab text-slate-400 hover:text-slate-700 select-none px-1"
+          aria-label="Kéo để sắp xếp"
+          {...attributes}
+          {...listeners}
+        >
+          ⋮⋮
+        </button>
+      )}
+      <select
+        className={`h-6 rounded border-0 px-1 text-[11px] font-medium ${STATUS_PILL[row.status] ?? ""}`}
+        value={row.status}
+        onChange={(e) => onChangeStatus(row.id, e.target.value as TaskStatus)}
+        disabled={busy}
+      >
+        {TASK_STATUSES.map((st) => (
+          <option key={st} value={st}>{taskStatusLabel(st)}</option>
+        ))}
+      </select>
+      <span className="flex-1 truncate" title={row.title}>{row.title}</span>
+      {row.assigneeName && (
+        <span className="text-[11px] text-muted-foreground whitespace-nowrap">{row.assigneeName}</span>
+      )}
+      {canEditParent && (
+        <button
+          type="button"
+          className="text-[11px] text-red-600 hover:underline"
+          onClick={() => onDelete(row.id)}
+          disabled={busy}
+        >
+          ✕
+        </button>
+      )}
+    </li>
   );
 }

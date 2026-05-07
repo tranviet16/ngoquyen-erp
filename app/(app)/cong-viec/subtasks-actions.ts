@@ -5,6 +5,7 @@ import {
   createSubtask,
   deleteSubtask,
   listChildren,
+  reorderSubtasks,
   type SubtaskRow,
 } from "@/lib/task/subtask-service";
 import { moveTask } from "@/lib/task/task-service";
@@ -30,5 +31,10 @@ export async function moveSubtaskAction(id: number, toStatus: TaskStatus): Promi
 
 export async function deleteSubtaskAction(id: number): Promise<void> {
   await deleteSubtask(id);
+  revalidatePath("/cong-viec");
+}
+
+export async function reorderSubtasksAction(parentId: number, orderedIds: number[]): Promise<void> {
+  await reorderSubtasks(parentId, orderedIds);
   revalidatePath("/cong-viec");
 }

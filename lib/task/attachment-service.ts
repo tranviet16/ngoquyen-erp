@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserContext, type UserContext } from "@/lib/department-rbac";
 import { safeFilename, store } from "@/lib/storage";
 import { canDeleteAttachment } from "./attachment-rbac";
+import { validateMagicBytes } from "./file-signature";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const ALLOWED_MIME = new Set([
@@ -101,6 +102,10 @@ export async function uploadAttachment(taskId: number, file: File): Promise<Atta
   const uuid = randomUUID();
   const relPath = `task-attachments/${taskId}/${uuid}-${original}`;
   const buf = Buffer.from(await file.arrayBuffer());
+
+  if (!validateMagicBytes(buf, file.type)) {
+    throw new Error("Nội dung file không khớp định dạng được khai báo");
+  }
 
   const { size } = await store.putFile(relPath, buf);
 
