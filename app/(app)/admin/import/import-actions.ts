@@ -66,14 +66,22 @@ export async function getRunRollbackInfo(id: number) {
   return getRollbackInfo(id);
 }
 
-export async function doCommit(
-  runId: number,
-  fileData: string, // base64 encoded file
-  mapping: ResolvedMapping
-) {
+export async function doCommit(formData: FormData) {
   const session = await getSession();
   requireRole(session?.user?.role, "admin");
 
-  const buffer = Buffer.from(fileData, "base64");
+  const runIdRaw = formData.get("runId");
+  const file = formData.get("file") as File | null;
+  const mappingRaw = formData.get("mapping");
+
+  const runId = Number(runIdRaw);
+  if (!runId || isNaN(runId)) throw new Error("runId không hợp lệ");
+  if (!file) throw new Error("Thiếu file");
+
+  const mapping: ResolvedMapping = mappingRaw
+    ? (JSON.parse(String(mappingRaw)) as ResolvedMapping)
+    : ({} as ResolvedMapping);
+
+  const buffer = Buffer.from(await file.arrayBuffer());
   return commitImport(runId, buffer, mapping);
 }

@@ -20,9 +20,11 @@ export function CommitPanel({ runId }: Props) {
 
     startTransition(async () => {
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
-        const result = await doCommit(runId, base64, {});
+        const fd = new FormData();
+        fd.set("runId", String(runId));
+        fd.set("file", file);
+        fd.set("mapping", "{}");
+        const result = await doCommit(fd);
         toast.success(`Commit thành công: ${result.rowsImported} dòng nhập, ${result.rowsSkipped} bỏ qua`);
         router.refresh();
       } catch (err) {
