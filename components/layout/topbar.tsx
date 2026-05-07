@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { NotificationBell } from "./notification-bell";
 
 interface ExtendedUser {
   id: string;
@@ -34,6 +35,7 @@ export function Topbar() {
     <header className="flex h-14 items-center gap-4 border-b bg-background px-4 sticky top-0 z-10">
       <SidebarTrigger className="-ml-1" />
       <div className="flex-1" />
+      <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted transition-colors">
           <span className="hidden sm:inline-block">

@@ -27,6 +27,10 @@ model User {
   coordinationFormsCreated  CoordinationForm[]         @relation("CFormCreator")
   coordinationFormsApproved CoordinationFormApproval[] @relation("CFormApprover")
 
+  tasksCreated  Task[]         @relation("TaskCreator")
+  tasksAssigned Task[]         @relation("TaskAssignee")
+  notifications Notification[]
+
   @@index([departmentId])
   @@map("users")
 }
@@ -43,6 +47,8 @@ model Department {
 
   coordinationFormsAsCreator  CoordinationForm[] @relation("CFormCreatorDept")
   coordinationFormsAsExecutor CoordinationForm[] @relation("CFormExecutorDept")
+
+  tasks Task[]
 
   @@map("departments")
 }
@@ -66,6 +72,7 @@ model CoordinationForm {
   creatorDept  Department                 @relation("CFormCreatorDept", fields: [creatorDeptId], references: [id])
   executorDept Department                 @relation("CFormExecutorDept", fields: [executorDeptId], references: [id])
   approvals    CoordinationFormApproval[]
+  task         Task?
 
   @@index([executorDeptId, status])
   @@index([creatorId])
@@ -901,4 +908,48 @@ model SlDtProgressStatus {
   @@unique([lotId, year, month])
   @@index([year, month])
   @@map("sl_dt_progress_statuses")
+}
+
+model Task {
+  id            Int       @id @default(autoincrement())
+  title         String
+  description   String?
+  status        String    @default("todo")
+  priority      String    @default("trung_binh")
+  deadline      DateTime?
+  assigneeId    String?
+  deptId        Int
+  creatorId     String
+  sourceFormId  Int?      @unique
+  orderInColumn Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime?
+
+  assignee   User?             @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator    User              @relation("TaskCreator", fields: [creatorId], references: [id])
+  dept       Department        @relation(fields: [deptId], references: [id])
+  sourceForm CoordinationForm? @relation(fields: [sourceFormId], references: [id])
+
+  @@index([deptId, status, orderInColumn])
+  @@index([assigneeId, status])
+  @@index([creatorId])
+  @@map("tasks")
+}
+
+model Notification {
+  id        Int       @id @default(autoincrement())
+  userId    String
+  type      String
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }

@@ -10,6 +10,7 @@ import { nextStatus, type FormStatus, type FormAction } from "./state-machine";
 import { nextFormCode, isUniqueViolation } from "./code-generator";
 import type { CreateDraftInput, UpdateDraftInput } from "./schemas";
 import type { CoordinationForm, CoordinationFormApproval, Department, User } from "@prisma/client";
+import { getDeptLeaders, getDirectorId } from "@/lib/department-rbac";
 
 const PAGE_SIZE = 20;
 
@@ -189,6 +190,11 @@ export async function updateDraft(
   });
 }
 
+type TxCallback = (
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  updated: CoordinationForm,
+) => Promise<void>;
+
 async function applyTransition(
   id: number,
   expected: FormStatus,
@@ -196,7 +202,8 @@ async function applyTransition(
   step: "creator" | "leader" | "director",
   approverId: string,
   comment: string | null,
-  extraData: Record<string, unknown> = {}
+  extraData: Record<string, unknown> = {},
+  txCallback?: TxCallback,
 ): Promise<CoordinationForm> {
   const to = nextStatus(expected, action);
   return prisma.$transaction(async (tx) => {
@@ -212,7 +219,26 @@ async function applyTransition(
     await tx.coordinationFormApproval.create({
       data: { formId: id, step, approverId, action, comment },
     });
+    if (txCallback) await txCallback(tx, updated);
     return updated;
+  });
+}
+
+async function notifyCreator(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  form: CoordinationForm,
+  type: "form_approved" | "form_rejected" | "form_revising",
+  title: string,
+  body: string,
+): Promise<void> {
+  await tx.notification.create({
+    data: {
+      userId: form.creatorId,
+      type,
+      title,
+      body,
+      link: `/phieu-phoi-hop/${form.id}`,
+    },
   });
 }
 
@@ -229,7 +255,21 @@ export async function submitForm(id: number): Promise<CoordinationForm> {
   }
   const action: FormAction = form.status === "draft" ? "submit" : "resubmit";
   const extra = form.status === "draft" ? { submittedAt: new Date() } : {};
-  return applyTransition(id, form.status, action, "creator", ctx.userId, null, extra);
+  return applyTransition(id, form.status, action, "creator", ctx.userId, null, extra, async (tx, updated) => {
+    const leaderIds = await getDeptLeaders(updated.executorDeptId);
+    for (const leaderId of leaderIds) {
+      if (leaderId === ctx.userId) continue;
+      await tx.notification.create({
+        data: {
+          userId: leaderId,
+          type: "form_submitted",
+          title: `Phiếu mới chờ duyệt: ${updated.code}`,
+          body: updated.content.slice(0, 200),
+          link: `/phieu-phoi-hop/${updated.id}`,
+        },
+      });
+    }
+  });
 }
 
 export async function cancelForm(id: number): Promise<CoordinationForm> {
@@ -273,13 +313,28 @@ async function requireDirector(formId: number): Promise<{
 
 export async function leaderApprove(id: number, comment?: string): Promise<CoordinationForm> {
   const { ctx } = await requireLeaderForExecutor(id);
-  return applyTransition(id, "pending_leader", "leader_approve", "leader", ctx.userId, comment ?? null);
+  return applyTransition(id, "pending_leader", "leader_approve", "leader", ctx.userId, comment ?? null, {}, async (tx, updated) => {
+    const directorId = await getDirectorId();
+    if (directorId && directorId !== ctx.userId) {
+      await tx.notification.create({
+        data: {
+          userId: directorId,
+          type: "form_submitted",
+          title: `Phiếu chờ giám đốc duyệt: ${updated.code}`,
+          body: updated.content.slice(0, 200),
+          link: `/phieu-phoi-hop/${updated.id}`,
+        },
+      });
+    }
+  });
 }
 
 export async function leaderRejectRevise(id: number, comment: string): Promise<CoordinationForm> {
   if (!comment || comment.trim().length < 5) throw new Error("Lý do tối thiểu 5 ký tự");
   const { ctx } = await requireLeaderForExecutor(id);
-  return applyTransition(id, "pending_leader", "leader_reject_revise", "leader", ctx.userId, comment);
+  return applyTransition(id, "pending_leader", "leader_reject_revise", "leader", ctx.userId, comment, {}, async (tx, u) => {
+    await notifyCreator(tx, u, "form_revising", `Phiếu ${u.code} cần sửa lại`, comment);
+  });
 }
 
 export async function leaderRejectClose(id: number, comment: string): Promise<CoordinationForm> {
@@ -287,6 +342,8 @@ export async function leaderRejectClose(id: number, comment: string): Promise<Co
   const { ctx } = await requireLeaderForExecutor(id);
   return applyTransition(id, "pending_leader", "leader_reject_close", "leader", ctx.userId, comment, {
     closedAt: new Date(),
+  }, async (tx, u) => {
+    await notifyCreator(tx, u, "form_rejected", `Phiếu ${u.code} bị từ chối`, comment);
   });
 }
 
@@ -294,13 +351,46 @@ export async function directorApprove(id: number, comment?: string): Promise<Coo
   const { ctx } = await requireDirector(id);
   return applyTransition(id, "pending_director", "director_approve", "director", ctx.userId, comment ?? null, {
     closedAt: new Date(),
+  }, async (tx, u) => {
+    // Auto-create Task linked to this form
+    await tx.task.create({
+      data: {
+        title: u.content.slice(0, 200),
+        description: `Từ phiếu ${u.code}\n\n${u.content}`,
+        deptId: u.executorDeptId,
+        creatorId: u.creatorId,
+        sourceFormId: u.id,
+        priority: u.priority,
+        deadline: u.deadline,
+        status: "todo",
+        assigneeId: null,
+      },
+    });
+    // Notify creator
+    await notifyCreator(tx, u, "form_approved", `Phiếu ${u.code} đã được duyệt`, "Task đã được tạo trong bảng công việc");
+    // Notify leaders of executor dept (so they assign the task)
+    const leaderIds = await getDeptLeaders(u.executorDeptId);
+    for (const leaderId of leaderIds) {
+      if (leaderId === ctx.userId || leaderId === u.creatorId) continue;
+      await tx.notification.create({
+        data: {
+          userId: leaderId,
+          type: "task_assigned",
+          title: `Task mới từ phiếu ${u.code}`,
+          body: "Cần phân công cho thành viên trong phòng",
+          link: `/cong-viec`,
+        },
+      });
+    }
   });
 }
 
 export async function directorRejectRevise(id: number, comment: string): Promise<CoordinationForm> {
   if (!comment || comment.trim().length < 5) throw new Error("Lý do tối thiểu 5 ký tự");
   const { ctx } = await requireDirector(id);
-  return applyTransition(id, "pending_director", "director_reject_revise", "director", ctx.userId, comment);
+  return applyTransition(id, "pending_director", "director_reject_revise", "director", ctx.userId, comment, {}, async (tx, u) => {
+    await notifyCreator(tx, u, "form_revising", `Phiếu ${u.code} cần sửa lại (giám đốc)`, comment);
+  });
 }
 
 export async function directorRejectClose(id: number, comment: string): Promise<CoordinationForm> {
@@ -308,6 +398,8 @@ export async function directorRejectClose(id: number, comment: string): Promise<
   const { ctx } = await requireDirector(id);
   return applyTransition(id, "pending_director", "director_reject_close", "director", ctx.userId, comment, {
     closedAt: new Date(),
+  }, async (tx, u) => {
+    await notifyCreator(tx, u, "form_rejected", `Phiếu ${u.code} bị từ chối (giám đốc)`, comment);
   });
 }
 

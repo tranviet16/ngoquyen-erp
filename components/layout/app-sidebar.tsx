@@ -13,6 +13,8 @@ import {
   Upload,
   Users,
   ClipboardList,
+  KanbanSquare,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -37,6 +39,8 @@ const NAV_ITEMS: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "San luong - Doanh thu", href: "/sl-dt", icon: TrendingUp },
   { label: "Tai chinh NQ", href: "/tai-chinh", icon: Wallet },
   { label: "Phieu phoi hop", href: "/phieu-phoi-hop", icon: ClipboardList },
+  { label: "Bang cong viec", href: "/cong-viec", icon: KanbanSquare },
+  { label: "Thong bao", href: "/thong-bao", icon: Bell },
   { label: "Nhap du lieu (Admin)", href: "/admin/import", icon: Upload },
   { label: "Phong ban (Admin)", href: "/admin/phong-ban", icon: Users },
 ];
