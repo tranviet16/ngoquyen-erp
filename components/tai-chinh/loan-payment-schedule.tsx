@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { recordLoanPayment } from "@/lib/tai-chinh/loan-service";
+import { formatVND, formatDate } from "@/lib/utils/format";
 import type { Prisma } from "@prisma/client";
 
 interface PaymentRow {
@@ -26,11 +27,8 @@ interface Props {
   contractId: number;
 }
 
-const VND = new Intl.NumberFormat("vi-VN");
-
 function formatVnd(v: Prisma.Decimal | null | undefined): string {
-  if (v == null) return "—";
-  return VND.format(Number(v));
+  return v == null ? "—" : formatVND(Number(v));
 }
 
 const STATUS_LABELS: Record<string, string> = { pending: "Chưa trả", paid: "Đã trả", overdue: "Quá hạn" };
@@ -45,7 +43,7 @@ export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props
   const selected = payments.find(p => p.id === selectedId);
 
   const colDefs: ColDef<PaymentRow>[] = [
-    { field: "dueDate", headerName: "Kỳ hạn", width: 120, valueFormatter: p => p.value ? new Date(p.value).toLocaleDateString("vi-VN") : "" },
+    { field: "dueDate", headerName: "Kỳ hạn", width: 120, valueFormatter: p => formatDate(p.value, "") },
     { field: "principalDue", headerName: "Gốc phải trả", width: 140, valueFormatter: p => formatVnd(p.value) },
     { field: "interestDue", headerName: "Lãi phải trả", width: 140, valueFormatter: p => formatVnd(p.value) },
     { headerName: "Tổng phải trả", width: 140, valueFormatter: p => {
@@ -53,7 +51,7 @@ export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props
       if (!row) return "";
       return formatVnd(row.principalDue.plus(row.interestDue));
     }},
-    { field: "paidDate", headerName: "Ngày trả", width: 120, valueFormatter: p => p.value ? new Date(p.value).toLocaleDateString("vi-VN") : "—" },
+    { field: "paidDate", headerName: "Ngày trả", width: 120, valueFormatter: p => formatDate(p.value) },
     { field: "principalPaid", headerName: "Gốc đã trả", width: 130, valueFormatter: p => formatVnd(p.value) },
     { field: "interestPaid", headerName: "Lãi đã trả", width: 130, valueFormatter: p => formatVnd(p.value) },
     { field: "status", headerName: "Trạng thái", width: 110, valueFormatter: p => STATUS_LABELS[p.value] ?? p.value },
@@ -99,7 +97,7 @@ export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props
 
       {selected && (
         <div className="rounded-lg border p-4 space-y-3 bg-muted/40">
-          <p className="text-sm font-medium">Ghi nhận thanh toán kỳ {new Date(selected.dueDate).toLocaleDateString("vi-VN")}</p>
+          <p className="text-sm font-medium">Ghi nhận thanh toán kỳ {formatDate(selected.dueDate)}</p>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-muted-foreground">Ngày trả</label>

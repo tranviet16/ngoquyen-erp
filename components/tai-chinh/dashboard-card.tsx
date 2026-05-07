@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { formatVND } from "@/lib/utils/format";
 
 interface DashboardCardProps {
   title: string;
@@ -9,30 +11,37 @@ interface DashboardCardProps {
   highlight?: boolean;
 }
 
-const VND_FORMATTER = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
-
 export function formatVnd(amount: number): string {
-  return VND_FORMATTER.format(amount);
+  return formatVND(amount);
 }
 
 export function DashboardCard({ title, value, subtitle, trend, icon, highlight }: DashboardCardProps) {
-  const borderColor = highlight
-    ? "border-orange-400"
+  const accent = highlight
+    ? "border-amber-300 dark:border-amber-500/40 bg-amber-50/40 dark:bg-amber-500/5"
     : trend === "up"
-    ? "border-green-400"
+    ? "border-emerald-300 dark:border-emerald-500/40"
     : trend === "down"
-    ? "border-red-400"
+    ? "border-red-300 dark:border-red-500/40"
     : "border-border";
 
   return (
-    <div className={`rounded-lg border-2 ${borderColor} bg-card p-4 shadow-sm`}>
-      <div className="flex items-start justify-between">
+    <div
+      className={cn(
+        "rounded-lg border bg-card p-4 shadow-sm transition-colors hover:border-primary/30",
+        accent
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground truncate">{title}</p>
-          <p className="mt-1 text-xl font-bold tracking-tight truncate">{value}</p>
-          {subtitle && <p className="mt-1 text-xs text-muted-foreground truncate">{subtitle}</p>}
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground truncate">
+            {title}
+          </p>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight tabular-nums truncate">{value}</p>
+          {subtitle && (
+            <p className="mt-1 text-xs text-muted-foreground truncate">{subtitle}</p>
+          )}
         </div>
-        {icon && <div className="ml-2 shrink-0 text-muted-foreground">{icon}</div>}
+        {icon && <div className="shrink-0 text-muted-foreground/70">{icon}</div>}
       </div>
     </div>
   );

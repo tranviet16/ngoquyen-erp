@@ -14,6 +14,8 @@ import {
   softDeleteCategory,
 } from "@/lib/master-data/project-service";
 import { type CategoryInput } from "@/lib/master-data/schemas";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatVND, formatDate } from "@/lib/utils/format";
 
 type Category = {
   id: number;
@@ -35,19 +37,11 @@ type Project = {
   categories: Category[];
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  active: "Đang thực hiện",
-  completed: "Hoàn thành",
-  paused: "Tạm dừng",
-};
-
 const CATEGORY_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "code", header: "Mã hạng mục", className: "w-[160px]" },
+  { key: "code", header: "Mã hạng mục", className: "w-[160px] font-mono" },
   { key: "name", header: "Tên hạng mục" },
-  { key: "sortOrder", header: "Thứ tự", className: "w-[80px]" },
+  { key: "sortOrder", header: "Thứ tự", className: "w-[80px]", align: "right" },
 ];
-
-const VND = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" });
 
 interface ProjectDetailClientProps {
   project: Project;
@@ -77,9 +71,7 @@ export function ProjectDetailClient({ project }: ProjectDetailClientProps) {
     startTransition(() => router.refresh());
   }
 
-  const contractDisplay = project.contractValue != null
-    ? VND.format(project.contractValue)
-    : "—";
+  const contractDisplay = formatVND(project.contractValue);
 
   return (
     <div className="space-y-6">
@@ -91,14 +83,14 @@ export function ProjectDetailClient({ project }: ProjectDetailClientProps) {
         <span>{project.name}</span>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{project.name}</h1>
-          <p className="text-sm text-muted-foreground">Mã: {project.code}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight truncate">{project.name}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Mã: <span className="font-mono">{project.code}</span>
+          </p>
         </div>
-        <span className="text-sm px-3 py-1 rounded-full border">
-          {STATUS_LABELS[project.status] ?? project.status}
-        </span>
+        <StatusBadge status={project.status} />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -119,9 +111,7 @@ export function ProjectDetailClient({ project }: ProjectDetailClientProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Thời gian</CardTitle>
           </CardHeader>
           <CardContent className="text-sm">
-            {project.startDate ? new Date(project.startDate).toLocaleDateString("vi-VN") : "—"}
-            {" → "}
-            {project.endDate ? new Date(project.endDate).toLocaleDateString("vi-VN") : "—"}
+            {formatDate(project.startDate)} <span className="text-muted-foreground">→</span> {formatDate(project.endDate)}
           </CardContent>
         </Card>
       </div>

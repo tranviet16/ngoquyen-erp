@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
+import { formatDate, formatDateTime } from "@/lib/utils/format";
+import { ChevronLeft, AlertTriangle } from "lucide-react";
 import { statusLabel, type FormStatus } from "@/lib/coordination-form/state-machine";
 import type {
   AvailableAction,
@@ -38,13 +40,13 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<FormStatus, string> = {
-  draft: "bg-gray-100 text-gray-700",
-  pending_leader: "bg-blue-100 text-blue-700",
-  pending_director: "bg-amber-100 text-amber-700",
-  approved: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  revising: "bg-orange-100 text-orange-700",
-  cancelled: "bg-gray-100 text-gray-500",
+  draft: "bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
+  pending_leader: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  pending_director: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+  approved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  rejected: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  revising: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+  cancelled: "bg-muted text-muted-foreground",
 };
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -163,19 +165,24 @@ export function DetailClient({ form, availableActions, departments }: Props) {
   return (
     <div className="max-w-3xl space-y-4">
       <div>
-        <Link href="/phieu-phoi-hop" className="text-sm text-muted-foreground hover:underline">
-          ← Quay lại danh sách
+        <Link
+          href="/phieu-phoi-hop"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+          Quay lại danh sách
         </Link>
-        <div className="flex items-start justify-between mt-2">
+        <div className="flex items-start justify-between gap-4 mt-2">
           <div>
-            <h1 className="text-2xl font-bold font-mono">{form.code}</h1>
-            <p className="text-sm text-muted-foreground">
-              Tạo bởi {form.creator.name} • {new Date(form.createdAt).toLocaleString("vi-VN")}
+            <h1 className="text-2xl font-bold tracking-tight font-mono">{form.code}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Tạo bởi <span className="font-medium text-foreground">{form.creator.name}</span> ·{" "}
+              <span className="tabular-nums">{formatDateTime(form.createdAt)}</span>
             </p>
           </div>
           <span
-            className={`px-2 py-1 rounded text-sm ${
-              STATUS_BADGE[form.status as FormStatus] ?? "bg-gray-100"
+            className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+              STATUS_BADGE[form.status as FormStatus] ?? "bg-muted"
             }`}
           >
             {statusLabel(form.status as FormStatus)}
@@ -183,28 +190,24 @@ export function DetailClient({ form, availableActions, departments }: Props) {
         </div>
       </div>
 
-      <div className="rounded-lg border divide-y">
+      <div className="rounded-lg border bg-card shadow-sm divide-y">
         <div className="grid grid-cols-2 gap-2 p-3 text-sm">
           <div className="text-muted-foreground">Phòng tạo:</div>
-          <div>{form.creatorDept.name}</div>
+          <div className="font-medium">{form.creatorDept.name}</div>
         </div>
         {!editing ? (
           <>
             <div className="grid grid-cols-2 gap-2 p-3 text-sm">
               <div className="text-muted-foreground">Phòng thực hiện:</div>
-              <div>{form.executorDept.name}</div>
+              <div className="font-medium">{form.executorDept.name}</div>
             </div>
             <div className="grid grid-cols-2 gap-2 p-3 text-sm">
               <div className="text-muted-foreground">Mức ưu tiên:</div>
-              <div>{PRIORITY_LABEL[form.priority] ?? form.priority}</div>
+              <div className="font-medium">{PRIORITY_LABEL[form.priority] ?? form.priority}</div>
             </div>
             <div className="grid grid-cols-2 gap-2 p-3 text-sm">
               <div className="text-muted-foreground">Hạn chót:</div>
-              <div>
-                {form.deadline
-                  ? new Date(form.deadline).toLocaleDateString("vi-VN")
-                  : "—"}
-              </div>
+              <div className="font-medium tabular-nums">{formatDate(form.deadline)}</div>
             </div>
             <div className="p-3">
               <div className="text-sm text-muted-foreground mb-1">Nội dung:</div>
@@ -274,8 +277,8 @@ export function DetailClient({ form, availableActions, departments }: Props) {
         )}
       </div>
 
-      <div className="rounded-lg border">
-        <div className="border-b px-3 py-2 text-sm font-medium bg-muted/40">
+      <div className="rounded-lg border bg-card shadow-sm">
+        <div className="border-b px-3 py-2 text-sm font-semibold bg-muted/40">
           Lịch sử ký duyệt ({form.approvals.length})
         </div>
         {form.approvals.length === 0 ? (
@@ -291,8 +294,8 @@ export function DetailClient({ form, availableActions, departments }: Props) {
                       ({a.step})
                     </span>
                   </span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(a.signedAt).toLocaleString("vi-VN")}
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formatDateTime(a.signedAt)}
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -310,7 +313,7 @@ export function DetailClient({ form, availableActions, departments }: Props) {
       </div>
 
       {availableActions.length > 0 && (
-        <div className="rounded-lg border p-3 flex flex-wrap gap-2">
+        <div className="rounded-lg border bg-card p-3 shadow-sm flex flex-wrap gap-2">
           {availableActions.includes("edit") && !editing && (
             <Button variant="outline" onClick={() => setEditing(true)} disabled={pending}>
               Sửa nội dung
@@ -375,7 +378,7 @@ export function DetailClient({ form, availableActions, departments }: Props) {
           {availableActions.includes("cancel") && (
             <Button
               variant="ghost"
-              className="ml-auto text-red-600 hover:text-red-700"
+              className="ml-auto text-destructive hover:text-destructive/80"
               onClick={doCancel}
               disabled={pending}
             >
@@ -399,8 +402,9 @@ export function DetailClient({ form, availableActions, departments }: Props) {
       >
         <div className="space-y-3">
           {rejectDialog?.type === "close" && (
-            <p className="text-sm text-red-600">
-              ⚠ Hành động này sẽ đóng phiếu vĩnh viễn (không thể hoàn tác).
+            <p className="inline-flex items-center gap-1.5 text-sm text-destructive">
+              <AlertTriangle className="size-4" aria-hidden="true" />
+              Hành động này sẽ đóng phiếu vĩnh viễn (không thể hoàn tác).
             </p>
           )}
           <div>

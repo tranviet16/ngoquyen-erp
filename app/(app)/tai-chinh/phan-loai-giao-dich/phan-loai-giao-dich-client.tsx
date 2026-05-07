@@ -9,6 +9,7 @@ import {
 } from "@/components/ag-grid-base";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { formatDate, formatNumber } from "@/lib/utils/format";
 import type {
   ExpenseClassificationRow,
   ExpenseClassificationSummary,
@@ -33,8 +34,7 @@ export function PhanLoaiGiaoDichClient({ rows, summary, initialFilters }: Props)
         field: "date",
         headerName: "Ngày",
         width: 110,
-        valueFormatter: (p) =>
-          p.value ? new Date(p.value as string).toLocaleDateString("vi-VN") : "",
+        valueFormatter: (p) => formatDate(p.value as string | null, ""),
       },
       { field: "categoryName", headerName: "Loại GD", minWidth: 200, flex: 1 },
       { field: "description", headerName: "Nội dung", minWidth: 280, flex: 2 },
@@ -72,14 +72,16 @@ export function PhanLoaiGiaoDichClient({ rows, summary, initialFilters }: Props)
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Phân loại giao dịch</h1>
-        <div className="text-xs text-muted-foreground">
-          Nguồn: file Tài chính NQ — sheet &quot;Phân loại chi phí&quot;
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Phân loại giao dịch</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Nguồn: file Tài chính NQ — sheet &quot;Phân loại chi phí&quot;.
+          </p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <SummaryCard label="Số giao dịch" value={summary.rowCount.toLocaleString("vi-VN")} />
+        <SummaryCard label="Số giao dịch" value={formatNumber(summary.rowCount)} />
         <SummaryCard label="Tổng số tiền" value={vndFormatter(summary.totalVnd)} highlight />
         <SummaryCard label="Số loại GD" value={summary.byCategory.length.toString()} />
         <SummaryCard

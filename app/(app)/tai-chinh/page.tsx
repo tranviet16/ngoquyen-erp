@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { getDashboardData } from "@/lib/tai-chinh/dashboard-service";
-import { DashboardCard, formatVnd } from "@/components/tai-chinh/dashboard-card";
+import { DashboardCard } from "@/components/tai-chinh/dashboard-card";
 import { CashflowBarChart, DebtPieChart } from "@/components/tai-chinh/cashflow-chart";
+import { formatVND, formatDate } from "@/lib/utils/format";
+import { AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -20,52 +22,61 @@ export default async function TaiChinhDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard Tài chính NQ</h1>
-        <div className="flex gap-2 flex-wrap">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Tổng quan Tài chính</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Vị thế dòng tiền, công nợ và lịch trả nợ vay theo thời gian thực.
+          </p>
+        </div>
+        <nav className="flex flex-wrap gap-1.5" aria-label="Điều hướng tài chính">
           {navItems.map(n => (
-            <Link key={n.href} href={n.href} className="text-xs px-3 py-1.5 rounded-md bg-muted hover:bg-muted/80 transition-colors">
+            <Link
+              key={n.href}
+              href={n.href}
+              className="inline-flex items-center rounded-md border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted hover:border-primary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {n.label}
             </Link>
           ))}
-        </div>
+        </nav>
       </div>
 
       {/* 6 KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <DashboardCard
           title="Vị thế tiền mặt (tháng này)"
-          value={formatVnd(Number(kpi.cashPositionVnd))}
+          value={formatVND(Number(kpi.cashPositionVnd))}
           trend={kpi.cashPositionVnd.gte(0) ? "up" : "down"}
           subtitle="Thu - Chi từ sổ nhật ký"
         />
         <DashboardCard
           title="Nợ vật tư (TT)"
-          value={formatVnd(Number(kpi.materialDebtVnd))}
+          value={formatVND(Number(kpi.materialDebtVnd))}
           trend="down"
           subtitle="Tổng công nợ NCC vật tư"
         />
         <DashboardCard
           title="Nợ nhân công (TT)"
-          value={formatVnd(Number(kpi.laborDebtVnd))}
+          value={formatVND(Number(kpi.laborDebtVnd))}
           trend="down"
           subtitle="Tổng công nợ nhân công"
         />
         <DashboardCard
           title="Dư nợ vay còn lại"
-          value={formatVnd(Number(kpi.totalLoanPrincipalVnd))}
+          value={formatVND(Number(kpi.totalLoanPrincipalVnd))}
           trend="down"
           subtitle="Tổng gốc chưa trả (hợp đồng active)"
         />
         <DashboardCard
           title="Phải thu (điều chỉnh)"
-          value={formatVnd(Number(kpi.receivableVnd))}
+          value={formatVND(Number(kpi.receivableVnd))}
           trend="up"
           subtitle="Tổng phải thu chưa thu"
         />
         <DashboardCard
           title="Phải trả (điều chỉnh)"
-          value={formatVnd(Number(kpi.payableVnd))}
+          value={formatVND(Number(kpi.payableVnd))}
           highlight
           subtitle="Tổng phải trả chưa thanh toán"
         />
@@ -85,25 +96,30 @@ export default async function TaiChinhDashboardPage() {
 
       {/* Loans due soon */}
       {loansDueSoon.length > 0 && (
-        <div className="rounded-lg border p-4">
-          <h2 className="text-sm font-semibold mb-3 text-orange-600">Cảnh báo: Kỳ vay đến hạn trong 30 ngày</h2>
+        <div className="rounded-lg border bg-card p-4 shadow-sm">
+          <h2 className="flex items-center gap-2 text-sm font-semibold mb-3 text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            Cảnh báo: Kỳ vay đến hạn trong 30 ngày
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-muted-foreground text-xs">
-                  <th className="text-left py-1 pr-4">Bên cho vay</th>
-                  <th className="text-left py-1 pr-4">Ngày đến hạn</th>
-                  <th className="text-right py-1 pr-4">Gốc</th>
-                  <th className="text-right py-1">Lãi</th>
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bên cho vay</th>
+                  <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ngày đến hạn</th>
+                  <th className="border-b px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Gốc</th>
+                  <th className="border-b px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lãi</th>
                 </tr>
               </thead>
               <tbody>
                 {loansDueSoon.map(loan => (
-                  <tr key={loan.id} className="border-b last:border-0">
-                    <td className="py-1 pr-4">{loan.lenderName}</td>
-                    <td className="py-1 pr-4 text-orange-600 font-medium">{new Date(loan.dueDate).toLocaleDateString("vi-VN")}</td>
-                    <td className="py-1 pr-4 text-right">{formatVnd(Number(loan.principalDue))}</td>
-                    <td className="py-1 text-right">{formatVnd(Number(loan.interestDue))}</td>
+                  <tr key={loan.id} className="even:bg-muted/20 hover:bg-muted/40 transition-colors">
+                    <td className="border-b px-3 py-2 font-medium">{loan.lenderName}</td>
+                    <td className="border-b px-3 py-2 text-amber-700 dark:text-amber-300 font-medium">
+                      {formatDate(loan.dueDate)}
+                    </td>
+                    <td className="border-b px-3 py-2 text-right tabular-nums">{formatVND(Number(loan.principalDue))}</td>
+                    <td className="border-b px-3 py-2 text-right tabular-nums">{formatVND(Number(loan.interestDue))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -114,3 +130,4 @@ export default async function TaiChinhDashboardPage() {
     </div>
   );
 }
+

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { DataTable, type ColumnDef } from "@/components/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { formatDate } from "@/lib/utils/format";
 
 type ProjectRow = {
   id: number;
@@ -14,12 +16,6 @@ type ProjectRow = {
   _count: { categories: number };
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  active: "Đang thực hiện",
-  completed: "Hoàn thành",
-  paused: "Tạm dừng",
-};
-
 const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   { key: "code", header: "Mã DA", className: "w-[100px] font-mono" },
   { key: "name", header: "Tên dự án" },
@@ -28,25 +24,19 @@ const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
     key: "startDate",
     header: "Khởi công",
     className: "w-[120px]",
-    render: (row) => {
-      const d = row.startDate as Date | null;
-      return d ? new Date(d).toLocaleDateString("vi-VN") : "—";
-    },
+    render: (row) => formatDate(row.startDate as Date | null),
   },
   {
     key: "endDate",
     header: "Hoàn thành",
     className: "w-[120px]",
-    render: (row) => {
-      const d = row.endDate as Date | null;
-      return d ? new Date(d).toLocaleDateString("vi-VN") : "—";
-    },
+    render: (row) => formatDate(row.endDate as Date | null),
   },
   {
     key: "status",
     header: "Trạng thái",
-    className: "w-[140px]",
-    render: (row) => STATUS_LABELS[row.status as string] ?? String(row.status),
+    className: "w-[160px]",
+    render: (row) => <StatusBadge status={row.status as string} />,
   },
 ];
 
@@ -64,8 +54,8 @@ export function DuAnListClient({ data, total, page, pageSize, searchValue }: Pro
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Quản lý Dự án Xây dựng</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-2xl font-bold tracking-tight">Quản lý Dự án Xây dựng</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Chọn dự án để xem tiến độ, nghiệm thu, dự toán, định mức, giao dịch, hợp đồng, dòng tiền.
         </p>
       </div>
@@ -79,7 +69,8 @@ export function DuAnListClient({ data, total, page, pageSize, searchValue }: Pro
         searchValue={searchValue}
         searchPlaceholder="Tìm theo mã hoặc tên dự án..."
         onRowClick={(row) => router.push(`/du-an/${(row as unknown as ProjectRow).id}`)}
-        emptyText="Chưa có dự án nào. Thêm dự án tại trang Dữ liệu gốc > Dự án."
+        emptyText="Chưa có dự án nào"
+        emptyDescription="Thêm dự án tại trang Dữ liệu nền tảng → Dự án."
       />
     </div>
   );

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { statusLabel, type FormStatus } from "@/lib/coordination-form/state-machine";
 import type { FormWithRelations } from "@/lib/coordination-form/coordination-form-service";
+import { formatDate } from "@/lib/utils/format";
+import { Plus, AlertTriangle } from "lucide-react";
 
 interface DeptRow {
   id: number;
@@ -26,13 +28,13 @@ interface Props {
 }
 
 const STATUS_BADGE: Record<FormStatus, string> = {
-  draft: "bg-gray-100 text-gray-700",
-  pending_leader: "bg-blue-100 text-blue-700",
-  pending_director: "bg-amber-100 text-amber-700",
-  approved: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-  revising: "bg-orange-100 text-orange-700",
-  cancelled: "bg-gray-100 text-gray-500 line-through",
+  draft: "bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
+  pending_leader: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  pending_director: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+  approved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  rejected: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  revising: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+  cancelled: "bg-muted text-muted-foreground line-through",
 };
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -76,20 +78,24 @@ export function ListClient({ data, departments, filter }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Phiếu phối hợp công việc</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-bold tracking-tight">Phiếu phối hợp công việc</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Quản lý phiếu phối hợp giữa các phòng ban — quy trình duyệt 3 bước.
           </p>
           {data.pendingDirectorCount > 0 && (
-            <p className="text-xs text-amber-700 mt-1">
-              ⚠ Có {data.pendingDirectorCount} phiếu đang chờ giám đốc duyệt
+            <p className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 mt-2">
+              <AlertTriangle className="size-3.5" aria-hidden="true" />
+              Có {data.pendingDirectorCount} phiếu đang chờ giám đốc duyệt
             </p>
           )}
         </div>
         <Link href="/phieu-phoi-hop/tao-moi">
-          <Button>+ Tạo phiếu mới</Button>
+          <Button>
+            <Plus className="size-4" aria-hidden="true" />
+            Tạo phiếu mới
+          </Button>
         </Link>
       </div>
 
@@ -109,18 +115,18 @@ export function ListClient({ data, departments, filter }: Props) {
         ))}
       </div>
 
-      <div className="rounded-lg border overflow-x-auto">
+      <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40">
-            <tr>
-              <th className="text-left px-3 py-2 font-medium">Mã</th>
-              <th className="text-left px-3 py-2 font-medium">Phòng tạo</th>
-              <th className="text-left px-3 py-2 font-medium">Phòng thực hiện</th>
-              <th className="text-left px-3 py-2 font-medium">Nội dung</th>
-              <th className="text-left px-3 py-2 font-medium">Ưu tiên</th>
-              <th className="text-left px-3 py-2 font-medium">Trạng thái</th>
-              <th className="text-left px-3 py-2 font-medium">Ngày tạo</th>
-              <th className="text-right px-3 py-2 font-medium">Hành động</th>
+            <tr className="text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="text-left px-3 py-2 font-semibold">Mã</th>
+              <th className="text-left px-3 py-2 font-semibold">Phòng tạo</th>
+              <th className="text-left px-3 py-2 font-semibold">Phòng thực hiện</th>
+              <th className="text-left px-3 py-2 font-semibold">Nội dung</th>
+              <th className="text-left px-3 py-2 font-semibold">Ưu tiên</th>
+              <th className="text-left px-3 py-2 font-semibold">Trạng thái</th>
+              <th className="text-left px-3 py-2 font-semibold">Ngày tạo</th>
+              <th className="text-right px-3 py-2 font-semibold">Hành động</th>
             </tr>
           </thead>
           <tbody>
@@ -132,7 +138,7 @@ export function ListClient({ data, departments, filter }: Props) {
               </tr>
             ) : (
               data.items.map((f) => (
-                <tr key={f.id} className="border-b last:border-0 hover:bg-muted/20">
+                <tr key={f.id} className="border-b last:border-0 even:bg-muted/20 hover:bg-muted/40 transition-colors">
                   <td className="px-3 py-2 font-mono text-xs">{f.code}</td>
                   <td className="px-3 py-2">{f.creatorDept.name}</td>
                   <td className="px-3 py-2">{f.executorDept.name}</td>
@@ -142,20 +148,20 @@ export function ListClient({ data, departments, filter }: Props) {
                   <td className="px-3 py-2">{PRIORITY_LABEL[f.priority] ?? f.priority}</td>
                   <td className="px-3 py-2">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-xs ${
-                        STATUS_BADGE[f.status as FormStatus] ?? "bg-gray-100"
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        STATUS_BADGE[f.status as FormStatus] ?? "bg-muted"
                       }`}
                     >
                       {statusLabel(f.status as FormStatus)}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {new Date(f.createdAt).toLocaleDateString("vi-VN")}
+                  <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">
+                    {formatDate(f.createdAt)}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Link
                       href={`/phieu-phoi-hop/${f.id}`}
-                      className="text-xs text-primary underline"
+                      className="text-xs font-medium text-primary hover:underline"
                     >
                       Xem
                     </Link>

@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
-import { AgGridBase, VND_COL_DEF, vndFormatter } from "@/components/ag-grid-base";
+import { AgGridBase, VND_COL_DEF } from "@/components/ag-grid-base";
+import { formatVND, formatDate } from "@/lib/utils/format";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -140,8 +142,8 @@ export function NghiemThuClient({ projectId, initialData, categories }: Props) {
     { field: "checkItem", headerName: "Hạng mục kiểm tra", flex: 2, minWidth: 180, editable: true },
     { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? "", width: 140 },
     { field: "acceptanceBatch", headerName: "Đợt NT", width: 90, editable: true },
-    { field: "planEnd", headerName: "Ngày KH", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 110 },
-    { field: "actualEnd", headerName: "Ngày TT", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 110 },
+    { field: "planEnd", headerName: "Ngày KH", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 110 },
+    { field: "actualEnd", headerName: "Ngày TT", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 110 },
     { field: "inspector", headerName: "Người KT", width: 120, editable: true },
     {
       field: "result", headerName: "Kết quả",
@@ -173,14 +175,18 @@ export function NghiemThuClient({ projectId, initialData, categories }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Nghiệm Thu</h2>
-          <p className="text-sm text-muted-foreground">
-            CĐT: <strong>{vndFormatter(totalCdt)}</strong> | Nội bộ: <strong>{vndFormatter(totalInternal)}</strong>
+          <h2 className="text-lg font-semibold tracking-tight">Nghiệm thu</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            CĐT: <strong className="tabular-nums">{formatVND(totalCdt)}</strong> · Nội bộ:{" "}
+            <strong className="tabular-nums">{formatVND(totalInternal)}</strong>
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm nghiệm thu</Button>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" aria-hidden="true" />
+          Thêm nghiệm thu
+        </Button>
       </div>
 
       {/* Editable: checkItem, inspector, result, defectCount, amountCdtVnd, amountInternalVnd, acceptanceBatch, note.

@@ -16,6 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatDate } from "@/lib/utils/format";
+import { Plus, Calendar, User as UserIcon, FileText } from "lucide-react";
 import {
   TASK_STATUSES,
   taskStatusLabel,
@@ -63,16 +65,16 @@ interface Props {
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  todo: "bg-slate-100 border-slate-300",
-  doing: "bg-blue-50 border-blue-300",
-  review: "bg-amber-50 border-amber-300",
-  done: "bg-emerald-50 border-emerald-300",
+  todo: "bg-slate-50 border-slate-300 dark:bg-slate-900/40 dark:border-slate-700",
+  doing: "bg-sky-50 border-sky-300 dark:bg-sky-500/5 dark:border-sky-500/40",
+  review: "bg-amber-50 border-amber-300 dark:bg-amber-500/5 dark:border-amber-500/40",
+  done: "bg-emerald-50 border-emerald-300 dark:bg-emerald-500/5 dark:border-emerald-500/40",
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  cao: "bg-red-100 text-red-700",
-  trung_binh: "bg-yellow-100 text-yellow-700",
-  thap: "bg-slate-100 text-slate-700",
+  cao: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  trung_binh: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+  thap: "bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
 };
 
 const PRIORITY_LABEL: Record<string, string> = {
@@ -155,17 +157,22 @@ export function KanbanClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Bảng công việc</h1>
-          <p className="text-sm text-muted-foreground">Kéo-thả thẻ giữa các cột để cập nhật trạng thái</p>
+          <h1 className="text-2xl font-bold tracking-tight">Bảng công việc</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Kéo-thả thẻ giữa các cột để cập nhật trạng thái
+          </p>
         </div>
         {canCreate && (
-          <Button onClick={() => setOpenCreate(true)}>+ Tạo task</Button>
+          <Button onClick={() => setOpenCreate(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            Tạo task
+          </Button>
         )}
       </div>
 
-      <div className="flex flex-wrap gap-3 items-end rounded-lg border p-3">
+      <div className="flex flex-wrap gap-3 items-end rounded-lg border bg-card p-3 shadow-sm">
         <div>
           <Label className="text-xs">Phòng ban</Label>
           <select
@@ -290,8 +297,10 @@ function Column({
       className={`rounded-lg border-2 p-2 min-h-96 ${colorClass} ${isOver ? "ring-2 ring-primary" : ""}`}
     >
       <div className="flex items-center justify-between mb-2 px-1">
-        <h3 className="font-semibold text-sm">{taskStatusLabel(status)}</h3>
-        <span className="text-xs text-muted-foreground">{tasks.length}</span>
+        <h3 className="font-semibold text-sm tracking-tight">{taskStatusLabel(status)}</h3>
+        <span className="rounded-full bg-background/70 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          {tasks.length}
+        </span>
       </div>
       <div className="space-y-2">
         {tasks.map((t) => (
@@ -333,39 +342,44 @@ function TaskCard({
           onClick();
         }
       }}
-      className={`rounded-md border bg-white p-2 shadow-sm ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+      className={`rounded-md border bg-card p-2.5 shadow-sm hover:border-primary/40 transition-colors ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium line-clamp-2 flex-1">{task.title}</p>
         {task.childCounts && task.childCounts.total > 0 && (
-          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 whitespace-nowrap">
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap tabular-nums">
             {task.childCounts.done}/{task.childCounts.total}
           </span>
         )}
       </div>
-      <div className="mt-1 flex flex-wrap gap-1 items-center text-xs">
-        <span className={`rounded px-1.5 py-0.5 ${PRIORITY_COLORS[task.priority] ?? ""}`}>
+      <div className="mt-1.5 flex flex-wrap gap-1.5 items-center text-xs">
+        <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_COLORS[task.priority] ?? ""}`}>
           {PRIORITY_LABEL[task.priority] ?? task.priority}
         </span>
         {task.deadline && (
-          <span className="text-muted-foreground">
-            ⏰ {new Date(task.deadline).toLocaleDateString("vi-VN")}
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <Calendar className="size-3" aria-hidden="true" />
+            {formatDate(task.deadline)}
           </span>
         )}
         {task.assignee && (
-          <span className="text-muted-foreground">👤 {task.assignee.name}</span>
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <UserIcon className="size-3" aria-hidden="true" />
+            {task.assignee.name}
+          </span>
         )}
         {task.sourceForm && (
           <Link
             href={`/phieu-phoi-hop/${task.sourceForm.id}`}
             onClick={(e) => e.stopPropagation()}
-            className="text-blue-600 hover:underline"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
           >
-            📋 {task.sourceForm.code}
+            <FileText className="size-3" aria-hidden="true" />
+            {task.sourceForm.code}
           </Link>
         )}
       </div>
-      <p className="text-xs text-muted-foreground mt-1">{task.dept.code}</p>
+      <p className="text-xs text-muted-foreground mt-1.5">{task.dept.code}</p>
     </div>
   );
 }
@@ -549,7 +563,7 @@ function EditTaskDialog({
         <div>
           <h2 className="text-lg font-bold">Chi tiết task</h2>
           {task.sourceForm && (
-            <Link href={`/phieu-phoi-hop/${task.sourceForm.id}`} className="text-xs text-blue-600 hover:underline">
+            <Link href={`/phieu-phoi-hop/${task.sourceForm.id}`} className="text-xs text-primary hover:underline">
               Từ phiếu {task.sourceForm.code}
             </Link>
           )}
@@ -622,7 +636,7 @@ function EditTaskDialog({
         <div className="flex justify-between gap-2 pt-2 border-t">
           <div>
             {canDelete && (
-              <Button type="button" variant="outline" onClick={doDelete} disabled={submitting || pending} className="text-red-600">
+              <Button type="button" variant="outline" onClick={doDelete} disabled={submitting || pending} className="text-destructive">
                 Xóa
               </Button>
             )}
@@ -648,7 +662,7 @@ function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: (
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-lg bg-white p-4 shadow-xl max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg rounded-lg border bg-card p-4 shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {children}

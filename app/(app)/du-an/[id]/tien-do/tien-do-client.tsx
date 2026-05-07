@@ -13,6 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { scheduleSchema, type ScheduleInput } from "@/lib/du-an/schemas";
 import { createSchedule, updateSchedule, softDeleteSchedule } from "@/lib/du-an/schedule-service";
+import { formatDate } from "@/lib/utils/format";
 
 type ScheduleRow = {
   id: number;
@@ -38,7 +39,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function fmt(d: Date | null) {
-  return d ? new Date(d).toLocaleDateString("vi-VN") : "";
+  return formatDate(d, "");
 }
 
 interface Props {
@@ -200,7 +201,12 @@ export function TienDoClient({ projectId, initialData, categories }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Tiến Độ Thi Công</h2>
+        <div>
+          <h2 className="text-lg font-semibold">Tiến độ thi công</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Theo dõi kế hoạch, thực tế và % hoàn thành theo từng công việc.
+          </p>
+        </div>
         <Button onClick={() => setCreateOpen(true)}>Thêm công việc</Button>
       </div>
 

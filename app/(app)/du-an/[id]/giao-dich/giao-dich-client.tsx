@@ -13,6 +13,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { transactionSchema, type TransactionInput } from "@/lib/du-an/schemas";
 import { createTransaction, updateTransaction, softDeleteTransaction } from "@/lib/du-an/transaction-service";
+import { formatDate } from "@/lib/utils/format";
 
 type TxRow = {
   id: number; projectId: number; date: Date; transactionType: string;
@@ -155,7 +156,7 @@ export function GiaoDichClient({ projectId, initialData, categories }: Props) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
-    { field: "date", headerName: "Ngày", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 100 },
+    { field: "date", headerName: "Ngày", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 100 },
     { field: "transactionType", headerName: "Loại", valueFormatter: (p) => TYPE_LABELS[p.value as string] ?? "", width: 100 },
     { field: "itemCode", headerName: "Mã hàng", width: 100 },
     { field: "itemName", headerName: "Tên hàng", flex: 2, minWidth: 150, editable: true },
@@ -205,7 +206,7 @@ export function GiaoDichClient({ projectId, initialData, categories }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Giao Dịch Dự Án</h2>
+          <h2 className="text-lg font-semibold">Giao dịch dự án</h2>
           <p className="text-sm text-muted-foreground">
             HĐ: <strong>{vndFormatter(totalHd)}</strong> | TT: <strong>{vndFormatter(totalTt)}</strong>
           </p>

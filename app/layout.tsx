@@ -18,9 +18,17 @@ const notoSans = Noto_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "ERP Ngo Quyen",
-  description: "He thong quan ly ERP noi bo",
+  title: "ERP Ngô Quyền",
+  description: "Hệ thống quản lý ERP nội bộ",
 };
+
+const themeInitScript = `
+try {
+  var t = localStorage.getItem('nq-erp-theme');
+  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  if (t === 'dark') document.documentElement.classList.add('dark');
+} catch (_) {}
+`;
 
 export default function RootLayout({
   children,
@@ -28,7 +36,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" className={`${beVietnamPro.variable} ${notoSans.variable} h-full antialiased`}>
+    <html lang="vi" className={`${beVietnamPro.variable} ${notoSans.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full bg-background text-foreground">
         {children}
         <Toaster richColors position="top-right" />

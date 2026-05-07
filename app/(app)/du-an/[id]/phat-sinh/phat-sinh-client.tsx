@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { changeOrderSchema, type ChangeOrderInput } from "@/lib/du-an/schemas";
 import { createChangeOrder, updateChangeOrder, softDeleteChangeOrder } from "@/lib/du-an/change-order-service";
+import { formatDate } from "@/lib/utils/format";
 
 type CoRow = {
   id: number; projectId: number; date: Date; coCode: string; description: string;
@@ -107,7 +108,7 @@ export function PhatSinhClient({ projectId, initialData, categories }: Props) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
-    { field: "date", headerName: "Ngày", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 100 },
+    { field: "date", headerName: "Ngày", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 100 },
     { field: "coCode", headerName: "Mã CO", width: 100 },
     { field: "description", headerName: "Mô tả", flex: 2, minWidth: 180 },
     { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => p.value ? (categoryMap[p.value as number] ?? "") : "PS mới", width: 130 },
@@ -143,7 +144,12 @@ export function PhatSinhClient({ projectId, initialData, categories }: Props) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Phát Sinh / Change Order (CO)</h2>
+        <div>
+          <h2 className="text-lg font-semibold">Phát sinh / Change Order (CO)</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Theo dõi tác động chi phí và tiến độ của các phát sinh.
+          </p>
+        </div>
         <Button onClick={() => setCreateOpen(true)}>Thêm CO</Button>
       </div>
       <AgGridBase rowData={initialData} columnDefs={colDefs} height={500} />

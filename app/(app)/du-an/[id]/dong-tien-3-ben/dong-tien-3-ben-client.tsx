@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { type ColDef } from "ag-grid-community";
-import { AgGridBase, VND_COL_DEF, vndFormatter } from "@/components/ag-grid-base";
+import { AgGridBase, VND_COL_DEF } from "@/components/ag-grid-base";
+import { formatVND, formatDate } from "@/lib/utils/format";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -93,7 +95,7 @@ export function DongTien3BenClient({ projectId, initialData, summary }: Props) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
-    { field: "date", headerName: "Ngày", valueFormatter: (p) => p.value ? new Date(p.value as Date).toLocaleDateString("vi-VN") : "", width: 100 },
+    { field: "date", headerName: "Ngày", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 100 },
     { field: "flowDirection", headerName: "Chiều GD", valueFormatter: (p) => FLOW_LABELS[p.value as string] ?? "", width: 120 },
     { field: "category", headerName: "Phân loại", valueFormatter: (p) => CAT_LABELS[p.value as string] ?? "", width: 110 },
     { field: "payerName", headerName: "Bên TT", width: 140 },
@@ -106,7 +108,7 @@ export function DongTien3BenClient({ projectId, initialData, summary }: Props) {
       headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
         <div className="flex gap-1 items-center h-full">
           <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
-          <DeleteConfirmDialog itemName={`${FLOW_LABELS[p.data.flowDirection]} ${vndFormatter(Number(p.data.amountVnd))}`}
+          <DeleteConfirmDialog itemName={`${FLOW_LABELS[p.data.flowDirection]} ${formatVND(Number(p.data.amountVnd))}`}
             onConfirm={async () => { await softDeleteCashflow(p.data.id, projectId); startTransition(() => router.refresh()); }}
             trigger={<Button variant="outline" size="sm" className="text-destructive">Xóa</Button>} />
         </div>
@@ -129,30 +131,35 @@ export function DongTien3BenClient({ projectId, initialData, summary }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Dòng Tiền 3 Bên (CĐT — Cty — Đội)</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Dòng tiền 3 bên</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">CĐT · Công ty · Đội thi công</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" aria-hidden="true" />
+          Thêm giao dịch
+        </Button>
       </div>
 
-      {/* 3-way summary */}
-      <div className="grid grid-cols-3 gap-4 text-sm">
-        <div className="rounded border p-3 space-y-1">
-          <p className="font-medium text-blue-700">Chủ Đầu Tư (CĐT)</p>
-          <p>Đã trả Cty: <strong>{vndFormatter(summary.cdtToCty)}</strong></p>
-          <p>Cty hoàn CĐT: <strong>{vndFormatter(summary.ctyToCdt)}</strong></p>
-          <p className="text-xs text-muted-foreground">Còn phải trả: {vndFormatter(summary.cdtToCty - summary.ctyToCdt)}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div className="rounded-lg border bg-card p-4 shadow-sm space-y-1.5">
+          <p className="font-semibold text-sky-700 dark:text-sky-300">Chủ đầu tư (CĐT)</p>
+          <p>Đã trả Cty: <strong className="tabular-nums">{formatVND(summary.cdtToCty)}</strong></p>
+          <p>Cty hoàn CĐT: <strong className="tabular-nums">{formatVND(summary.ctyToCdt)}</strong></p>
+          <p className="text-xs text-muted-foreground">
+            Còn phải trả: <span className="tabular-nums">{formatVND(summary.cdtToCty - summary.ctyToCdt)}</span>
+          </p>
         </div>
-        <div className="rounded border p-3 space-y-1">
-          <p className="font-medium text-emerald-700">Công Ty (Cty)</p>
-          <p>Nhận từ CĐT: <strong>{vndFormatter(summary.cdtToCty)}</strong></p>
-          <p>Đã trả Đội: <strong>{vndFormatter(summary.ctyToDoi)}</strong></p>
+        <div className="rounded-lg border bg-card p-4 shadow-sm space-y-1.5">
+          <p className="font-semibold text-emerald-700 dark:text-emerald-300">Công ty</p>
+          <p>Nhận từ CĐT: <strong className="tabular-nums">{formatVND(summary.cdtToCty)}</strong></p>
+          <p>Đã trả Đội: <strong className="tabular-nums">{formatVND(summary.ctyToDoi)}</strong></p>
         </div>
-        <div className="rounded border p-3 space-y-1">
-          <p className="font-medium text-orange-700">Đội Thi Công</p>
-          <p>Nhận từ Cty: <strong>{vndFormatter(summary.ctyToDoi)}</strong></p>
-          <p>Hoàn lại Cty: <strong>{vndFormatter(summary.doiToCty + summary.doiRefund)}</strong></p>
+        <div className="rounded-lg border bg-card p-4 shadow-sm space-y-1.5">
+          <p className="font-semibold text-amber-700 dark:text-amber-300">Đội thi công</p>
+          <p>Nhận từ Cty: <strong className="tabular-nums">{formatVND(summary.ctyToDoi)}</strong></p>
+          <p>Hoàn lại Cty: <strong className="tabular-nums">{formatVND(summary.doiToCty + summary.doiRefund)}</strong></p>
         </div>
       </div>
 

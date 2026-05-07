@@ -10,6 +10,8 @@ import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-d
 import { createReconciliation, updateReconciliation, softDeleteReconciliation } from "@/lib/vat-tu-ncc/reconciliation-service";
 import { type ReconciliationInput } from "@/lib/vat-tu-ncc/schemas";
 import { ReconciliationForm } from "@/components/vat-tu-ncc/reconciliation-form";
+import { formatDate } from "@/lib/utils/format";
+import { Plus } from "lucide-react";
 
 type ReconciliationRow = {
   id: number;
@@ -36,9 +38,8 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
   const [editTarget, setEditTarget] = useState<ReconciliationRow | null>(null);
   const [, startTransition] = useTransition();
 
-  const fmtDate = (d: Date) => new Date(d).toLocaleDateString("vi-VN");
   const fmtPeriod = (r: ReconciliationRow) =>
-    `${fmtDate(r.periodFrom)} – ${fmtDate(r.periodTo)}`;
+    `${formatDate(r.periodFrom, "")} – ${formatDate(r.periodTo, "")}`;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const colDefs: ColDef<any>[] = [
@@ -105,9 +106,17 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Đối chiếu công nợ</h2>
-        <Button onClick={() => setCreateOpen(true)}>Tạo kỳ đối chiếu</Button>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Đối chiếu công nợ</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Lập biên bản đối chiếu công nợ định kỳ với nhà cung cấp.
+          </p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" aria-hidden="true" />
+          Tạo kỳ đối chiếu
+        </Button>
       </div>
 
       <AgGridBase rowData={initialData} columnDefs={colDefs} height={400} />

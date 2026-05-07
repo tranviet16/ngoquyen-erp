@@ -2,12 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable, type ColumnDef } from "@/components/data-table";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { ProjectForm } from "@/components/master-data/project-form";
 import { createProject, updateProject, softDeleteProject } from "@/lib/master-data/project-service";
 import { type ProjectInput } from "@/lib/master-data/schemas";
+import { formatNumber } from "@/lib/utils/format";
 
 type ProjectRow = {
   id: number;
@@ -18,29 +21,24 @@ type ProjectRow = {
   _count: { categories: number };
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  active: "Đang thực hiện",
-  completed: "Hoàn thành",
-  paused: "Tạm dừng",
-};
-
 const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "code", header: "Mã DA", className: "w-[100px]" },
+  { key: "code", header: "Mã DA", className: "w-[100px] font-mono" },
   { key: "name", header: "Tên dự án" },
   { key: "ownerInvestor", header: "Chủ đầu tư" },
   {
     key: "status",
     header: "Trạng thái",
-    className: "w-[140px]",
-    render: (row) => STATUS_LABELS[row.status as string] ?? String(row.status),
+    className: "w-[160px]",
+    render: (row) => <StatusBadge status={row.status as string} />,
   },
   {
     key: "_count",
     header: "Hạng mục",
     className: "w-[100px]",
+    align: "right",
     render: (row) => {
       const cnt = row._count as { categories: number };
-      return String(cnt?.categories ?? 0);
+      return formatNumber(cnt?.categories ?? 0);
     },
   },
 ];
@@ -81,10 +79,13 @@ export function ProjectsClient({ data, total, page, pageSize, searchValue }: Pro
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dự Án</h1>
-          <p className="text-sm text-muted-foreground">Danh sách dự án xây dựng</p>
+          <h1 className="text-2xl font-bold tracking-tight">Dự án</h1>
+          <p className="text-sm text-muted-foreground mt-1">Danh sách dự án xây dựng</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm mới</Button>
+        <Button onClick={() => setCreateOpen(true)} className="gap-1.5">
+          <Plus className="size-4" aria-hidden="true" />
+          Thêm dự án
+        </Button>
       </div>
 
       <DataTable
