@@ -64,7 +64,7 @@ export function CreateFormClient({ departments, currentDeptId }: Props) {
         </Link>
         <h1 className="text-2xl font-bold mt-2">Tạo phiếu phối hợp mới</h1>
         <p className="text-sm text-muted-foreground">
-          Phiếu sẽ được lưu nháp. Bấm "Gửi duyệt" trong trang chi tiết để bắt đầu quy trình.
+          Phiếu sẽ được lưu nháp. Bấm &quot;Gửi duyệt&quot; trong trang chi tiết để bắt đầu quy trình.
         </p>
       </div>
 
