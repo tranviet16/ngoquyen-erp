@@ -129,10 +129,12 @@ export interface PaymentPlanLite {
  * Suggest target milestone (col "Công việc cần hoàn thành theo DT lũy kế")
  * by comparing dtThoLuyKe to cumulative payment-plan amounts.
  *
- * Rule: smallest đợt N where cumulative[N] >= dtThoLuyKe → return dotN.milestone.
- * Khi DT lũy kế nằm giữa 2 mốc → lấy mốc sau.
+ * Rule: chọn mốc có cumulative gần dtThoLuyKe nhất (nearest milestone).
+ * Khi DT lũy kế nằm giữa 2 mốc → lấy mốc GẦN HƠN.
+ * Khi cách đều 2 mốc → ưu tiên mốc sau (đã đạt cao hơn).
  * Nếu DT lũy kế đã vượt cả 4 đợt → trả mốc đợt 4 (cuối).
  * Nếu plan rỗng (tổng = 0) → null.
+ * Admin có thể override manual qua field targetMilestone.
  */
 export function suggestTargetMilestone(
   dtThoLuyKe: number,
@@ -148,10 +150,17 @@ export function suggestTargetMilestone(
   ];
   const milestones = [plan.dot1Milestone, plan.dot2Milestone, plan.dot3Milestone, plan.dot4Milestone];
   if (cums[3] === 0) return null;
-  for (let i = 0; i < 4; i++) {
-    if (cums[i] >= dtThoLuyKe) return milestones[i];
+  if (dtThoLuyKe >= cums[3]) return milestones[3];
+  let bestIdx = 0;
+  let bestDiff = Math.abs(cums[0] - dtThoLuyKe);
+  for (let i = 1; i < 4; i++) {
+    const diff = Math.abs(cums[i] - dtThoLuyKe);
+    if (diff <= bestDiff) {
+      bestDiff = diff;
+      bestIdx = i;
+    }
   }
-  return milestones[3];
+  return milestones[bestIdx];
 }
 
 /**
