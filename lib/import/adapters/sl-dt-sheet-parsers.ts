@@ -146,7 +146,16 @@ export function parseDoanhThu(matrix: unknown[][], year: number, month: number) 
   return out;
 }
 
-/** Chỉ tiêu — cols: 1=Lô, 13=tiến độ thực tế (milestoneText), 15=tình trạng (settlementStatus) */
+/** Chỉ tiêu — Excel cols (16-col layout):
+ *  0=STT, 1=Danh mục, 2=estimate, 3=SL_lk_đầu, 4=DT_lk_đầu,
+ *  5,6=SL kỳ (chỉ tiêu/thực), 7,8=DT kỳ (chỉ tiêu/thực),
+ *  9=SL trát, 10=DT trát,
+ *  11=DT cần thực hiện theo tiến độ (NUMBER, computed downstream — ignored on import),
+ *  12=Công việc cần hoàn thành theo DT lũy kế (=targetMilestone),
+ *  13=Tiến độ thực tế (=milestoneText),
+ *  14=Tình trạng thực hiện doanh thu (computed downstream — ignored),
+ *  15=Ghi chú (free text; may also contain settlement keywords).
+ *  Settlement keywords ("quyết toán", "tạm dừng", "đã ký") extracted from cols 14/15 → settlementStatus. */
 export function parseChiTieu(matrix: unknown[][], year: number, month: number) {
   const out: { kind: SlDtParsedKind; data: Record<string, unknown> }[] = [];
   const state = newState();
@@ -154,23 +163,25 @@ export function parseChiTieu(matrix: unknown[][], year: number, month: number) {
     const r = matrix[i] || [];
     const { isLot, lotName } = step(state, r[0], r[1], r[1]);
     if (!isLot) continue;
-    // Pick milestone & settlement from rightmost non-empty cells in cols 11..16
-    let milestoneText: string | null = null;
+    const targetMilestone = String(r[12] ?? "").trim() || null;
+    const milestoneText = String(r[13] ?? "").trim() || null;
     let settlementStatus: string | null = null;
-    for (let c = 12; c <= 16; c++) {
+    let ghiChu: string | null = null;
+    for (let c = 14; c <= 15; c++) {
       const v = String(r[c] ?? "").trim();
       if (!v) continue;
       const lower = v.toLowerCase();
       if (lower.includes("quyết toán") || lower.includes("tạm dừng") || lower.includes("đã ký")) {
-        settlementStatus = v;
-      } else if (!milestoneText) {
-        milestoneText = v;
+        if (!settlementStatus) settlementStatus = v;
+        else if (!ghiChu) ghiChu = v;
+      } else if (!ghiChu) {
+        ghiChu = v;
       }
     }
-    if (!milestoneText && !settlementStatus) continue;
+    if (!milestoneText && !settlementStatus && !targetMilestone && !ghiChu) continue;
     out.push({
       kind: "progress_status",
-      data: { lotName, year, month, milestoneText, settlementStatus },
+      data: { lotName, year, month, targetMilestone, milestoneText, settlementStatus, ghiChu },
     });
   }
   return out;

@@ -256,7 +256,7 @@ export const SlDtAdapter: ImportAdapter = {
       const y = Number(row.data.year), mo = Number(row.data.month);
       const key = ym(lotId, y, mo);
       const cur = statuses.get(key) ?? { lotId, year: y, month: mo };
-      for (const k of ["milestoneText", "settlementStatus", "khungBtct", "xayTuong", "tratNgoai", "xayTho", "tratHoanThien", "hoSoQuyetToan"] as const) {
+      for (const k of ["milestoneText", "targetMilestone", "settlementStatus", "ghiChu", "khungBtct", "xayTuong", "tratNgoai", "xayTho", "tratHoanThien", "hoSoQuyetToan"] as const) {
         if (row.data[k] != null) cur[k] = row.data[k];
       }
       statuses.set(key, cur);
@@ -265,18 +265,23 @@ export const SlDtAdapter: ImportAdapter = {
       try {
         await db.$executeRaw`
           INSERT INTO sl_dt_progress_statuses ("lotId", year, month,
-            "milestoneText", "settlementStatus",
+            "milestoneText", "targetMilestone", "settlementStatus", "ghiChu",
             "khungBtct", "xayTuong", "tratNgoai", "xayTho", "tratHoanThien", "hoSoQuyetToan",
             "createdAt", "updatedAt")
           VALUES (${cur.lotId as number}, ${cur.year as number}, ${cur.month as number},
-            ${(cur.milestoneText as string) ?? null}, ${(cur.settlementStatus as string) ?? null},
+            ${(cur.milestoneText as string) ?? null},
+            ${(cur.targetMilestone as string) ?? null},
+            ${(cur.settlementStatus as string) ?? null},
+            ${(cur.ghiChu as string) ?? null},
             ${(cur.khungBtct as string) ?? null}, ${(cur.xayTuong as string) ?? null},
             ${(cur.tratNgoai as string) ?? null}, ${(cur.xayTho as string) ?? null},
             ${(cur.tratHoanThien as string) ?? null}, ${(cur.hoSoQuyetToan as string) ?? null},
             NOW(), NOW())
           ON CONFLICT ("lotId", year, month) DO UPDATE
             SET "milestoneText" = COALESCE(EXCLUDED."milestoneText", sl_dt_progress_statuses."milestoneText"),
+                "targetMilestone" = COALESCE(EXCLUDED."targetMilestone", sl_dt_progress_statuses."targetMilestone"),
                 "settlementStatus" = COALESCE(EXCLUDED."settlementStatus", sl_dt_progress_statuses."settlementStatus"),
+                "ghiChu" = COALESCE(EXCLUDED."ghiChu", sl_dt_progress_statuses."ghiChu"),
                 "khungBtct" = COALESCE(EXCLUDED."khungBtct", sl_dt_progress_statuses."khungBtct"),
                 "xayTuong" = COALESCE(EXCLUDED."xayTuong", sl_dt_progress_statuses."xayTuong"),
                 "tratNgoai" = COALESCE(EXCLUDED."tratNgoai", sl_dt_progress_statuses."tratNgoai"),

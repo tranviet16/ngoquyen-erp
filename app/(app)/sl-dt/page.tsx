@@ -6,6 +6,7 @@ export default async function SlDtPage() {
   const latest = months[0];
 
   const navItems = [
+    { href: "/sl-dt/nhap-thang-moi", label: "Nhập tháng mới", desc: "Form 4 tab — kế thừa từ tháng trước, lũy kế tự động", primary: true },
     { href: "/sl-dt/bao-cao-sl", label: "Báo cáo Sản lượng", desc: "11 cột SL theo lô" },
     { href: "/sl-dt/bao-cao-dt", label: "Báo cáo Doanh thu", desc: "13 cột DT theo lô" },
     { href: "/sl-dt/chi-tieu", label: "Chỉ tiêu", desc: "Tiến độ + phải nộp tiền" },
@@ -24,29 +25,14 @@ export default async function SlDtPage() {
         </p>
       </div>
 
-      {latest && (
-        <div className="flex gap-2 text-sm">
-          <Link
-            href={`/sl-dt/bao-cao-sl?year=${latest.year}&month=${latest.month}`}
-            className="px-3 py-1.5 rounded border bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            Xem SL T{latest.month}/{latest.year}
-          </Link>
-          <Link
-            href={`/sl-dt/bao-cao-dt?year=${latest.year}&month=${latest.month}`}
-            className="px-3 py-1.5 rounded border hover:bg-muted"
-          >
-            Xem DT T{latest.month}/{latest.year}
-          </Link>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="border rounded-lg p-4 hover:bg-muted/30 transition-colors"
+            className={`border rounded-lg p-4 hover:bg-muted/30 transition-colors ${
+              item.primary ? "border-primary bg-primary/5" : ""
+            }`}
           >
             <div className="font-semibold">{item.label}</div>
             <div className="text-sm text-muted-foreground mt-1">{item.desc}</div>

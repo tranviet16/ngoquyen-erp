@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { computeSanLuong, computeDoanhThu, computeChiTieu, computePaidStatus } from "./compute";
+import { computeSanLuong, computeDoanhThu, computeChiTieu, computePaidStatus, computeDtCanThucHien, computeTinhTrangDoanhThu, suggestTargetMilestone } from "./compute";
 import { rollupSanLuong, rollupDoanhThu, type SanLuongRow, type DoanhThuRow } from "./rollup";
 
 export type { SanLuongRow, DoanhThuRow };
@@ -112,17 +112,46 @@ export interface ChiTieuRow {
   phaseCode: string;
   groupCode: string;
   sortOrder: number;
-  estimateValue: number;
+  // Static
+  estimateValue: number;     // col 2: Dự toán phần thô
   contractValue: number;
-  milestoneText: string | null;
-  settlementStatus: string | null;
+  // Prev luỹ kế đầu kỳ
+  prevSlLuyKeTho: number;    // col 3
+  prevDtThoLuyKe: number;    // col 4
+  // Kỳ
+  slKeHoachKy: number;       // col 5
+  slThucKyTho: number;       // col 6
+  dtKeHoachKy: number;       // col 7
+  dtThoKy: number;           // col 8
+  // Trát
+  slTrat: number;            // col 9
+  dtTratKy: number;          // col 10
+  // Computed
+  dtCanThucHien: number;     // col 11
+  // Editable text
+  targetMilestone: string | null;  // col 12 (user-stored override)
+  suggestedTarget: string | null;  // col 12 (computed from dtThoLuyKe vs payment plan)
+  milestoneText: string | null;    // col 13
+  // Computed
+  tinhTrang: string;         // col 14
+  // Editable text
+  settlementStatus: string | null; // col 15a (settlement)
+  ghiChu: string | null;     // col 15b (notes)
+  // Legacy fields (still used elsewhere)
   phaiNop: number;
   tienDaDong: number;
   paidStatus: string;
+  // For client to recompute when editing
+  dtThoLuyKe: number;
+}
+
+function prevMonthOf(year: number, month: number): { year: number; month: number } {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 }
 
 export async function getChiTieuReport(year: number, month: number): Promise<ChiTieuRow[]> {
-  const [lots, scoreMap] = await Promise.all([
+  const prev = prevMonthOf(year, month);
+  const [lots, prevInputs, scoreMap] = await Promise.all([
     prisma.slDtLot.findMany({
       where: { deletedAt: null },
       include: {
@@ -132,35 +161,48 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
       },
       orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
     }),
+    prisma.slDtMonthlyInput.findMany({ where: { year: prev.year, month: prev.month } }),
     buildScoreMap(),
   ]);
+
+  const prevByLot = new Map(prevInputs.map((p) => [p.lotId, p]));
 
   const lotRows: ChiTieuRow[] = lots.map((lot) => {
     const status = lot.progressStatus[0];
     const plan = lot.paymentPlan;
     const inp = lot.monthlyInputs[0];
+    const prevInp = prevByLot.get(lot.id);
     const estimateValue = toNum(inp?.estimateValue ?? lot.estimateValue);
     const contractValue = toNum(inp?.contractValue ?? lot.contractValue);
-    const tienDaDong = toNum(inp?.dtThoLuyKe) + toNum(inp?.dtTratLuyKe);
+    const dtThoLuyKe = toNum(inp?.dtThoLuyKe);
+    const dtTratLuyKe = toNum(inp?.dtTratLuyKe);
+    const tienDaDong = dtThoLuyKe + dtTratLuyKe;
+    const milestoneText = status?.milestoneText ?? null;
+    const settlementStatus = status?.settlementStatus ?? null;
+
+    const planLite = plan
+      ? {
+          dot1Amount: toNum(plan.dot1Amount), dot1Milestone: plan.dot1Milestone,
+          dot2Amount: toNum(plan.dot2Amount), dot2Milestone: plan.dot2Milestone,
+          dot3Amount: toNum(plan.dot3Amount), dot3Milestone: plan.dot3Milestone,
+          dot4Amount: toNum(plan.dot4Amount), dot4Milestone: plan.dot4Milestone,
+        }
+      : null;
 
     const { phaiNop } = computeChiTieu(
       {
-        milestoneText: status?.milestoneText ?? null,
-        settlementStatus: status?.settlementStatus ?? null,
-        estimateValue,
-        dot1Amount: toNum(plan?.dot1Amount),
-        dot1Milestone: plan?.dot1Milestone ?? null,
-        dot2Amount: toNum(plan?.dot2Amount),
-        dot2Milestone: plan?.dot2Milestone ?? null,
-        dot3Amount: toNum(plan?.dot3Amount),
-        dot3Milestone: plan?.dot3Milestone ?? null,
-        dot4Amount: toNum(plan?.dot4Amount),
-        dot4Milestone: plan?.dot4Milestone ?? null,
+        milestoneText, settlementStatus, estimateValue,
+        dot1Amount: planLite?.dot1Amount ?? 0, dot1Milestone: planLite?.dot1Milestone ?? null,
+        dot2Amount: planLite?.dot2Amount ?? 0, dot2Milestone: planLite?.dot2Milestone ?? null,
+        dot3Amount: planLite?.dot3Amount ?? 0, dot3Milestone: planLite?.dot3Milestone ?? null,
+        dot4Amount: planLite?.dot4Amount ?? 0, dot4Milestone: planLite?.dot4Milestone ?? null,
         hasPlan: plan != null,
       },
       scoreMap
     );
-
+    const dtCanThucHien = computeDtCanThucHien(milestoneText, settlementStatus, estimateValue, planLite, scoreMap);
+    const tinhTrang = computeTinhTrangDoanhThu(dtThoLuyKe, dtCanThucHien);
+    const suggestedTarget = suggestTargetMilestone(dtThoLuyKe, planLite);
     const paidStatus = computePaidStatus(tienDaDong, phaiNop);
 
     return {
@@ -173,16 +215,52 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
       sortOrder: lot.sortOrder,
       estimateValue,
       contractValue,
-      milestoneText: status?.milestoneText ?? null,
-      settlementStatus: status?.settlementStatus ?? null,
+      prevSlLuyKeTho: toNum(prevInp?.slLuyKeTho),
+      prevDtThoLuyKe: toNum(prevInp?.dtThoLuyKe),
+      slKeHoachKy: toNum(inp?.slKeHoachKy),
+      slThucKyTho: toNum(inp?.slThucKyTho),
+      dtKeHoachKy: toNum(inp?.dtKeHoachKy),
+      dtThoKy: toNum(inp?.dtThoKy),
+      slTrat: toNum(inp?.slTrat),
+      dtTratKy: toNum(inp?.dtTratKy),
+      dtCanThucHien,
+      targetMilestone: status?.targetMilestone ?? null,
+      suggestedTarget,
+      milestoneText,
+      tinhTrang,
+      settlementStatus,
+      ghiChu: status?.ghiChu ?? null,
       phaiNop,
       tienDaDong,
       paidStatus,
+      dtThoLuyKe,
     };
   });
 
-  // No subtotal formula for phaiNop — just sum for group/phase/grand
   return buildChiTieuHierarchy(lotRows);
+}
+
+function emptySubtotal(kind: "group" | "phase" | "grand", lotName: string, phaseCode: string, groupCode: string, sortOrder: number): ChiTieuRow {
+  return {
+    kind, code: "", lotName, phaseCode, groupCode, sortOrder,
+    estimateValue: 0, contractValue: 0,
+    prevSlLuyKeTho: 0, prevDtThoLuyKe: 0,
+    slKeHoachKy: 0, slThucKyTho: 0, dtKeHoachKy: 0, dtThoKy: 0,
+    slTrat: 0, dtTratKy: 0, dtCanThucHien: 0,
+    targetMilestone: null, suggestedTarget: null, milestoneText: null, tinhTrang: "",
+    settlementStatus: null, ghiChu: null,
+    phaiNop: 0, tienDaDong: 0, paidStatus: "", dtThoLuyKe: 0,
+  };
+}
+
+const NUMERIC_KEYS = [
+  "estimateValue", "contractValue", "prevSlLuyKeTho", "prevDtThoLuyKe",
+  "slKeHoachKy", "slThucKyTho", "dtKeHoachKy", "dtThoKy",
+  "slTrat", "dtTratKy", "dtCanThucHien", "phaiNop", "tienDaDong", "dtThoLuyKe",
+] as const;
+
+function sumInto(target: ChiTieuRow, src: ChiTieuRow) {
+  for (const k of NUMERIC_KEYS) target[k] += src[k];
 }
 
 function buildChiTieuHierarchy(lotRows: ChiTieuRow[]): ChiTieuRow[] {
@@ -196,74 +274,24 @@ function buildChiTieuHierarchy(lotRows: ChiTieuRow[]): ChiTieuRow[] {
     byGroup.get(r.groupCode)!.push(r);
   }
 
-  let grandPhaiNop = 0;
-  let grandTienDaDong = 0;
+  const grand = emptySubtotal("grand", "Tổng cộng", "", "", 999999);
 
   for (const [phaseCode, byGroup] of byPhase) {
-    let phasePhaiNop = 0;
-    let phaseTienDaDong = 0;
+    const phaseSub = emptySubtotal("phase", `Tổng giai đoạn ${phaseCode}`, phaseCode, "", 99999);
 
     for (const [groupCode, lots] of byGroup) {
       const sorted = [...lots].sort((a, b) => a.sortOrder - b.sortOrder);
       result.push(...sorted);
 
-      const groupPhaiNop = sorted.reduce((s, r) => s + r.phaiNop, 0);
-      const groupTienDaDong = sorted.reduce((s, r) => s + r.tienDaDong, 0);
-      phasePhaiNop += groupPhaiNop;
-      phaseTienDaDong += groupTienDaDong;
-
-      result.push({
-        kind: "group",
-        code: "",
-        lotName: `Tổng nhóm ${groupCode}`,
-        phaseCode,
-        groupCode,
-        sortOrder: 9999,
-        estimateValue: sorted.reduce((s, r) => s + r.estimateValue, 0),
-        contractValue: sorted.reduce((s, r) => s + r.contractValue, 0),
-        milestoneText: null,
-        settlementStatus: null,
-        phaiNop: groupPhaiNop,
-        tienDaDong: groupTienDaDong,
-        paidStatus: "",
-      });
+      const groupSub = emptySubtotal("group", `Tổng nhóm ${groupCode}`, phaseCode, groupCode, 9999);
+      for (const r of sorted) sumInto(groupSub, r);
+      sumInto(phaseSub, groupSub);
+      result.push(groupSub);
     }
-
-    grandPhaiNop += phasePhaiNop;
-    grandTienDaDong += phaseTienDaDong;
-    result.push({
-      kind: "phase",
-      code: "",
-      lotName: `Tổng giai đoạn ${phaseCode}`,
-      phaseCode,
-      groupCode: "",
-      sortOrder: 99999,
-      estimateValue: 0,
-      contractValue: 0,
-      milestoneText: null,
-      settlementStatus: null,
-      phaiNop: phasePhaiNop,
-      tienDaDong: phaseTienDaDong,
-      paidStatus: "",
-    });
+    sumInto(grand, phaseSub);
+    result.push(phaseSub);
   }
-
-  result.push({
-    kind: "grand",
-    code: "",
-    lotName: "Tổng cộng",
-    phaseCode: "",
-    groupCode: "",
-    sortOrder: 999999,
-    estimateValue: 0,
-    contractValue: 0,
-    milestoneText: null,
-    settlementStatus: null,
-    phaiNop: grandPhaiNop,
-    tienDaDong: grandTienDaDong,
-    paidStatus: "",
-  });
-
+  result.push(grand);
   return result;
 }
 

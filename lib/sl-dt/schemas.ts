@@ -5,6 +5,7 @@ export const progressStatusSchema = z.object({
   year: z.number().int().min(2000).max(2100),
   month: z.number().int().min(1).max(12),
   milestoneText: z.string().nullable().optional(),
+  targetMilestone: z.string().nullable().optional(),
   settlementStatus: z.string().nullable().optional(),
   khungBtct: z.string().nullable().optional(),
   xayTuong: z.string().nullable().optional(),

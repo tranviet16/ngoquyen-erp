@@ -114,6 +114,88 @@ export function computeChiTieu(inputs: ChiTieuInputs, scoreMap: Map<string, numb
   return { phaiNop, paidStatus: "" };
 }
 
+export interface PaymentPlanLite {
+  dot1Amount: number;
+  dot1Milestone: string | null;
+  dot2Amount: number;
+  dot2Milestone: string | null;
+  dot3Amount: number;
+  dot3Milestone: string | null;
+  dot4Amount: number;
+  dot4Milestone: string | null;
+}
+
+/**
+ * Suggest target milestone (col "Công việc cần hoàn thành theo DT lũy kế")
+ * by comparing dtThoLuyKe to cumulative payment-plan amounts.
+ *
+ * Rule: smallest đợt N where cumulative[N] >= dtThoLuyKe → return dotN.milestone.
+ * Khi DT lũy kế nằm giữa 2 mốc → lấy mốc sau.
+ * Nếu DT lũy kế đã vượt cả 4 đợt → trả mốc đợt 4 (cuối).
+ * Nếu plan rỗng (tổng = 0) → null.
+ */
+export function suggestTargetMilestone(
+  dtThoLuyKe: number,
+  plan: PaymentPlanLite | null,
+): string | null {
+  if (!plan) return null;
+  if (dtThoLuyKe <= 0) return null; // Chưa có DT lũy kế → không gợi ý mốc nào
+  const cums = [
+    plan.dot1Amount,
+    plan.dot1Amount + plan.dot2Amount,
+    plan.dot1Amount + plan.dot2Amount + plan.dot3Amount,
+    plan.dot1Amount + plan.dot2Amount + plan.dot3Amount + plan.dot4Amount,
+  ];
+  const milestones = [plan.dot1Milestone, plan.dot2Milestone, plan.dot3Milestone, plan.dot4Milestone];
+  if (cums[3] === 0) return null;
+  for (let i = 0; i < 4; i++) {
+    if (cums[i] >= dtThoLuyKe) return milestones[i];
+  }
+  return milestones[3];
+}
+
+/**
+ * Compute "DT cần thực hiện theo tiến độ" (col 11 in Chỉ tiêu Excel).
+ * = phaiNop based on current Tiến độ thực tế (milestoneText) vs payment plan.
+ * Reuses computeChiTieu logic but only needs milestoneText + plan + scoreMap.
+ */
+export function computeDtCanThucHien(
+  milestoneText: string | null,
+  settlementStatus: string | null,
+  estimateValue: number,
+  plan: PaymentPlanLite | null,
+  scoreMap: Map<string, number>,
+): number {
+  if (settlementStatus === "Đã quyết toán") return estimateValue;
+  if (!plan) return 0;
+  const total = plan.dot1Amount + plan.dot2Amount + plan.dot3Amount + plan.dot4Amount;
+  if (total === 0) return 0;
+  const diem = scoreMap.get(milestoneText ?? "") ?? 0;
+  const m1 = scoreMap.get(plan.dot1Milestone ?? "") ?? 0;
+  const m2 = scoreMap.get(plan.dot2Milestone ?? "") ?? 0;
+  const m3 = scoreMap.get(plan.dot3Milestone ?? "") ?? 0;
+  const can2 = diem >= m1 - 10;
+  const can3 = diem >= m2 - 10;
+  const can4 = diem >= m3 - 10;
+  return (
+    plan.dot1Amount +
+    (can2 ? plan.dot2Amount : 0) +
+    (can3 ? plan.dot3Amount : 0) +
+    (can4 ? plan.dot4Amount : 0)
+  );
+}
+
+/**
+ * Compute "Tình trạng thực hiện doanh thu" (col 14): so sánh dtThoLuyKe vs phaiNop.
+ */
+export function computeTinhTrangDoanhThu(dtThoLuyKe: number, phaiNop: number): string {
+  if (phaiNop === 0) return "";
+  const diff = dtThoLuyKe - phaiNop;
+  if (Math.abs(diff) < 1) return "Đạt";
+  if (diff > 0) return `Vượt ${diff.toLocaleString("vi-VN")}`;
+  return `Còn thiếu ${(-diff).toLocaleString("vi-VN")}`;
+}
+
 /**
  * Compute payment status text given tienDaDong (already paid) vs phaiNop.
  */

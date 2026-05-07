@@ -11,6 +11,7 @@ export async function updateProgressStatus(input: ProgressStatusInput) {
     where: { lotId_year_month: { lotId: data.lotId, year: data.year, month: data.month } },
     update: {
       milestoneText: data.milestoneText ?? null,
+      targetMilestone: data.targetMilestone ?? null,
       settlementStatus: data.settlementStatus ?? null,
       khungBtct: data.khungBtct ?? null,
       xayTuong: data.xayTuong ?? null,
@@ -26,6 +27,7 @@ export async function updateProgressStatus(input: ProgressStatusInput) {
       year: data.year,
       month: data.month,
       milestoneText: data.milestoneText ?? null,
+      targetMilestone: data.targetMilestone ?? null,
       settlementStatus: data.settlementStatus ?? null,
       khungBtct: data.khungBtct ?? null,
       xayTuong: data.xayTuong ?? null,
