@@ -43,3 +43,18 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Local dev / temp
+.next-dev.log
+.claude/scheduled_tasks.lock
+
+# Excel temp lock files
+SOP/~$*.xlsx
+
+# Diagnostic / one-off scripts
+scripts/diag-*
+scripts/inspect-*
+scripts/check-*
+scripts/count-*
+scripts/test-cnvt-*
+scripts/import-sl-dt.ts
