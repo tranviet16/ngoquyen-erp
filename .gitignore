@@ -58,3 +58,4 @@ scripts/check-*
 scripts/count-*
 scripts/test-cnvt-*
 scripts/import-sl-dt.ts
+scripts/.smoke-shots/
