@@ -49,6 +49,15 @@ export function CommentSection({ taskId, currentUserId }: Props) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const esRef = useRef<EventSource | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
+
+  function scrollToBottom() {
+    const el = listRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+  }
 
   async function load() {
     try {
@@ -102,6 +111,7 @@ export function CommentSection({ taskId, currentUserId }: Props) {
             },
           ];
         });
+        scrollToBottom();
       } catch {
         // ignore
       }
@@ -121,6 +131,7 @@ export function CommentSection({ taskId, currentUserId }: Props) {
         const row = await createCommentAction(taskId, body);
         setItems((cur) => [...cur, row as CommentRow]);
         setDraft("");
+        scrollToBottom();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));
       }
@@ -170,7 +181,7 @@ export function CommentSection({ taskId, currentUserId }: Props) {
       ) : items.length === 0 ? (
         <p className="text-xs text-muted-foreground">Chưa có bình luận.</p>
       ) : (
-        <ul className="space-y-2 mb-3 max-h-64 overflow-y-auto pr-1">
+        <ul ref={listRef} className="space-y-2 mb-3 max-h-64 overflow-y-auto pr-1">
           {items.map((c) => {
             const mine = c.authorId === currentUserId;
             const editable = mine && isWithinEditWindow(c.createdAt);

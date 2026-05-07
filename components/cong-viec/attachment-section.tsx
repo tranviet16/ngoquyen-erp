@@ -92,14 +92,16 @@ export function AttachmentSection({ taskId }: Props) {
           toast.error(`${file.name}: loại file không được phép`);
           continue;
         }
+        const tid = toast.loading(`${file.name} — đang tải lên (${fmtSize(file.size)})…`);
         try {
           const fd = new FormData();
           fd.set("taskId", String(taskId));
           fd.set("file", file);
           const row = await uploadAttachmentAction(fd);
           setItems((cur) => [row as AttachmentRow, ...cur]);
+          toast.success(`${file.name} đã tải lên`, { id: tid });
         } catch (err) {
-          toast.error(`${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+          toast.error(`${file.name}: ${err instanceof Error ? err.message : String(err)}`, { id: tid });
         }
       }
     });
