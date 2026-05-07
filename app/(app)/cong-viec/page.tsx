@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { listTasksForBoard, listDeptMembers } from "@/lib/task/task-service";
 import { listDepartments } from "@/lib/department-service";
 import { getUserContext } from "@/lib/department-rbac";
+import { listViewableDeptIds } from "@/lib/dept-access";
 import { KanbanClient } from "./kanban-client";
 
 export const dynamic = "force-dynamic";
@@ -22,18 +23,29 @@ export default async function Page({
     sp.fromForm === "true" ? true : sp.fromForm === "false" ? false : undefined;
 
   const ctx = await getUserContext(session.user.id);
-  const effectiveDeptId = deptIdNum ?? ctx?.departmentId ?? undefined;
+  // Task query: only filter by dept when user explicitly picked one in the
+  // dropdown. Otherwise let the access map's OR clause (own dept + grants)
+  // decide visibility — falling back to ctx.departmentId would hide cross-dept
+  // grants whenever "— Tất cả —" is selected.
+  const queryDeptId = deptIdNum;
+  // Member dropdown context: needs a single dept to list assignable members.
+  const memberDeptId = deptIdNum ?? ctx?.departmentId ?? undefined;
 
-  const [{ byStatus }, departments, members] = await Promise.all([
+  const [{ byStatus }, allDepartments, members, viewableIds] = await Promise.all([
     listTasksForBoard({
-      deptId: effectiveDeptId,
+      deptId: queryDeptId,
       assigneeId: sp.assigneeId,
       priority: sp.priority,
       fromForm,
     }),
     listDepartments({ activeOnly: true }),
-    effectiveDeptId ? listDeptMembers(effectiveDeptId) : Promise.resolve([]),
+    memberDeptId ? listDeptMembers(memberDeptId) : Promise.resolve([]),
+    listViewableDeptIds(session.user.id),
   ]);
+  const departments =
+    viewableIds === "all"
+      ? allDepartments
+      : allDepartments.filter((d) => viewableIds.includes(d.id));
 
   return (
     <KanbanClient
@@ -46,7 +58,7 @@ export default async function Page({
       currentIsLeader={ctx?.isLeader ?? false}
       currentIsDirector={ctx?.isDirector ?? false}
       filters={{
-        deptId: effectiveDeptId ?? null,
+        deptId: queryDeptId ?? null,
         assigneeId: sp.assigneeId ?? null,
         priority: sp.priority ?? null,
         fromForm: fromForm ?? null,

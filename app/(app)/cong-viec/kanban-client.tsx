@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -97,6 +97,12 @@ export function KanbanClient({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [optimistic, setOptimistic] = useState(byStatus);
+  // Re-sync local optimistic state when server returns a new board (e.g. after
+  // changing the dept filter or after router.refresh). Without this, useState's
+  // initial value sticks and filter changes don't visibly update the columns.
+  useEffect(() => {
+    setOptimistic(byStatus);
+  }, [byStatus]);
   const [openEdit, setOpenEdit] = useState<TaskWithRelations | null>(null);
   const [openCreate, setOpenCreate] = useState(false);
 
@@ -323,19 +329,22 @@ function TaskCard({
   draggable: boolean;
   onClick: () => void;
 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
-    disabled: !draggable,
+    disabled: !draggable || !mounted,
   });
   const style: React.CSSProperties = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
     : {};
   return (
     <div
-      ref={setNodeRef}
+      ref={mounted ? setNodeRef : undefined}
       style={style}
-      {...listeners}
-      {...attributes}
+      {...(mounted ? listeners : {})}
+      {...(mounted ? attributes : {})}
+      suppressHydrationWarning
       onClick={(e) => {
         if (!isDragging) {
           e.stopPropagation();

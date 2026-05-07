@@ -71,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Nhập dữ liệu", href: "/admin/import", icon: Upload },
       { label: "Phòng ban", href: "/admin/phong-ban", icon: Users },
+      { label: "Người dùng", href: "/admin/nguoi-dung", icon: Users },
     ],
   },
 ];

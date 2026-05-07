@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserContext, type UserContext } from "@/lib/department-rbac";
+import { getDeptAccessMap, hasDeptAccess, type DeptAccessMap } from "@/lib/dept-access";
 import { safeFilename, store } from "@/lib/storage";
 import { canDeleteAttachment } from "./attachment-rbac";
 import { validateMagicBytes } from "./file-signature";
@@ -36,33 +37,32 @@ async function requireSession(): Promise<{ userId: string; role: string }> {
   return { userId: session.user.id, role: session.user.role ?? "viewer" };
 }
 
-async function requireContext(): Promise<{ ctx: UserContext; role: string }> {
+async function requireContext(): Promise<{ ctx: UserContext; role: string; accessMap: DeptAccessMap }> {
   const { userId, role } = await requireSession();
   const ctx = await getUserContext(userId);
   if (!ctx) throw new Error("Không tìm thấy thông tin người dùng");
-  return { ctx, role };
+  const accessMap = await getDeptAccessMap(userId);
+  return { ctx, role, accessMap };
 }
 
-function canViewTask(
+function canAccessTask(
   task: { creatorId: string; deptId: number },
   ctx: UserContext,
-  role: string,
+  accessMap: DeptAccessMap,
+  min: "read" | "comment" | "edit",
 ): boolean {
-  if (role === "admin") return true;
-  if (ctx.isDirector) return true;
   if (task.creatorId === ctx.userId) return true;
-  if (ctx.departmentId === task.deptId) return true;
-  return false;
+  return hasDeptAccess(accessMap, task.deptId, min);
 }
 
 export async function listAttachments(taskId: number): Promise<AttachmentRow[]> {
-  const { ctx, role } = await requireContext();
+  const { ctx, role, accessMap } = await requireContext();
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { id: true, deptId: true, creatorId: true },
   });
   if (!task) throw new Error("Không tìm thấy task");
-  if (!canViewTask(task, ctx, role)) throw new Error("Bạn không có quyền xem task này");
+  if (!canAccessTask(task, ctx, accessMap, "read")) throw new Error("Bạn không có quyền xem task này");
 
   const rows = await prisma.taskAttachment.findMany({
     where: { taskId },
@@ -90,13 +90,13 @@ export async function uploadAttachment(taskId: number, file: File): Promise<Atta
     throw new Error(`Loại file không được phép: ${file.type || "unknown"}`);
   }
 
-  const { ctx, role } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { id: true, deptId: true, creatorId: true },
   });
   if (!task) throw new Error("Không tìm thấy task");
-  if (!canViewTask(task, ctx, role)) throw new Error("Bạn không có quyền với task này");
+  if (!canAccessTask(task, ctx, accessMap, "edit")) throw new Error("Bạn không có quyền với task này");
 
   const original = safeFilename(file.name || "file");
   const uuid = randomUUID();
@@ -160,13 +160,13 @@ export async function getAttachmentForDownload(id: number): Promise<{
   mimeType: string;
   sizeBytes: number;
 }> {
-  const { ctx, role } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
   const att = await prisma.taskAttachment.findUnique({
     where: { id },
     include: { task: { select: { deptId: true, creatorId: true } } },
   });
   if (!att) throw new Error("Không tìm thấy file");
-  if (!canViewTask(att.task, ctx, role)) {
+  if (!canAccessTask(att.task, ctx, accessMap, "read")) {
     throw new Error("Bạn không có quyền tải file này");
   }
   return {

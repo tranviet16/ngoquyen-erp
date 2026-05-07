@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserContext, type UserContext } from "@/lib/department-rbac";
+import { getDeptAccessMap, hasDeptAccess, type DeptAccessMap } from "@/lib/dept-access";
 
 export interface ChildCounts {
   done: number;
@@ -24,11 +25,12 @@ async function requireSession(): Promise<{ userId: string; role: string }> {
   return { userId: session.user.id, role: session.user.role ?? "viewer" };
 }
 
-async function requireContext(): Promise<{ ctx: UserContext; role: string }> {
+async function requireContext(): Promise<{ ctx: UserContext; role: string; accessMap: DeptAccessMap }> {
   const { userId, role } = await requireSession();
   const ctx = await getUserContext(userId);
   if (!ctx) throw new Error("Không tìm thấy thông tin người dùng");
-  return { ctx, role };
+  const accessMap = await getDeptAccessMap(userId);
+  return { ctx, role, accessMap };
 }
 
 function canEditTask(
@@ -45,13 +47,10 @@ function canEditTask(
 function canViewTask(
   task: { creatorId: string; deptId: number },
   ctx: UserContext,
-  role: string,
+  accessMap: DeptAccessMap,
 ): boolean {
-  if (role === "admin") return true;
-  if (ctx.isDirector) return true;
   if (task.creatorId === ctx.userId) return true;
-  if (ctx.departmentId === task.deptId) return true;
-  return false;
+  return hasDeptAccess(accessMap, task.deptId, "read");
 }
 
 /**
@@ -88,13 +87,13 @@ export async function getChildCounts(parentIds: number[]): Promise<Map<number, C
 }
 
 export async function listChildren(parentId: number): Promise<SubtaskRow[]> {
-  const { ctx, role } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
   const parent = await prisma.task.findUnique({
     where: { id: parentId },
     select: { id: true, deptId: true, creatorId: true },
   });
   if (!parent) throw new Error("Không tìm thấy task cha");
-  if (!canViewTask(parent, ctx, role)) throw new Error("Bạn không có quyền xem");
+  if (!canViewTask(parent, ctx, accessMap)) throw new Error("Bạn không có quyền xem");
 
   const rows = await prisma.task.findMany({
     where: { parentId },

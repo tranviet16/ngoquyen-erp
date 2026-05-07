@@ -4,6 +4,12 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserContext, type UserContext } from "@/lib/department-rbac";
 import {
+  getDeptAccessMap,
+  hasDeptAccess,
+  assertDeptAccess,
+  type DeptAccessMap,
+} from "@/lib/dept-access";
+import {
   canMoveTask,
   isValidTaskStatus,
   TASK_STATUSES,
@@ -33,19 +39,21 @@ async function requireSession(): Promise<{ userId: string; role: string }> {
   return { userId: session.user.id, role: session.user.role ?? "viewer" };
 }
 
-async function requireContext(): Promise<{ ctx: UserContext; role: string }> {
+async function requireContext(): Promise<{
+  ctx: UserContext;
+  role: string;
+  accessMap: DeptAccessMap;
+}> {
   const { userId, role } = await requireSession();
   const ctx = await getUserContext(userId);
   if (!ctx) throw new Error("Không tìm thấy thông tin người dùng");
-  return { ctx, role };
+  const accessMap = await getDeptAccessMap(userId);
+  return { ctx, role, accessMap };
 }
 
-function canViewTask(task: Task, ctx: UserContext, role: string): boolean {
-  if (role === "admin") return true;
-  if (ctx.isDirector) return true;
+function canViewTask(task: Task, ctx: UserContext, accessMap: DeptAccessMap): boolean {
   if (task.creatorId === ctx.userId) return true;
-  if (ctx.departmentId === task.deptId) return true;
-  return false;
+  return hasDeptAccess(accessMap, task.deptId, "read");
 }
 
 function canEditTask(task: Task, ctx: UserContext, role: string): boolean {
@@ -87,15 +95,14 @@ export async function listTasksForBoard(opts: {
   ctx: UserContext;
   role: string;
 }> {
-  const { ctx, role } = await requireContext();
+  const { ctx, role, accessMap } = await requireContext();
 
   const where: Prisma.TaskWhereInput = { parentId: null };
 
-  if (role !== "admin" && !ctx.isDirector) {
+  if (accessMap.scope === "scoped") {
+    const ids = Array.from(accessMap.grants.keys());
     const orClauses: Prisma.TaskWhereInput[] = [{ creatorId: ctx.userId }];
-    if (ctx.departmentId !== null) {
-      orClauses.push({ deptId: ctx.departmentId });
-    }
+    if (ids.length > 0) orClauses.push({ deptId: { in: ids } });
     where.OR = orClauses;
   }
 
@@ -136,7 +143,7 @@ export async function listTasksForBoard(opts: {
 }
 
 export async function getTaskById(id: number): Promise<TaskWithRelations> {
-  const { ctx, role } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
   const t = await prisma.task.findUnique({
     where: { id },
     include: {
@@ -147,7 +154,8 @@ export async function getTaskById(id: number): Promise<TaskWithRelations> {
     },
   });
   if (!t) throw new Error("Không tìm thấy task");
-  if (!canViewTask(t, ctx, role)) throw new Error("Bạn không có quyền xem task này");
+  if (!canViewTask(t, ctx, accessMap))
+    throw new Error("Bạn không có quyền xem task này");
   return t as TaskWithRelations;
 }
 
@@ -158,6 +166,7 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
   const { ctx, role } = await requireContext();
 
   // Permission: member of dept | leader | admin/director
+  // Cross-dept "edit" grant KHÔNG cho phép tạo task — giữ rule cũ.
   const isMember = ctx.departmentId === data.deptId;
   const allowed = role === "admin" || ctx.isDirector || ctx.isLeader || isMember;
   if (!allowed) throw new Error("Bạn không có quyền tạo task ở phòng này");
@@ -208,12 +217,15 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
 
 export async function updateTask(id: number, input: UpdateTaskInput): Promise<Task> {
   const data = updateTaskSchema.parse(input);
-  const { ctx, role } = await requireContext();
+  const { ctx, role, accessMap } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.task.findUnique({ where: { id } });
     if (!existing) throw new Error("Không tìm thấy task");
-    if (!canEditTask(existing, ctx, role)) throw new Error("Bạn không có quyền sửa task này");
+    const allowedByOldRule = canEditTask(existing, ctx, role);
+    const allowedByGrant = hasDeptAccess(accessMap, existing.deptId, "edit");
+    if (!allowedByOldRule && !allowedByGrant)
+      throw new Error("Bạn không có quyền sửa task này");
     if (existing.status === "done") throw new Error("Task đã hoàn thành, không thể sửa");
 
     const patch: Prisma.TaskUpdateInput = {};

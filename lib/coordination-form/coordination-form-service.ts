@@ -6,6 +6,7 @@ import {
   canSubmitFormToDept,
   type UserContext,
 } from "@/lib/department-rbac";
+import { getDeptAccessMap, hasDeptAccess, type DeptAccessMap } from "@/lib/dept-access";
 import { nextStatus, type FormStatus, type FormAction } from "./state-machine";
 import { nextFormCode, isUniqueViolation } from "./code-generator";
 import type { CreateDraftInput, UpdateDraftInput } from "./schemas";
@@ -29,20 +30,23 @@ async function requireSession(): Promise<{ userId: string; role: string }> {
   return { userId: session.user.id, role: session.user.role ?? "viewer" };
 }
 
-async function requireContext(): Promise<{ ctx: UserContext; role: string }> {
+async function requireContext(): Promise<{ ctx: UserContext; role: string; accessMap: DeptAccessMap }> {
   const { userId, role } = await requireSession();
   const ctx = await getUserContext(userId);
   if (!ctx) throw new Error("Không tìm thấy thông tin người dùng");
-  return { ctx, role };
+  const accessMap = await getDeptAccessMap(userId);
+  return { ctx, role, accessMap };
 }
 
-function canView(form: CoordinationForm, ctx: UserContext, role: string): boolean {
-  return (
-    role === "admin" ||
-    form.creatorId === ctx.userId ||
-    (ctx.isLeader && ctx.departmentId === form.executorDeptId) ||
-    ctx.isDirector
-  );
+function canView(
+  form: CoordinationForm,
+  ctx: UserContext,
+  accessMap: DeptAccessMap,
+): boolean {
+  if (form.creatorId === ctx.userId) return true;
+  if (hasDeptAccess(accessMap, form.creatorDeptId, "read")) return true;
+  if (hasDeptAccess(accessMap, form.executorDeptId, "read")) return true;
+  return false;
 }
 
 // ─── Queries ────────────────────────────────────────────────────────────────
@@ -58,7 +62,7 @@ export async function listForms(opts: {
   pageSize: number;
   pendingDirectorCount: number;
 }> {
-  const { ctx, role } = await requireContext();
+  const { ctx, role, accessMap } = await requireContext();
   const page = Math.max(1, opts.page ?? 1);
 
   const where: Record<string, unknown> = {};
@@ -66,10 +70,12 @@ export async function listForms(opts: {
 
   if (opts.mine) {
     where.creatorId = ctx.userId;
-  } else if (role !== "admin") {
+  } else if (accessMap.scope === "scoped") {
+    const viewableIds = Array.from(accessMap.grants.keys());
     const orClauses: Record<string, unknown>[] = [{ creatorId: ctx.userId }];
-    if (ctx.isLeader && ctx.departmentId !== null) {
-      orClauses.push({ executorDeptId: ctx.departmentId });
+    if (viewableIds.length > 0) {
+      orClauses.push({ creatorDeptId: { in: viewableIds } });
+      orClauses.push({ executorDeptId: { in: viewableIds } });
     }
     if (ctx.isDirector) {
       orClauses.push({ status: { in: ["pending_director", "approved", "rejected"] } });
@@ -101,7 +107,7 @@ export async function listForms(opts: {
 }
 
 export async function getFormById(id: number): Promise<FormWithRelations | null> {
-  const { ctx, role } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
   const form = await prisma.coordinationForm.findUnique({
     where: { id },
     include: {
@@ -115,7 +121,7 @@ export async function getFormById(id: number): Promise<FormWithRelations | null>
     },
   });
   if (!form) return null;
-  if (!canView(form, ctx, role)) throw new Error("Bạn không có quyền xem phiếu này");
+  if (!canView(form, ctx, accessMap)) throw new Error("Bạn không có quyền xem phiếu này");
   return form as FormWithRelations;
 }
 

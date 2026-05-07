@@ -14,8 +14,9 @@
  * not pre-populated. Acceptable for Phase 1 correctness.
  *
  * Bulk operations (createMany, updateMany, deleteMany, upsert, nested writes)
- * bypass this extension. A runtime guard throws when these are called without
- * { __skipAudit: true } to force a conscious decision by the caller.
+ * bypass this extension. A runtime guard throws when these are called outside
+ * a bypassAudit(() => ...) AsyncLocalStorage scope, forcing the caller to
+ * make a conscious decision (and to also write the audit row manually).
  *
  * Transaction guarantee: audit log writes are performed inside a
  * base.$transaction([...]) call. If the audit insert fails the error is logged
@@ -29,7 +30,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
-import { getCurrentUserId } from "./async-context";
+import { getCurrentUserId, isAuditBypassed } from "./async-context";
 import { env } from "./env";
 
 // Models managed by Better Auth — skip auditing to avoid noise.
@@ -118,37 +119,37 @@ function createPrismaClient() {
     query: {
       $allModels: {
         async createMany({ args, query, model }) {
-          if (!(args as unknown as Record<string, unknown>).__skipAudit) {
+          if (!isAuditBypassed()) {
             throw new Error(
               `[audit] ${model}.createMany bypasses audit middleware. ` +
-              "Pass __skipAudit: true in args if intentional."
+              "Wrap the call in bypassAudit(() => ...) if intentional."
             );
           }
           return query(args);
         },
         async updateMany({ args, query, model }) {
-          if (!(args as unknown as Record<string, unknown>).__skipAudit) {
+          if (!isAuditBypassed()) {
             throw new Error(
               `[audit] ${model}.updateMany bypasses audit middleware. ` +
-              "Pass __skipAudit: true in args if intentional."
+              "Wrap the call in bypassAudit(() => ...) if intentional."
             );
           }
           return query(args);
         },
         async deleteMany({ args, query, model }) {
-          if (!(args as unknown as Record<string, unknown>).__skipAudit) {
+          if (!isAuditBypassed()) {
             throw new Error(
               `[audit] ${model}.deleteMany bypasses audit middleware. ` +
-              "Pass __skipAudit: true in args if intentional."
+              "Wrap the call in bypassAudit(() => ...) if intentional."
             );
           }
           return query(args);
         },
         async upsert({ args, query, model }) {
-          if (!(args as unknown as Record<string, unknown>).__skipAudit) {
+          if (!isAuditBypassed()) {
             throw new Error(
               `[audit] ${model}.upsert bypasses audit middleware. ` +
-              "Pass __skipAudit: true in args if intentional."
+              "Wrap the call in bypassAudit(() => ...) if intentional."
             );
           }
           return query(args);

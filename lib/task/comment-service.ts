@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserContext, type UserContext } from "@/lib/department-rbac";
+import { getDeptAccessMap, hasDeptAccess, type DeptAccessMap } from "@/lib/dept-access";
 import { broadcastToUser } from "@/lib/notification/sse-emitter";
 import { createNotification } from "@/lib/notification/notification-service";
 import { canEditComment, canDeleteComment, COMMENT_EDIT_WINDOW_MS } from "./comment-rbac";
@@ -27,23 +28,22 @@ async function requireSession(): Promise<{ userId: string; role: string }> {
   return { userId: session.user.id, role: session.user.role ?? "viewer" };
 }
 
-async function requireContext(): Promise<{ ctx: UserContext; role: string }> {
+async function requireContext(): Promise<{ ctx: UserContext; role: string; accessMap: DeptAccessMap }> {
   const { userId, role } = await requireSession();
   const ctx = await getUserContext(userId);
   if (!ctx) throw new Error("Không tìm thấy thông tin người dùng");
-  return { ctx, role };
+  const accessMap = await getDeptAccessMap(userId);
+  return { ctx, role, accessMap };
 }
 
-function canViewTask(
+function canAccessTask(
   task: { creatorId: string; deptId: number },
   ctx: UserContext,
-  role: string,
+  accessMap: DeptAccessMap,
+  min: "read" | "comment" | "edit",
 ): boolean {
-  if (role === "admin") return true;
-  if (ctx.isDirector) return true;
   if (task.creatorId === ctx.userId) return true;
-  if (ctx.departmentId === task.deptId) return true;
-  return false;
+  return hasDeptAccess(accessMap, task.deptId, min);
 }
 
 function sanitizeBody(raw: string): string {
@@ -59,13 +59,13 @@ function shorten(s: string, n = 120): string {
 }
 
 export async function listComments(taskId: number): Promise<CommentRow[]> {
-  const { ctx, role } = await requireContext();
+  const { ctx, role, accessMap } = await requireContext();
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { id: true, deptId: true, creatorId: true },
   });
   if (!task) throw new Error("Không tìm thấy task");
-  if (!canViewTask(task, ctx, role)) throw new Error("Bạn không có quyền xem task này");
+  if (!canAccessTask(task, ctx, accessMap, "read")) throw new Error("Bạn không có quyền xem task này");
 
   const rows = await prisma.taskComment.findMany({
     where: { taskId },
@@ -88,7 +88,7 @@ export async function listComments(taskId: number): Promise<CommentRow[]> {
 
 export async function createComment(taskId: number, bodyRaw: string): Promise<CommentRow> {
   const body = sanitizeBody(bodyRaw);
-  const { ctx, role } = await requireContext();
+  const { ctx, role, accessMap } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const task = await tx.task.findUnique({
@@ -96,7 +96,7 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
       select: { id: true, deptId: true, creatorId: true, assigneeId: true, title: true },
     });
     if (!task) throw new Error("Không tìm thấy task");
-    if (!canViewTask(task, ctx, role)) throw new Error("Bạn không có quyền bình luận task này");
+    if (!canAccessTask(task, ctx, accessMap, "comment")) throw new Error("Bạn không có quyền bình luận task này");
 
     const created = await tx.taskComment.create({
       data: { taskId, authorId: ctx.userId, body },

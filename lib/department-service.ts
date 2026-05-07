@@ -1,5 +1,7 @@
 import { prisma } from "./prisma";
 import type { Department, User } from "@prisma/client";
+import { writeAuditLog } from "./audit";
+import { bypassAudit } from "./async-context";
 
 export type DepartmentMember = Pick<
   User,
@@ -70,12 +72,47 @@ export async function assignUserToDept(
   if (isLeader && departmentId === null) {
     throw new Error("Lãnh đạo phòng phải thuộc 1 phòng ban");
   }
-  await prisma.user.update({
+
+  const existing = await prisma.user.findUnique({
     where: { id: userId },
-    data: {
-      departmentId,
-      isLeader: departmentId === null ? false : isLeader,
-    },
+    select: { departmentId: true },
+  });
+  const oldDeptId = existing?.departmentId ?? null;
+  // A→B (both non-null and different): reset grants. null→X keeps grants.
+  const shouldResetGrants =
+    oldDeptId !== null && departmentId !== null && oldDeptId !== departmentId;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        departmentId,
+        isLeader: departmentId === null ? false : isLeader,
+      },
+    });
+    if (shouldResetGrants) {
+      const grants = await tx.userDeptAccess.findMany({ where: { userId } });
+      await bypassAudit(() =>
+        tx.userDeptAccess.deleteMany({ where: { userId } }),
+      );
+      for (const g of grants) {
+        await writeAuditLog({
+          tableName: "user_dept_access",
+          recordId: `${g.userId}:${g.deptId}`,
+          action: "delete",
+          before: { level: g.level },
+        });
+      }
+    }
+    if (oldDeptId !== departmentId) {
+      await writeAuditLog({
+        tableName: "users",
+        recordId: userId,
+        action: "dept_change",
+        before: { departmentId: oldDeptId },
+        after: { departmentId },
+      });
+    }
   });
 }
 
