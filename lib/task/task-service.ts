@@ -317,8 +317,49 @@ export async function moveTask(id: number, toStatus: TaskStatus, toOrder?: numbe
       );
     }
 
+    if (existing.parentId !== null && toStatus === "done") {
+      await maybeBumpParentToReview(tx, existing.parentId, ctx.userId);
+    }
+
     return updated;
   });
+}
+
+type TaskTxClient = Pick<typeof prisma, "task" | "notification">;
+
+export async function maybeBumpParentToReview(
+  tx: TaskTxClient,
+  parentId: number,
+  actingUserId: string,
+): Promise<boolean> {
+  const parent = await tx.task.findUnique({ where: { id: parentId } });
+  if (!parent || parent.status === "review" || parent.status === "done") return false;
+  const [total, doneCount] = await Promise.all([
+    tx.task.count({ where: { parentId } }),
+    tx.task.count({ where: { parentId, status: "done" } }),
+  ]);
+  if (total === 0 || total !== doneCount) return false;
+
+  await tx.task.update({
+    where: { id: parentId },
+    data: { status: "review", completedAt: null },
+  });
+  const recipients = new Set<string>();
+  if (parent.assigneeId && parent.assigneeId !== actingUserId) recipients.add(parent.assigneeId);
+  if (parent.creatorId !== actingUserId) recipients.add(parent.creatorId);
+  for (const uid of recipients) {
+    await createNotification(
+      {
+        userId: uid,
+        type: "task_status_changed",
+        title: 'Task chuyển sang "Chờ duyệt" (mọi việc nhỏ đã hoàn thành)',
+        body: parent.title,
+        link: `/cong-viec?taskId=${parent.id}`,
+      },
+      tx,
+    );
+  }
+  return true;
 }
 
 export async function deleteTask(id: number): Promise<void> {

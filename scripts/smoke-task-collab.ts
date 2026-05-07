@@ -16,6 +16,7 @@ import { canDeleteComment, canEditComment, COMMENT_EDIT_WINDOW_MS } from "../lib
 import { canDeleteAttachment } from "../lib/task/attachment-rbac";
 import { ALLOWED_MIME, MAX_ATTACHMENT_BYTES } from "../lib/task/attachment-service";
 import { getChildCounts } from "../lib/task/subtask-service";
+import { maybeBumpParentToReview } from "../lib/task/task-service";
 import { LocalDiskStore, safeFilename } from "../lib/storage/local-disk";
 
 const PASSWORD = "changeme123";
@@ -215,9 +216,7 @@ async function testStorage() {
 async function testSubtasks(fx: Fixture) {
   console.log("\n[test 5] subtasks: child counts + cascade + depth");
 
-  // Cleanup any prior smoke tasks
-  await prisma.task.deleteMany({}).catch(() => {});
-  // ↑ deleteMany would be blocked by audit middleware; use single-row instead
+  // Cleanup any prior smoke tasks (single-row only — audit middleware blocks deleteMany)
   const prior = await prisma.task.findMany({
     where: { creatorId: fx.deptA.member.id, title: { startsWith: "smoke-sub" } },
   });
@@ -275,6 +274,57 @@ async function testSubtasks(fx: Fixture) {
 }
 
 // ────────────────────────────────────────────────────────────────────
+// Test 5b: auto-transition parent → review when all children done
+// ────────────────────────────────────────────────────────────────────
+async function testAutoTransitionParent(fx: Fixture) {
+  console.log("\n[test 5b] auto-transition parent to review");
+  const parent = await prisma.task.create({
+    data: {
+      title: "smoke-auto-parent",
+      deptId: fx.deptA.id,
+      creatorId: fx.deptA.member.id,
+      assigneeId: fx.deptA.leader.id,
+      status: "doing",
+    },
+  });
+  const c1 = await prisma.task.create({
+    data: { title: "ap-c1", deptId: fx.deptA.id, creatorId: fx.deptA.member.id, parentId: parent.id, status: "done" },
+  });
+  const c2 = await prisma.task.create({
+    data: { title: "ap-c2", deptId: fx.deptA.id, creatorId: fx.deptA.member.id, parentId: parent.id, status: "doing" },
+  });
+
+  // Not all done yet → no transition
+  let bumped = await prisma.$transaction((tx) => maybeBumpParentToReview(tx, parent.id, fx.deptA.member.id));
+  let p = await prisma.task.findUnique({ where: { id: parent.id } });
+  check("partial done: parent stays at 'doing'", !bumped && p?.status === "doing");
+
+  // Mark last child done
+  await prisma.task.update({ where: { id: c2.id }, data: { status: "done" } });
+  bumped = await prisma.$transaction((tx) => maybeBumpParentToReview(tx, parent.id, fx.deptA.member.id));
+  p = await prisma.task.findUnique({ where: { id: parent.id } });
+  check("all done: parent bumped to 'review'", bumped && p?.status === "review", `got ${p?.status}`);
+  check("completedAt cleared on bump", p?.completedAt === null);
+
+  // Idempotent: re-running on a parent already in review does nothing
+  const bumpedAgain = await prisma.$transaction((tx) => maybeBumpParentToReview(tx, parent.id, fx.deptA.member.id));
+  check("idempotent: no re-bump when already review", !bumpedAgain);
+
+  // Notification fan-out: assignee (leader) + creator (member) — minus actor (member)
+  const notes = await prisma.notification.findMany({
+    where: { type: "task_status_changed", body: parent.title },
+  });
+  const recipients = new Set(notes.map((n) => n.userId));
+  check("notified assignee", recipients.has(fx.deptA.leader.id));
+  check("did NOT notify acting user", !recipients.has(fx.deptA.member.id));
+
+  // Cleanup
+  await prisma.task.delete({ where: { id: c1.id } });
+  await prisma.task.delete({ where: { id: c2.id } });
+  await prisma.task.delete({ where: { id: parent.id } });
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Test 6: listTasksForBoard excludes children (verify by raw query)
 // ────────────────────────────────────────────────────────────────────
 async function testBoardExcludesChildren(fx: Fixture) {
@@ -311,6 +361,7 @@ async function main() {
   testAttachmentRbac(fx);
   await testStorage();
   await testSubtasks(fx);
+  await testAutoTransitionParent(fx);
   await testBoardExcludesChildren(fx);
 
   console.log(`\n=== ${pass} pass / ${fail} fail ===`);
