@@ -45,6 +45,9 @@ const TX_TYPE_MAP: Record<string, string> = {
   "lay hang": "lay_hang",
   "nhan cong": "nhan_cong",
   "may moc": "may_moc",
+  "tra tien": "tra_tien",
+  "thanh toan": "tra_tien",
+  "tra hang": "tra_hang",
 };
 
 export const DuAnXayDungAdapter: ImportAdapter = {
@@ -135,7 +138,11 @@ export const DuAnXayDungAdapter: ImportAdapter = {
           const dateVal = parseExcelDate(r["Ngày"] ?? null);
           if (!dateVal) continue;
           const loaiGd = normHeader(r["Loại Giao Dịch"] ?? r["Loại"] ?? "");
-          const txType = TX_TYPE_MAP[loaiGd] ?? "lay_hang";
+          const txType = TX_TYPE_MAP[loaiGd];
+          if (!txType) {
+            console.warn(`[du-an-xay-dung] Unknown transaction type "${loaiGd}" — skipping row ${rowIdx}`);
+            continue;
+          }
           const itemCode = String(r["Mã Item"] ?? r["Mã VT"] ?? "").trim();
           rows.push({
             rowIndex: rowIdx++,
@@ -388,29 +395,86 @@ export const DuAnXayDungAdapter: ImportAdapter = {
       const matrix = readMatrix(wb.Sheets[debtSheetName]);
       const headerIdx = findHeaderRow(matrix, ["nha cc", "nha thau"]);
       if (headerIdx >= 0) {
-        const { rows: rawRows } = buildRowsFromMatrix(matrix, headerIdx);
-        for (const r of rawRows) {
-          const supplierName = String(r["Nhà CC / Nhà Thầu"] ?? r["Nhà CC"] ?? "").trim();
+        // Resolve column indices positionally — sheet has duplicated headers
+        // (Lấy Hàng / Đã TT / Còn Nợ appear twice: HĐ pair first, TT pair second).
+        // buildRowsFromMatrix dedupes by overwriting, so we read the matrix directly.
+        const headerCells = (matrix[headerIdx] || []).map((h) =>
+          String(h ?? "").replace(/\s+/g, " ").trim().toLowerCase(),
+        );
+        const findAll = (key: string): number[] => {
+          const k = key.toLowerCase();
+          const idxs: number[] = [];
+          headerCells.forEach((h, i) => {
+            if (h === k) idxs.push(i);
+          });
+          return idxs;
+        };
+        const findFirst = (...keys: string[]): number => {
+          for (const k of keys) {
+            const idx = headerCells.findIndex((h) => h === k.toLowerCase());
+            if (idx >= 0) return idx;
+          }
+          return -1;
+        };
+        const layHangCols = findAll("lấy hàng"); // [HĐ, TT]
+        const daTtCols = findAll("đã tt"); // [HĐ, TT]
+        const conNoCols = findAll("còn nợ"); // [HĐ, TT]
+        const cSupplier = findFirst("nhà cc / nhà thầu", "nhà cc");
+        const cItem = findFirst("tên hàng / dv", "tên hàng");
+        const cQty = findFirst("sl");
+        const cUnit = findFirst("đvt");
+        const cMa = findFirst("mã");
+
+        const colHd = {
+          taken: layHangCols[0] ?? -1,
+          paid: daTtCols[0] ?? -1,
+          balance: conNoCols[0] ?? -1,
+        };
+        const colTt = {
+          taken: layHangCols[1] ?? -1,
+          paid: daTtCols[1] ?? -1,
+          balance: conNoCols[1] ?? -1,
+        };
+
+        const safeNum = (row: unknown[], col: number): number =>
+          col >= 0 ? num(row[col] ?? 0) : 0;
+        const safeStr = (row: unknown[], col: number): string =>
+          col >= 0 ? String(row[col] ?? "").trim() : "";
+
+        for (let i = headerIdx + 1; i < matrix.length; i++) {
+          const row = matrix[i] || [];
+          if (row.every((c) => c == null || c === "")) continue;
+          const supplierName = safeStr(row, cSupplier);
           if (!supplierName || supplierName.includes("TỔNG") || supplierName.startsWith("🔹"))
             continue;
-          const itemName = String(r["Tên Hàng / DV"] ?? r["Tên Hàng"] ?? "").trim();
-          // Use thực tế (TT) columns 11-13 (Lấy Hàng TT, Đã TT TT, Còn Nợ TT)
-          const amountTaken = num(r["Lấy Hàng_2"] ?? r["Lấy Hàng "] ?? r["Lấy Hàng"] ?? 0);
-          const amountPaid = num(r["Đã TT_2"] ?? r["Đã TT "] ?? r["Đã TT"] ?? 0);
-          const balance = num(r["Còn Nợ_2"] ?? r["Còn Nợ "] ?? r["Còn Nợ"] ?? 0);
-          if (amountTaken === 0 && amountPaid === 0 && balance === 0) continue;
+          const itemName = safeStr(row, cItem);
+          const amountTakenHd = safeNum(row, colHd.taken);
+          const amountPaidHd = safeNum(row, colHd.paid);
+          const balanceHd = safeNum(row, colHd.balance);
+          const amountTaken = safeNum(row, colTt.taken);
+          const amountPaid = safeNum(row, colTt.paid);
+          const balance = safeNum(row, colTt.balance);
+          if (
+            amountTaken === 0 && amountPaid === 0 && balance === 0 &&
+            amountTakenHd === 0 && amountPaidHd === 0 && balanceHd === 0
+          )
+            continue;
+          const qtyVal = cQty >= 0 ? row[cQty] : null;
           rows.push({
             rowIndex: rowIdx++,
             data: {
               _type: "debt-snapshot",
               supplierName,
               itemName: itemName || undefined,
-              qty: r["SL"] ? num(r["SL"]) : null,
-              unit: String(r["ĐVT"] ?? "").trim() || undefined,
+              qty: qtyVal != null && qtyVal !== "" ? num(qtyVal) : null,
+              unit: safeStr(row, cUnit) || undefined,
               amountTaken,
               amountPaid,
               balance,
-              note: String(r["Mã"] ?? "").trim() || undefined,
+              amountTakenHd,
+              amountPaidHd,
+              balanceHd,
+              note: safeStr(row, cMa) || undefined,
             },
           });
         }
@@ -687,7 +751,9 @@ export const DuAnXayDungAdapter: ImportAdapter = {
         await db.$executeRaw`
           INSERT INTO project_supplier_debt_snapshots
             ("projectId", "supplierName", "itemName", qty, unit, "unitPrice",
-             "amountTaken", "amountPaid", balance, "asOfDate", note,
+             "amountTaken", "amountPaid", balance,
+             "amountTakenHd", "amountPaidHd", "balanceHd",
+             "asOfDate", note,
              "importRunId", "createdAt", "updatedAt")
           VALUES
             (${projectId}, ${String(row.data.supplierName ?? "")},
@@ -698,6 +764,9 @@ export const DuAnXayDungAdapter: ImportAdapter = {
              ${row.data.amountTaken != null ? Number(row.data.amountTaken) : null},
              ${row.data.amountPaid != null ? Number(row.data.amountPaid) : null},
              ${row.data.balance != null ? Number(row.data.balance) : null},
+             ${row.data.amountTakenHd != null ? Number(row.data.amountTakenHd) : null},
+             ${row.data.amountPaidHd != null ? Number(row.data.amountPaidHd) : null},
+             ${row.data.balanceHd != null ? Number(row.data.balanceHd) : null},
              ${null},
              ${row.data.note ? String(row.data.note) : null},
              ${importRunId ?? null}, NOW(), NOW())
