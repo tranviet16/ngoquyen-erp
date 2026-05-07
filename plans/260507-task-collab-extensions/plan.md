@@ -32,9 +32,9 @@ Extend the kanban Task model (Plan C) with collaboration primitives so a task is
 
 ## Phase files
 
-- phase-01-task-comments.md (TODO)
-- phase-02-task-attachments.md (TODO)
-- phase-03-task-subtasks.md (TODO)
+- [phase-01-task-comments.md](phase-01-task-comments.md) — pending
+- [phase-02-task-attachments.md](phase-02-task-attachments.md) — pending (depends on 1 for drawer mount point only)
+- [phase-03-task-subtasks.md](phase-03-task-subtasks.md) — pending (depends on 1 for drawer mount point only)
 
 ## Decisions (locked 2026-05-07)
 
