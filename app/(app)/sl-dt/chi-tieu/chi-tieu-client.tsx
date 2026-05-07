@@ -14,6 +14,11 @@ interface Props {
 
 const SETTLEMENT_OPTIONS = ["Đã quyết toán", "Tạm dừng", "Đã ký HĐ", "Đã ký phụ lục"];
 
+const groupCls = {
+  sl: "bg-amber-50 dark:bg-amber-950/30",
+  dt: "bg-emerald-50 dark:bg-emerald-950/30",
+};
+
 interface EditForm {
   targetMilestone: string;
   milestoneText: string;
@@ -63,8 +68,8 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions }: Props) {
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">Dự toán phần thô</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">SL lũy kế đầu kỳ</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">DT lũy kế đầu kỳ</th>
-            <th colSpan={2} className="px-2 py-1 text-center border-r">Sản lượng kỳ này</th>
-            <th colSpan={2} className="px-2 py-1 text-center border-r">Doanh thu kỳ này</th>
+            <th colSpan={2} className={`px-2 py-1 text-center border-r border-l ${groupCls.sl}`}>Sản lượng kỳ này</th>
+            <th colSpan={2} className={`px-2 py-1 text-center border-r border-l ${groupCls.dt}`}>Doanh thu kỳ này</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[100px]">SL trát</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[100px]">DT trát</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[120px] bg-blue-50">DT cần thực hiện theo tiến độ</th>
@@ -76,10 +81,10 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions }: Props) {
             <th rowSpan={2} className="px-2 py-1 text-center w-20">Thao tác</th>
           </tr>
           <tr>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Chỉ tiêu</th>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Thực hiện</th>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Chỉ tiêu</th>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Thực hiện</th>
+            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.sl}`}>Chỉ tiêu</th>
+            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.sl}`}>Thực hiện</th>
+            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.dt}`}>Chỉ tiêu</th>
+            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.dt}`}>Thực hiện</th>
           </tr>
         </thead>
         <tbody>
@@ -97,16 +102,16 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions }: Props) {
               <tr key={`${r.kind}-${idx}`} className={rowCls}>
                 <td className="px-2 py-1 text-center text-muted-foreground sticky left-0 bg-inherit border-r">{isLot ? stt : ""}</td>
                 <td className={`px-2 py-1 border-r ${isLot ? "pl-3" : ""}`}>{r.lotName}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.estimateValue)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.prevSlLuyKeTho)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.prevDtThoLuyKe)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.slKeHoachKy)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.slThucKyTho)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.dtKeHoachKy)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.dtThoKy)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.slTrat)}</td>
-                <td className="px-2 py-1 text-right border-r">{fmtNum(r.dtTratKy)}</td>
-                <td className="px-2 py-1 text-right border-r bg-blue-50/50 text-blue-900 font-medium">{fmtNum(r.dtCanThucHien)}</td>
+                <td className="px-2 py-1 text-right border-r tabular-nums">{fmtNum(r.estimateValue)}</td>
+                <td className="px-2 py-1 text-right border-r tabular-nums">{fmtNum(r.prevSlLuyKeTho)}</td>
+                <td className="px-2 py-1 text-right border-r tabular-nums">{fmtNum(r.prevDtThoLuyKe)}</td>
+                <td className={`px-2 py-1 text-right border-r tabular-nums ${groupCls.sl}`}>{fmtNum(r.slKeHoachKy)}</td>
+                <td className={`px-2 py-1 text-right border-r tabular-nums ${groupCls.sl}`}>{fmtNum(r.slThucKyTho)}</td>
+                <td className={`px-2 py-1 text-right border-r tabular-nums ${groupCls.dt}`}>{fmtNum(r.dtKeHoachKy)}</td>
+                <td className={`px-2 py-1 text-right border-r tabular-nums ${groupCls.dt}`}>{fmtNum(r.dtThoKy)}</td>
+                <td className="px-2 py-1 text-right border-r tabular-nums">{fmtNum(r.slTrat)}</td>
+                <td className="px-2 py-1 text-right border-r tabular-nums">{fmtNum(r.dtTratKy)}</td>
+                <td className="px-2 py-1 text-right border-r tabular-nums bg-blue-50/50 text-blue-900 font-medium">{fmtNum(r.dtCanThucHien)}</td>
 
                 {/* Công việc cần hoàn thành theo DT lũy kế (targetMilestone, fallback to suggestedTarget) */}
                 <td className="px-1 py-0.5 border-r">
