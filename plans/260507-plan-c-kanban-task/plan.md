@@ -1,6 +1,6 @@
 ---
 title: "Plan C — Kanban + Task auto-create + Notification"
-status: pending
+status: completed
 priority: P1
 effort: "8-12h"
 dependencies: ["260507-plan-b-coordination-form"]
@@ -30,12 +30,12 @@ Plan B: [Plan B](../260507-plan-b-coordination-form/plan.md)
 
 | # | Phase | File | Status | Effort |
 |---|-------|------|--------|--------|
-| 1 | Schema (Task + Notification) + migration | [phase-01-schema.md](phase-01-schema.md) | pending | 1h |
-| 2 | Task service + Notification service + RBAC | [phase-02-services.md](phase-02-services.md) | pending | 2-3h |
-| 3 | Auto-create hook into approveByDirector + notification triggers | [phase-03-hooks.md](phase-03-hooks.md) | pending | 1h |
-| 4 | Kanban board UI (@dnd-kit + drag-drop) | [phase-04-kanban-ui.md](phase-04-kanban-ui.md) | pending | 3-4h |
-| 5 | Notification bell + list page | [phase-05-notifications-ui.md](phase-05-notifications-ui.md) | pending | 1-2h |
-| 6 | Verify + smoke test | [phase-06-verify.md](phase-06-verify.md) | pending | 30m |
+| 1 | Schema (Task + Notification) + migration | [phase-01-schema.md](phase-01-schema.md) | completed | 1h |
+| 2 | Task service + Notification service + RBAC | [phase-02-services.md](phase-02-services.md) | completed | 2-3h |
+| 3 | Auto-create hook into approveByDirector + notification triggers | [phase-03-hooks.md](phase-03-hooks.md) | completed | 1h |
+| 4 | Kanban board UI (@dnd-kit + drag-drop) | [phase-04-kanban-ui.md](phase-04-kanban-ui.md) | completed | 3-4h |
+| 5 | Notification bell + list page | [phase-05-notifications-ui.md](phase-05-notifications-ui.md) | completed | 1-2h |
+| 6 | Verify + smoke test | [phase-06-verify.md](phase-06-verify.md) | completed | 30m |
 
 ## Permission matrix (Plan C)
 
