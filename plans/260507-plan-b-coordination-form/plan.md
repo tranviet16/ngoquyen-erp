@@ -1,6 +1,6 @@
 ---
 title: "Plan B — Coordination Form + 3-Step Approval"
-status: pending
+status: completed
 priority: P1
 effort: "8-12h"
 dependencies: ["260506-plan-a-department-foundation"]
@@ -32,11 +32,11 @@ Plan A (foundation): [Plan A](../260506-plan-a-department-foundation/plan.md)
 
 | # | Phase | File | Status | Effort |
 |---|-------|------|--------|--------|
-| 1 | Schema + migration + code generator | [phase-01-schema-and-codegen.md](phase-01-schema-and-codegen.md) | pending | 1h |
-| 2 | Service layer + state machine | [phase-02-service-layer.md](phase-02-service-layer.md) | pending | 2-3h |
-| 3 | List + Create UI | [phase-03-list-create-ui.md](phase-03-list-create-ui.md) | pending | 2-3h |
-| 4 | Detail + Signature panel UI | [phase-04-detail-signature-ui.md](phase-04-detail-signature-ui.md) | pending | 2-3h |
-| 5 | Verify + nav link + smoke test | [phase-05-verify.md](phase-05-verify.md) | pending | 30m |
+| 1 | Schema + migration + code generator | [phase-01-schema-and-codegen.md](phase-01-schema-and-codegen.md) | completed | 1h |
+| 2 | Service layer + state machine | [phase-02-service-layer.md](phase-02-service-layer.md) | completed | 2-3h |
+| 3 | List + Create UI | [phase-03-list-create-ui.md](phase-03-list-create-ui.md) | completed | 2-3h |
+| 4 | Detail + Signature panel UI | [phase-04-detail-signature-ui.md](phase-04-detail-signature-ui.md) | completed | 2-3h |
+| 5 | Verify + nav link + smoke test | [phase-05-verify.md](phase-05-verify.md) | completed | 30m |
 
 ## State machine (canonical)
 
