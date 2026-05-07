@@ -41,6 +41,7 @@ interface DeptOpt {
 interface MemberOpt {
   id: string;
   name: string;
+  email: string;
 }
 interface Filters {
   deptId: number | null;
@@ -616,7 +617,7 @@ function EditTaskDialog({
         {!task.parentId && (
           <SubtaskSection parentId={task.id} members={members} canEditParent={canEdit} />
         )}
-        <CommentSection taskId={task.id} currentUserId={currentUserId} />
+        <CommentSection taskId={task.id} currentUserId={currentUserId} members={members} />
         <AttachmentSection taskId={task.id} />
         <div className="flex justify-between gap-2 pt-2 border-t">
           <div>

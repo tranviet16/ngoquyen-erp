@@ -26,9 +26,50 @@ interface CommentRow {
   canDelete: boolean;
 }
 
+interface MemberOpt {
+  id: string;
+  name: string;
+  email: string;
+}
+
 interface Props {
   taskId: number;
   currentUserId: string;
+  members?: MemberOpt[];
+}
+
+interface MentionState {
+  active: boolean;
+  query: string;
+  start: number;
+  end: number;
+  highlight: number;
+}
+
+const EMPTY_MENTION: MentionState = { active: false, query: "", start: 0, end: 0, highlight: 0 };
+
+function detectMention(value: string, caret: number): MentionState {
+  if (caret <= 0) return EMPTY_MENTION;
+  let i = caret - 1;
+  while (i >= 0) {
+    const ch = value[i];
+    if (ch === "@") {
+      const before = i === 0 ? "" : value[i - 1];
+      if (before === "" || /\s|[(\[{>]/.test(before)) {
+        return {
+          active: true,
+          query: value.slice(i + 1, caret).toLowerCase(),
+          start: i,
+          end: caret,
+          highlight: 0,
+        };
+      }
+      return EMPTY_MENTION;
+    }
+    if (/\s/.test(ch)) return EMPTY_MENTION;
+    i--;
+  }
+  return EMPTY_MENTION;
 }
 
 function fmt(d: string | Date): string {
@@ -41,15 +82,72 @@ function isWithinEditWindow(createdAt: string | Date): boolean {
   return Date.now() - t < EDIT_WINDOW_MS;
 }
 
-export function CommentSection({ taskId, currentUserId }: Props) {
+export function CommentSection({ taskId, currentUserId, members = [] }: Props) {
   const [items, setItems] = useState<CommentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [posting, startPost] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [mention, setMention] = useState<MentionState>(EMPTY_MENTION);
   const esRef = useRef<EventSource | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const mentionMatches = mention.active
+    ? members
+        .filter((m) => m.id !== currentUserId)
+        .filter((m) => {
+          if (!mention.query) return true;
+          return (
+            m.email.toLowerCase().includes(mention.query) ||
+            m.name.toLowerCase().includes(mention.query)
+          );
+        })
+        .slice(0, 6)
+    : [];
+
+  function applyMention(member: MemberOpt) {
+    const before = draft.slice(0, mention.start);
+    const after = draft.slice(mention.end);
+    const insert = `@${member.email} `;
+    const next = before + insert + after;
+    setDraft(next);
+    setMention(EMPTY_MENTION);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      const pos = (before + insert).length;
+      ta.focus();
+      ta.setSelectionRange(pos, pos);
+    });
+  }
+
+  function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const value = e.target.value;
+    setDraft(value);
+    const caret = e.target.selectionStart ?? value.length;
+    setMention(detectMention(value, caret));
+  }
+
+  function handleDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (!mention.active || mentionMatches.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setMention((m) => ({ ...m, highlight: (m.highlight + 1) % mentionMatches.length }));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setMention((m) => ({
+        ...m,
+        highlight: (m.highlight - 1 + mentionMatches.length) % mentionMatches.length,
+      }));
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      applyMention(mentionMatches[mention.highlight]);
+    } else if (e.key === "Escape") {
+      setMention(EMPTY_MENTION);
+    }
+  }
 
   function scrollToBottom() {
     const el = listRef.current;
@@ -250,14 +348,39 @@ export function CommentSection({ taskId, currentUserId }: Props) {
       )}
 
       <div className="space-y-2">
-        <textarea
-          className="w-full min-h-16 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
-          placeholder="Viết bình luận (markdown)…"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          maxLength={4000}
-          disabled={posting}
-        />
+        <div className="relative">
+          <textarea
+            ref={taRef}
+            className="w-full min-h-16 rounded-md border border-input bg-transparent px-2 py-1 text-sm"
+            placeholder="Viết bình luận (markdown). Gõ @ để nhắc đồng nghiệp…"
+            value={draft}
+            onChange={handleDraftChange}
+            onKeyDown={handleDraftKeyDown}
+            onBlur={() => setTimeout(() => setMention(EMPTY_MENTION), 100)}
+            maxLength={4000}
+            disabled={posting}
+          />
+          {mention.active && mentionMatches.length > 0 && (
+            <ul className="absolute left-2 bottom-full mb-1 z-50 w-64 max-h-56 overflow-y-auto rounded-md border bg-white shadow-md text-sm">
+              {mentionMatches.map((m, idx) => (
+                <li
+                  key={m.id}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyMention(m);
+                  }}
+                  onMouseEnter={() => setMention((s) => ({ ...s, highlight: idx }))}
+                  className={`px-2 py-1 cursor-pointer ${
+                    idx === mention.highlight ? "bg-blue-50" : "hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="font-medium text-xs">{m.name}</div>
+                  <div className="text-[10px] text-muted-foreground">{m.email}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <div className="flex justify-end">
           <Button size="sm" onClick={submitNew} disabled={posting || !draft.trim()}>
             {posting ? "Đang gửi…" : "Gửi"}

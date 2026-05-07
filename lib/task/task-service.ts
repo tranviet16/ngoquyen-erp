@@ -373,10 +373,10 @@ export async function deleteTask(id: number): Promise<void> {
   });
 }
 
-export async function listDeptMembers(deptId: number): Promise<Array<{ id: string; name: string }>> {
+export async function listDeptMembers(deptId: number): Promise<Array<{ id: string; name: string; email: string }>> {
   const rows = await prisma.user.findMany({
     where: { departmentId: deptId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });
   return rows;
