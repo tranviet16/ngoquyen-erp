@@ -31,6 +31,9 @@ model User {
   tasksAssigned Task[]         @relation("TaskAssignee")
   notifications Notification[]
 
+  taskComments    TaskComment[]    @relation("TaskCommentAuthor")
+  taskAttachments TaskAttachment[] @relation("TaskAttachmentUploader")
+
   @@index([departmentId])
   @@map("users")
 }
@@ -782,24 +785,24 @@ model ExpenseClassification {
 // ─── Snapshot công nợ NCC theo dự án (line-item Công Nợ tab) ───────────────────
 
 model ProjectSupplierDebtSnapshot {
-  id           Int       @id @default(autoincrement())
-  projectId    Int
-  supplierName String
-  itemName     String?
-  qty          Decimal?  @db.Decimal(18, 4)
-  unit         String?
-  unitPrice    Decimal?  @db.Decimal(18, 2)
-  amountTaken  Decimal?  @db.Decimal(18, 2) // Đã lấy hàng (TT)
-  amountPaid   Decimal?  @db.Decimal(18, 2) // Đã trả tiền (TT)
-  balance      Decimal?  @db.Decimal(18, 2) // Còn nợ (TT)
-  amountTakenHd Decimal? @db.Decimal(18, 2) // Đã lấy hàng (HĐ)
-  amountPaidHd  Decimal? @db.Decimal(18, 2) // Đã trả tiền (HĐ)
-  balanceHd     Decimal? @db.Decimal(18, 2) // Còn nợ (HĐ)
-  asOfDate     DateTime?
-  note         String?
-  deletedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @default(now())
+  id            Int       @id @default(autoincrement())
+  projectId     Int
+  supplierName  String
+  itemName      String?
+  qty           Decimal?  @db.Decimal(18, 4)
+  unit          String?
+  unitPrice     Decimal?  @db.Decimal(18, 2)
+  amountTaken   Decimal?  @db.Decimal(18, 2) // Đã lấy hàng (TT)
+  amountPaid    Decimal?  @db.Decimal(18, 2) // Đã trả tiền (TT)
+  balance       Decimal?  @db.Decimal(18, 2) // Còn nợ (TT)
+  amountTakenHd Decimal?  @db.Decimal(18, 2) // Đã lấy hàng (HĐ)
+  amountPaidHd  Decimal?  @db.Decimal(18, 2) // Đã trả tiền (HĐ)
+  balanceHd     Decimal?  @db.Decimal(18, 2) // Còn nợ (HĐ)
+  asOfDate      DateTime?
+  note          String?
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
@@ -820,7 +823,7 @@ model SlDtLot {
   phaseCode     String    @default("?")
   groupCode     String    @default("?")
   sortOrder     Int       @default(0)
-  estimateValue Decimal   @db.Decimal(18, 2) @default(0)
+  estimateValue Decimal   @default(0) @db.Decimal(18, 2)
   contractValue Decimal?  @db.Decimal(18, 2)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
@@ -840,24 +843,26 @@ model SlDtMilestoneScore {
   score         Int
   sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
-  updatedAt    DateTime  @updatedAt
+  updatedAt     DateTime @updatedAt
+
   @@map("sl_dt_milestone_scores")
 }
 
 model SlDtPaymentPlan {
   id            Int      @id @default(autoincrement())
   lotId         Int      @unique
-  dot1Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot1Amount    Decimal  @default(0) @db.Decimal(18, 2)
   dot1Milestone String?
-  dot2Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot2Amount    Decimal  @default(0) @db.Decimal(18, 2)
   dot2Milestone String?
-  dot3Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot3Amount    Decimal  @default(0) @db.Decimal(18, 2)
   dot3Milestone String?
-  dot4Amount    Decimal  @db.Decimal(18, 2) @default(0)
+  dot4Amount    Decimal  @default(0) @db.Decimal(18, 2)
   dot4Milestone String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   lot           SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
   @@map("sl_dt_payment_plans")
 }
 
@@ -866,22 +871,23 @@ model SlDtMonthlyInput {
   lotId         Int
   year          Int
   month         Int
-  slKeHoachKy   Decimal  @db.Decimal(18, 2) @default(0)
-  slThucKyTho   Decimal  @db.Decimal(18, 2) @default(0)
-  slLuyKeTho    Decimal  @db.Decimal(18, 2) @default(0)
-  slTrat        Decimal  @db.Decimal(18, 2) @default(0)
-  dtKeHoachKy   Decimal  @db.Decimal(18, 2) @default(0)
-  dtThoKy       Decimal  @db.Decimal(18, 2) @default(0)
-  dtThoLuyKe    Decimal  @db.Decimal(18, 2) @default(0)
-  qtTratChua    Decimal  @db.Decimal(18, 2) @default(0)
-  dtTratKy      Decimal  @db.Decimal(18, 2) @default(0)
-  dtTratLuyKe   Decimal  @db.Decimal(18, 2) @default(0)
+  slKeHoachKy   Decimal  @default(0) @db.Decimal(18, 2)
+  slThucKyTho   Decimal  @default(0) @db.Decimal(18, 2)
+  slLuyKeTho    Decimal  @default(0) @db.Decimal(18, 2)
+  slTrat        Decimal  @default(0) @db.Decimal(18, 2)
+  dtKeHoachKy   Decimal  @default(0) @db.Decimal(18, 2)
+  dtThoKy       Decimal  @default(0) @db.Decimal(18, 2)
+  dtThoLuyKe    Decimal  @default(0) @db.Decimal(18, 2)
+  qtTratChua    Decimal  @default(0) @db.Decimal(18, 2)
+  dtTratKy      Decimal  @default(0) @db.Decimal(18, 2)
+  dtTratLuyKe   Decimal  @default(0) @db.Decimal(18, 2)
   estimateValue Decimal? @db.Decimal(18, 2)
   contractValue Decimal? @db.Decimal(18, 2)
   ghiChu        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   lot           SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
   @@unique([lotId, year, month])
   @@index([year, month])
   @@map("sl_dt_monthly_inputs")
@@ -905,6 +911,7 @@ model SlDtProgressStatus {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   lot              SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
   @@unique([lotId, year, month])
   @@index([year, month])
   @@map("sl_dt_progress_statuses")
@@ -921,6 +928,7 @@ model Task {
   deptId        Int
   creatorId     String
   sourceFormId  Int?      @unique
+  parentId      Int?
   orderInColumn Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -930,11 +938,50 @@ model Task {
   creator    User              @relation("TaskCreator", fields: [creatorId], references: [id])
   dept       Department        @relation(fields: [deptId], references: [id])
   sourceForm CoordinationForm? @relation(fields: [sourceFormId], references: [id])
+  parent     Task?             @relation("TaskHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Task[]            @relation("TaskHierarchy")
+
+  comments    TaskComment[]
+  attachments TaskAttachment[]
 
   @@index([deptId, status, orderInColumn])
   @@index([assigneeId, status])
   @@index([creatorId])
+  @@index([parentId])
   @@map("tasks")
+}
+
+model TaskComment {
+  id        Int       @id @default(autoincrement())
+  taskId    Int
+  authorId  String
+  body      String
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation("TaskCommentAuthor", fields: [authorId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@index([authorId])
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id         Int      @id @default(autoincrement())
+  taskId     Int
+  uploaderId String
+  filename   String
+  storedPath String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  task     Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader User @relation("TaskAttachmentUploader", fields: [uploaderId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@map("task_attachments")
 }
 
 model Notification {

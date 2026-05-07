@@ -29,6 +29,9 @@ import {
   moveTaskAction,
   updateTaskAction,
 } from "./actions";
+import { CommentSection } from "@/components/cong-viec/comment-section";
+import { AttachmentSection } from "@/components/cong-viec/attachment-section";
+import { SubtaskSection } from "@/components/cong-viec/subtask-section";
 
 interface DeptOpt {
   id: number;
@@ -233,6 +236,7 @@ export function KanbanClient({
         <EditTaskDialog
           task={openEdit}
           members={openEdit.deptId === currentDeptId ? members : []}
+          currentUserId={currentUserId}
           canEdit={canEditTask(openEdit, currentUserId, currentRole, currentIsLeader, currentDeptId)}
           canAssign={canAssignTask(openEdit, currentRole, currentIsLeader, currentDeptId)}
           canDelete={canDeleteTask(openEdit, currentUserId, currentRole)}
@@ -330,7 +334,14 @@ function TaskCard({
       }}
       className={`rounded-md border bg-white p-2 shadow-sm ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
     >
-      <p className="text-sm font-medium line-clamp-2">{task.title}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium line-clamp-2 flex-1">{task.title}</p>
+        {task.childCounts && task.childCounts.total > 0 && (
+          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 whitespace-nowrap">
+            {task.childCounts.done}/{task.childCounts.total}
+          </span>
+        )}
+      </div>
       <div className="mt-1 flex flex-wrap gap-1 items-center text-xs">
         <span className={`rounded px-1.5 py-0.5 ${PRIORITY_COLORS[task.priority] ?? ""}`}>
           {PRIORITY_LABEL[task.priority] ?? task.priority}
@@ -462,6 +473,7 @@ function CreateTaskDialog({
 function EditTaskDialog({
   task,
   members,
+  currentUserId,
   canEdit,
   canAssign,
   canDelete,
@@ -471,6 +483,7 @@ function EditTaskDialog({
 }: {
   task: TaskWithRelations;
   members: MemberOpt[];
+  currentUserId: string;
   canEdit: boolean;
   canAssign: boolean;
   canDelete: boolean;
@@ -600,6 +613,11 @@ function EditTaskDialog({
         <p className="text-xs text-muted-foreground">
           Phòng: {task.dept.code} - {task.dept.name} • Người tạo: {task.creator.name}
         </p>
+        {!task.parentId && (
+          <SubtaskSection parentId={task.id} members={members} canEditParent={canEdit} />
+        )}
+        <CommentSection taskId={task.id} currentUserId={currentUserId} />
+        <AttachmentSection taskId={task.id} />
         <div className="flex justify-between gap-2 pt-2 border-t">
           <div>
             {canDelete && (

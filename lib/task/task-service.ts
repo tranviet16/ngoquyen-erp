@@ -17,12 +17,14 @@ import {
   type UpdateTaskInput,
 } from "./schemas";
 import { createNotification } from "@/lib/notification/notification-service";
+import { getChildCounts, type ChildCounts } from "./subtask-service";
 
 export type TaskWithRelations = Task & {
   assignee: Pick<User, "id" | "name"> | null;
   creator: Pick<User, "id" | "name">;
   dept: Pick<Department, "id" | "code" | "name">;
   sourceForm: { id: number; code: string } | null;
+  childCounts?: ChildCounts;
 };
 
 async function requireSession(): Promise<{ userId: string; role: string }> {
@@ -87,7 +89,7 @@ export async function listTasksForBoard(opts: {
 }> {
   const { ctx, role } = await requireContext();
 
-  const where: Prisma.TaskWhereInput = {};
+  const where: Prisma.TaskWhereInput = { parentId: null };
 
   if (role !== "admin" && !ctx.isDirector) {
     const orClauses: Prisma.TaskWhereInput[] = [{ creatorId: ctx.userId }];
@@ -114,6 +116,8 @@ export async function listTasksForBoard(opts: {
     orderBy: [{ status: "asc" }, { orderInColumn: "asc" }, { createdAt: "asc" }],
   });
 
+  const counts = await getChildCounts(items.map((t) => t.id));
+
   const byStatus: Record<TaskStatus, TaskWithRelations[]> = {
     todo: [],
     doing: [],
@@ -121,7 +125,11 @@ export async function listTasksForBoard(opts: {
     done: [],
   };
   for (const t of items) {
-    if (isValidTaskStatus(t.status)) byStatus[t.status].push(t as TaskWithRelations);
+    if (!isValidTaskStatus(t.status)) continue;
+    const enriched: TaskWithRelations = { ...(t as TaskWithRelations) };
+    const c = counts.get(t.id);
+    if (c) enriched.childCounts = c;
+    byStatus[t.status].push(enriched);
   }
 
   return { byStatus, ctx, role };
