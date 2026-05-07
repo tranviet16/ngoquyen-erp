@@ -24,6 +24,9 @@ model User {
   auditLogs  AuditLog[]
   department Department? @relation(fields: [departmentId], references: [id])
 
+  coordinationFormsCreated  CoordinationForm[]         @relation("CFormCreator")
+  coordinationFormsApproved CoordinationFormApproval[] @relation("CFormApprover")
+
   @@index([departmentId])
   @@map("users")
 }
@@ -38,7 +41,53 @@ model Department {
 
   members User[]
 
+  coordinationFormsAsCreator  CoordinationForm[] @relation("CFormCreatorDept")
+  coordinationFormsAsExecutor CoordinationForm[] @relation("CFormExecutorDept")
+
   @@map("departments")
+}
+
+model CoordinationForm {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique
+  creatorId      String
+  creatorDeptId  Int
+  executorDeptId Int
+  content        String
+  priority       String    @default("trung_binh")
+  deadline       DateTime?
+  status         String    @default("draft")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  submittedAt    DateTime?
+  closedAt       DateTime?
+
+  creator      User                       @relation("CFormCreator", fields: [creatorId], references: [id])
+  creatorDept  Department                 @relation("CFormCreatorDept", fields: [creatorDeptId], references: [id])
+  executorDept Department                 @relation("CFormExecutorDept", fields: [executorDeptId], references: [id])
+  approvals    CoordinationFormApproval[]
+
+  @@index([executorDeptId, status])
+  @@index([creatorId])
+  @@index([status])
+  @@map("coordination_forms")
+}
+
+model CoordinationFormApproval {
+  id         Int      @id @default(autoincrement())
+  formId     Int
+  step       String
+  approverId String
+  action     String
+  comment    String?
+  signedAt   DateTime @default(now())
+
+  form     CoordinationForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  approver User             @relation("CFormApprover", fields: [approverId], references: [id])
+
+  @@index([formId])
+  @@index([approverId])
+  @@map("coordination_form_approvals")
 }
 
 model Session {
