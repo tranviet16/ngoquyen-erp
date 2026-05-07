@@ -29,7 +29,7 @@ type Project = {
   name: string;
   ownerInvestor: string | null;
   status: string;
-  contractValue: unknown;
+  contractValue: number | null;
   startDate: Date | null;
   endDate: Date | null;
   categories: Category[];
@@ -77,8 +77,8 @@ export function ProjectDetailClient({ project }: ProjectDetailClientProps) {
     startTransition(() => router.refresh());
   }
 
-  const contractDisplay = project.contractValue
-    ? VND.format(Number(project.contractValue))
+  const contractDisplay = project.contractValue != null
+    ? VND.format(project.contractValue)
     : "—";
 
   return (

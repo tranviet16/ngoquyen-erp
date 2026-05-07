@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 import { auth } from "@/lib/auth";
 import { projectSchema, categorySchema, type ProjectInput, type CategoryInput } from "./schemas";
+import { serializeDecimal } from "@/lib/utils/serialize-decimal";
 
 async function getSessionRole(): Promise<string | null> {
   try {
@@ -41,11 +42,11 @@ export async function listProjects(opts?: { search?: string; status?: string; in
     }),
     prisma.project.count({ where }),
   ]);
-  return { items, total, page, pageSize };
+  return { items: serializeDecimal(items), total, page, pageSize };
 }
 
 export async function getProjectById(id: number) {
-  return prisma.project.findUnique({
+  const row = await prisma.project.findUnique({
     where: { id },
     include: {
       categories: {
@@ -54,6 +55,7 @@ export async function getProjectById(id: number) {
       },
     },
   });
+  return row ? serializeDecimal(row) : null;
 }
 
 export async function createProject(input: ProjectInput) {
