@@ -36,10 +36,8 @@ Extend the kanban Task model (Plan C) with collaboration primitives so a task is
 - phase-02-task-attachments.md (TODO)
 - phase-03-task-subtasks.md (TODO)
 
-## Open questions
+## Decisions (locked 2026-05-07)
 
-1. Storage backend for attachments — reuse existing import file storage path or introduce dedicated `task-attachments/` bucket?
-2. Sub-task progress rollup — show as "3/5 done" on parent card, or compute % and color the card border?
-3. Comment edit history — keep latest only, or store revisions table?
-
-Decide these before writing phase files.
+1. **Attachment storage** — local disk at `${UPLOAD_DIR}/task-attachments/{taskId}/{uuid}-{name}`, abstracted behind `lib/storage/local-disk.ts` (`putFile` / `getStream` / `deleteFile`). Caps: 25MB/file, MIME allowlist (pdf, jpg, png, xlsx, docx, zip). Swap to S3/R2 later by re-implementing the interface — call sites unchanged.
+2. **Sub-task rollup** — small "3/5" badge on parent card. No progress bar, no color signal (priority already owns color).
+3. **Comment edits** — latest-only with `editedAt` flag. 5-minute edit window from `createdAt`; after that the comment is frozen. Show `(đã sửa)` next to timestamp. No revisions table.
