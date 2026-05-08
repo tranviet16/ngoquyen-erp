@@ -1,12 +1,15 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import {
   createDepartmentAction,
   updateDepartmentAction,
@@ -14,6 +17,16 @@ import {
   setDirectorAction,
   unsetDirectorAction,
 } from "./actions";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+}) => ReactElement;
 
 interface DeptRow {
   id: number;
@@ -57,20 +70,11 @@ export function DepartmentClient({ departments, users }: Props) {
     setDeptDialog({ open: true, edit: null });
   }
 
-  function openEditDept(d: DeptRow) {
-    setDeptForm({ code: d.code, name: d.name });
-    setDeptDialog({ open: true, edit: d });
-  }
-
   async function submitDept(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       try {
-        if (deptDialog.edit) {
-          await updateDepartmentAction(deptDialog.edit.id, deptForm);
-        } else {
-          await createDepartmentAction(deptForm);
-        }
+        await createDepartmentAction(deptForm);
         toast.success("Đã lưu");
         setDeptDialog({ open: false, edit: null });
         router.refresh();
@@ -80,17 +84,30 @@ export function DepartmentClient({ departments, users }: Props) {
     });
   }
 
-  function toggleActive(d: DeptRow) {
-    startTransition(async () => {
+  const deptColumns: DataGridColumn<DeptRow>[] = [
+    { id: "code", title: "Mã", kind: "text", width: 100 },
+    { id: "name", title: "Tên phòng ban", kind: "text", width: 260 },
+    { id: "memberCount", title: "Số thành viên", kind: "number", width: 130, readonly: true },
+    { id: "isActive", title: "Hoạt động", kind: "boolean", width: 100 },
+  ];
+
+  const deptHandlers: DataGridHandlers<DeptRow> = {
+    onCellEdit: async (id, col, value) => {
+      const patch: Partial<{ code: string; name: string; isActive: boolean }> = {};
+      if (col === "code" && typeof value === "string") patch.code = value;
+      else if (col === "name" && typeof value === "string") patch.name = value;
+      else if (col === "isActive") patch.isActive = Boolean(value);
+      else return;
       try {
-        await updateDepartmentAction(d.id, { isActive: !d.isActive });
-        toast.success(d.isActive ? "Đã ẩn phòng ban" : "Đã kích hoạt phòng ban");
-        router.refresh();
+        await updateDepartmentAction(id, patch);
+        toast.success("Đã lưu");
+        startTransition(() => router.refresh());
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));
+        startTransition(() => router.refresh());
       }
-    });
-  }
+    },
+  };
 
   function changeUserDept(u: UserRow, deptId: number | null) {
     startTransition(async () => {
@@ -172,68 +189,20 @@ export function DepartmentClient({ departments, users }: Props) {
 
       {tab === "depts" ? (
         <div className="space-y-3">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              Sửa trực tiếp Mã, Tên, Hoạt động trong bảng. Toggle ô &quot;Hoạt động&quot; để ẩn/hiện.
+            </p>
             <Button size="sm" onClick={openCreateDept} disabled={pending}>
               + Thêm phòng ban
             </Button>
           </div>
-          <div className="rounded-lg border overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/40">
-                <tr>
-                  <th className="text-left px-3 py-2">Mã</th>
-                  <th className="text-left px-3 py-2">Tên phòng ban</th>
-                  <th className="text-right px-3 py-2">Số thành viên</th>
-                  <th className="text-left px-3 py-2">Trạng thái</th>
-                  <th className="text-right px-3 py-2">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {departments.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                      Chưa có phòng ban nào
-                    </td>
-                  </tr>
-                ) : (
-                  departments.map((d) => (
-                    <tr key={d.id} className="border-b last:border-0 hover:bg-muted/20">
-                      <td className="px-3 py-2 font-mono">{d.code}</td>
-                      <td className="px-3 py-2">{d.name}</td>
-                      <td className="px-3 py-2 text-right">{d.memberCount}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-xs ${
-                            d.isActive
-                              ? "bg-green-100 text-green-700"
-                              : "bg-gray-100 text-gray-600"
-                          }`}
-                        >
-                          {d.isActive ? "Hoạt động" : "Ngừng"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right space-x-2">
-                        <button
-                          onClick={() => openEditDept(d)}
-                          className="text-xs text-primary underline"
-                          disabled={pending}
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          onClick={() => toggleActive(d)}
-                          className="text-xs text-orange-600 underline"
-                          disabled={pending}
-                        >
-                          {d.isActive ? "Ẩn" : "Bật"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataGrid<DeptRow>
+            columns={deptColumns}
+            rows={departments}
+            handlers={deptHandlers}
+            height={420}
+          />
         </div>
       ) : (
         <div className="rounded-lg border overflow-x-auto">
@@ -301,9 +270,9 @@ export function DepartmentClient({ departments, users }: Props) {
       )}
 
       <CrudDialog
-        title={deptDialog.edit ? "Sửa phòng ban" : "Thêm phòng ban"}
+        title="Thêm phòng ban"
         open={deptDialog.open}
-        onOpenChange={(o) => setDeptDialog({ open: o, edit: o ? deptDialog.edit : null })}
+        onOpenChange={(o) => setDeptDialog({ open: o, edit: null })}
       >
         <form onSubmit={submitDept} className="space-y-3">
           <div>

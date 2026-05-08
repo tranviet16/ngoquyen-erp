@@ -1,17 +1,33 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { type ColDef } from "ag-grid-community";
-import { AgGridBase, VND_COL_DEF } from "@/components/ag-grid-base";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
-import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
-import { createReconciliation, updateReconciliation, softDeleteReconciliation } from "@/lib/vat-tu-ncc/reconciliation-service";
+import { CrudDialog } from "@/components/master-data/crud-dialog";
+import {
+  createReconciliation,
+  updateReconciliation,
+  softDeleteReconciliation,
+} from "@/lib/vat-tu-ncc/reconciliation-service";
 import { type ReconciliationInput } from "@/lib/vat-tu-ncc/schemas";
 import { ReconciliationForm } from "@/components/vat-tu-ncc/reconciliation-form";
 import { formatDate } from "@/lib/utils/format";
 import { Plus } from "lucide-react";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+  onSelectionChange?: (ids: number[]) => void;
+}) => ReactElement;
 
 type ReconciliationRow = {
   id: number;
@@ -27,6 +43,16 @@ type ReconciliationRow = {
   note: string | null;
 };
 
+interface ReconGridRow extends RowWithId {
+  period: string;
+  openingBalance: number;
+  totalIn: number;
+  totalPaid: number;
+  closingBalance: number;
+  signedBySupplier: boolean;
+  note: string;
+}
+
 interface Props {
   supplierId: number;
   initialData: ReconciliationRow[];
@@ -36,38 +62,75 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ReconciliationRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [, startTransition] = useTransition();
 
   const fmtPeriod = (r: ReconciliationRow) =>
     `${formatDate(r.periodFrom, "")} – ${formatDate(r.periodTo, "")}`;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const colDefs: ColDef<any>[] = [
-    { headerName: "Kỳ đối chiếu", flex: 2, minWidth: 200, valueGetter: (p) => fmtPeriod(p.data) },
-    { field: "openingBalance", headerName: "Dư đầu kỳ", ...VND_COL_DEF, width: 140 },
-    { field: "totalIn", headerName: "Phát sinh", ...VND_COL_DEF, width: 130 },
-    { field: "totalPaid", headerName: "Thanh toán", ...VND_COL_DEF, width: 130 },
-    { field: "closingBalance", headerName: "Dư cuối kỳ", ...VND_COL_DEF, width: 140 },
-    {
-      field: "signedBySupplier", headerName: "NCC ký", width: 90,
-      valueFormatter: (p) => p.value ? "Đã ký" : "Chưa ký",
-    },
-    { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 100 },
-    {
-      headerName: "Thao tác", width: 150,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      cellRenderer: (p: { data: any }) => (
-        <div className="flex gap-1 items-center h-full">
-          <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
-          <DeleteConfirmDialog
-            itemName={fmtPeriod(p.data)}
-            onConfirm={async () => { await softDeleteReconciliation(p.data.id, supplierId); startTransition(() => router.refresh()); }}
-            trigger={<Button variant="outline" size="sm" className="text-destructive">Xóa</Button>}
-          />
-        </div>
-      ),
-    },
+  const rows: ReconGridRow[] = initialData.map((r) => ({
+    id: r.id,
+    period: fmtPeriod(r),
+    openingBalance: Number(r.openingBalance),
+    totalIn: Number(r.totalIn),
+    totalPaid: Number(r.totalPaid),
+    closingBalance: Number(r.closingBalance),
+    signedBySupplier: r.signedBySupplier,
+    note: r.note ?? "",
+  }));
+
+  const columns: DataGridColumn<ReconGridRow>[] = [
+    { id: "period", title: "Kỳ đối chiếu", kind: "text", width: 220, readonly: true },
+    { id: "openingBalance", title: "Dư đầu kỳ", kind: "currency", width: 140, readonly: true },
+    { id: "totalIn", title: "Phát sinh", kind: "currency", width: 130, readonly: true },
+    { id: "totalPaid", title: "Thanh toán", kind: "currency", width: 130, readonly: true },
+    { id: "closingBalance", title: "Dư cuối kỳ", kind: "currency", width: 140, readonly: true },
+    { id: "signedBySupplier", title: "NCC ký", kind: "boolean", width: 90 },
+    { id: "note", title: "Ghi chú", kind: "text", width: 220 },
   ];
+
+  const patchRecon = async (id: number, patch: Partial<ReconGridRow>) => {
+    const current = initialData.find((r) => r.id === id);
+    if (!current) throw new Error(`#${id} không tồn tại`);
+    const input: ReconciliationInput = {
+      supplierId,
+      periodFrom: new Date(current.periodFrom).toISOString().split("T")[0],
+      periodTo: new Date(current.periodTo).toISOString().split("T")[0],
+      openingBalance: Number(current.openingBalance),
+      totalIn: Number(current.totalIn),
+      totalPaid: Number(current.totalPaid),
+      signedBySupplier:
+        typeof patch.signedBySupplier === "boolean" ? patch.signedBySupplier : current.signedBySupplier,
+      signedDate: current.signedDate ? new Date(current.signedDate).toISOString().split("T")[0] : undefined,
+      note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
+    };
+    await updateReconciliation(id, input);
+  };
+
+  const handlers: DataGridHandlers<ReconGridRow> = {
+    onCellEdit: async (id, col, value) => {
+      try {
+        await patchRecon(id, { [col]: value } as Partial<ReconGridRow>);
+        toast.success("Đã lưu");
+        startTransition(() => router.refresh());
+      } catch (err) {
+        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+        startTransition(() => router.refresh());
+      }
+    },
+    onDeleteRows: async (ids) => {
+      for (const id of ids) {
+        await softDeleteReconciliation(id, supplierId);
+      }
+      startTransition(() => router.refresh());
+    },
+  };
+
+  const editSelected = () => {
+    if (selectedIds.length !== 1) return;
+    const target = initialData.find((r) => r.id === selectedIds[0]);
+    if (target) setEditTarget(target);
+  };
 
   async function handleCreate(data: ReconciliationInput) {
     try {
@@ -113,13 +176,24 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
             Lập biên bản đối chiếu công nợ định kỳ với nhà cung cấp.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" aria-hidden="true" />
-          Tạo kỳ đối chiếu
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+            Sửa
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            Tạo kỳ đối chiếu
+          </Button>
+        </div>
       </div>
 
-      <AgGridBase rowData={initialData} columnDefs={colDefs} height={400} />
+      <DataGrid<ReconGridRow>
+        columns={columns}
+        rows={rows}
+        handlers={handlers}
+        height={420}
+        onSelectionChange={setSelectedIds}
+      />
 
       <CrudDialog title="Tạo kỳ đối chiếu" open={createOpen} onOpenChange={setCreateOpen}>
         <ReconciliationForm supplierId={supplierId} onSubmit={handleCreate} />
