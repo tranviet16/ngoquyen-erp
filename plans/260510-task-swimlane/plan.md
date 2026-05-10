@@ -3,9 +3,10 @@ title: Task swimlane on Bảng công việc (Plan B)
 description: >-
   Add swimlane view (rows = users, cols = status) to /van-hanh/cong-viec for quick
   "who's working on what" visibility. Uses canAccess from Plan A.
-status: pending
+status: completed
 priority: P2
 created: 2026-05-10T00:00:00.000Z
+completed: 2026-05-11T00:00:00.000Z
 blockedBy: [260510-van-hanh-acl-refactor]
 ---
 
@@ -19,8 +20,8 @@ Add view toggle (Kanban / Swimlane) to `/van-hanh/cong-viec`. Swimlane rows = us
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Swimlane view + toggle](./phase-01-swimlane-view-toggle.md) | Pending |
-| 2 | [Filters & polish](./phase-02-filters-polish.md) | Pending |
+| 1 | [Swimlane view + toggle](./phase-01-swimlane-view-toggle.md) | Completed |
+| 2 | [Filters & polish](./phase-02-filters-polish.md) | Completed |
 
 ## Key Decisions
 
@@ -44,4 +45,7 @@ Add view toggle (Kanban / Swimlane) to `/van-hanh/cong-viec`. Swimlane rows = us
 
 ## Notes
 
-Detailed phase files to be written via `/ck:plan` once Plan A is in progress.
+Phase 1 shipped 2026-05-10 (commits b8fe490, 0bc5bd8). Phase 2 shipped 2026-05-11
+(commit 0c19ce4). Deferred from Phase 2 spec: density toggle, "show empty rows"
+toggle — low ROI vs. shipped scope, revisit if user feedback requests.
+Service-layer where-clause unit tests deferred (no Prisma-mock infra in repo).

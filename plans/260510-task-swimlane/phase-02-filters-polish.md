@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Filters & polish"
-status: pending
+status: completed
 priority: P2
 effort: "5h"
 dependencies: [1]
