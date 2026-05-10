@@ -1,7 +1,11 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { listTasksForBoard, listDeptMembers } from "@/lib/task/task-service";
+import {
+  listTasksForBoard,
+  listDeptMembers,
+  listViewableMembers,
+} from "@/lib/task/task-service";
 import { listDepartments } from "@/lib/department-service";
 import { getUserContext } from "@/lib/department-rbac";
 import { listViewableDeptIds } from "@/lib/dept-access";
@@ -11,10 +15,28 @@ import { serializeDecimals } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
+function parseIsoDate(s: string | undefined): Date | undefined {
+  if (!s) return undefined;
+  const m = /^\d{4}-\d{2}-\d{2}$/.exec(s);
+  if (!m) return undefined;
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return Number.isFinite(d.getTime()) ? d : undefined;
+}
+
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ deptId?: string; assigneeId?: string; priority?: string; fromForm?: string; view?: string }>;
+  searchParams: Promise<{
+    deptId?: string;
+    assigneeId?: string;
+    assigneeIds?: string;
+    priority?: string;
+    fromForm?: string;
+    view?: string;
+    deadlineFrom?: string;
+    deadlineTo?: string;
+    includeUndated?: string;
+  }>;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/login");
@@ -25,25 +47,39 @@ export default async function Page({
     sp.fromForm === "true" ? true : sp.fromForm === "false" ? false : undefined;
 
   const ctx = await getUserContext(session.user.id);
-  // Task query: only filter by dept when user explicitly picked one in the
-  // dropdown. Otherwise let the access map's OR clause (own dept + grants)
-  // decide visibility — falling back to ctx.departmentId would hide cross-dept
-  // grants whenever "— Tất cả —" is selected.
   const queryDeptId = deptIdNum;
-  // Member dropdown context: needs a single dept to list assignable members.
   const memberDeptId = deptIdNum ?? ctx?.departmentId ?? undefined;
 
-  const [{ byStatus }, allDepartments, members, viewableIds] = await Promise.all([
-    listTasksForBoard({
-      deptId: queryDeptId,
-      assigneeId: sp.assigneeId,
-      priority: sp.priority,
-      fromForm,
-    }),
-    listDepartments({ activeOnly: true }),
-    memberDeptId ? listDeptMembers(memberDeptId) : Promise.resolve([]),
-    listViewableDeptIds(session.user.id),
-  ]);
+  const assigneeIdsCsv = sp.assigneeIds?.trim();
+  const assigneeIds = assigneeIdsCsv
+    ? assigneeIdsCsv.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+  const deadlineFromDate = parseIsoDate(sp.deadlineFrom);
+  // Inclusive end-of-day for `to` so a single-day filter "from=X to=X" matches.
+  const deadlineToRaw = parseIsoDate(sp.deadlineTo);
+  const deadlineToDate = deadlineToRaw
+    ? new Date(deadlineToRaw.getTime() + 86_400_000 - 1)
+    : undefined;
+  // Default include undated; explicit "0" excludes them.
+  const includeUndated = sp.includeUndated === "0" ? false : true;
+
+  const [{ byStatus }, allDepartments, members, viewableMembers, viewableIds] =
+    await Promise.all([
+      listTasksForBoard({
+        deptId: queryDeptId,
+        assigneeId: sp.assigneeId,
+        assigneeIds,
+        priority: sp.priority,
+        fromForm,
+        deadlineFrom: deadlineFromDate,
+        deadlineTo: deadlineToDate,
+        includeUndated,
+      }),
+      listDepartments({ activeOnly: true }),
+      memberDeptId ? listDeptMembers(memberDeptId) : Promise.resolve([]),
+      listViewableMembers(),
+      listViewableDeptIds(session.user.id),
+    ]);
   const departments =
     viewableIds === "all"
       ? allDepartments
@@ -60,6 +96,7 @@ export default async function Page({
       byStatus={serializeDecimals(byStatus)}
       departments={departments.map((d) => ({ id: d.id, code: d.code, name: d.name }))}
       members={members}
+      viewableMembers={viewableMembers}
       currentUserId={session.user.id}
       currentRole={session.user.role ?? "viewer"}
       currentDeptId={ctx?.departmentId ?? null}
@@ -69,8 +106,12 @@ export default async function Page({
       filters={{
         deptId: queryDeptId ?? null,
         assigneeId: sp.assigneeId ?? null,
+        assigneeIds: assigneeIds ?? [],
         priority: sp.priority ?? null,
         fromForm: fromForm ?? null,
+        deadlineFrom: sp.deadlineFrom ?? "",
+        deadlineTo: sp.deadlineTo ?? "",
+        includeUndated,
       }}
     />
     </div>

@@ -41,6 +41,11 @@ export function TaskCard({
   const style: React.CSSProperties = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
     : {};
+  const overdueLabel = getOverdueLabel({
+    deadline: task.deadline ? new Date(task.deadline) : null,
+    completedAt: task.completedAt ? new Date(task.completedAt) : null,
+  });
+  const isOverdue = overdueLabel === "overdue";
   return (
     <div
       ref={mounted ? setNodeRef : undefined}
@@ -54,7 +59,9 @@ export function TaskCard({
           onClick();
         }
       }}
-      className={`rounded-md border bg-card p-2.5 shadow-sm hover:border-primary/40 transition-colors ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+      className={`rounded-md border bg-card p-2.5 shadow-sm hover:border-primary/40 transition-colors ${
+        isOverdue ? "border-red-400 dark:border-red-500/60 border-l-4 border-l-red-500" : ""
+      } ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium line-clamp-2 flex-1">{task.title}</p>
@@ -68,12 +75,7 @@ export function TaskCard({
         <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_COLORS[task.priority] ?? ""}`}>
           {PRIORITY_LABEL[task.priority] ?? task.priority}
         </span>
-        <OverdueBadge
-          label={getOverdueLabel({
-            deadline: task.deadline ? new Date(task.deadline) : null,
-            completedAt: task.completedAt ? new Date(task.completedAt) : null,
-          })}
-        />
+        <OverdueBadge label={overdueLabel} />
         {task.deadline && (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
             <Calendar className="size-3" aria-hidden="true" />

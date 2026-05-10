@@ -37,6 +37,8 @@ import { SubtaskSection } from "@/components/cong-viec/subtask-section";
 import { TaskCard } from "@/components/task/task-card";
 import { ViewToggle, type ViewMode } from "@/components/task/view-toggle";
 import { SwimlaneBoard } from "@/components/task/swimlane-board";
+import { AssigneeMultiSelect } from "@/components/task/assignee-multi-select";
+import { DeadlineRangePicker } from "@/components/task/deadline-range-picker";
 
 interface DeptOpt {
   id: number;
@@ -51,14 +53,19 @@ interface MemberOpt {
 interface Filters {
   deptId: number | null;
   assigneeId: string | null;
+  assigneeIds: string[];
   priority: string | null;
   fromForm: boolean | null;
+  deadlineFrom: string;
+  deadlineTo: string;
+  includeUndated: boolean;
 }
 
 interface Props {
   byStatus: Record<TaskStatus, TaskWithRelations[]>;
   departments: DeptOpt[];
   members: MemberOpt[];
+  viewableMembers: { id: string; name: string }[];
   currentUserId: string;
   currentRole: string;
   currentDeptId: number | null;
@@ -79,6 +86,7 @@ export function KanbanClient({
   byStatus,
   departments,
   members,
+  viewableMembers,
   currentUserId,
   currentRole,
   currentDeptId,
@@ -149,17 +157,44 @@ export function KanbanClient({
     });
   }
 
-  function updateFilter(key: keyof Filters, value: string | null) {
+  function pushFilters(next: Partial<Filters>) {
+    const merged: Filters = { ...filters, ...next };
     const params = new URLSearchParams();
-    const merged: Record<string, string | null> = {
-      deptId: filters.deptId !== null ? String(filters.deptId) : null,
-      assigneeId: filters.assigneeId,
-      priority: filters.priority,
-      fromForm: filters.fromForm !== null ? String(filters.fromForm) : null,
-    };
-    merged[key] = value;
-    for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v);
-    router.push(`/van-hanh/cong-viec${params.toString() ? `?${params.toString()}` : ""}`);
+    if (merged.deptId !== null) params.set("deptId", String(merged.deptId));
+    if (merged.assigneeIds.length > 0) {
+      params.set("assigneeIds", merged.assigneeIds.join(","));
+    } else if (merged.assigneeId) {
+      params.set("assigneeId", merged.assigneeId);
+    }
+    if (merged.priority) params.set("priority", merged.priority);
+    if (merged.fromForm !== null) params.set("fromForm", String(merged.fromForm));
+    if (merged.deadlineFrom) params.set("deadlineFrom", merged.deadlineFrom);
+    if (merged.deadlineTo) params.set("deadlineTo", merged.deadlineTo);
+    if (!merged.includeUndated) params.set("includeUndated", "0");
+    if (view === "swimlane") params.set("view", "swimlane");
+    const qs = params.toString();
+    router.push(`/van-hanh/cong-viec${qs ? `?${qs}` : ""}`);
+  }
+
+  function updateDept(v: string | null) {
+    pushFilters({ deptId: v ? Number(v) : null });
+  }
+  function updatePriority(v: string | null) {
+    pushFilters({ priority: v });
+  }
+  function updateFromForm(v: string | null) {
+    pushFilters({ fromForm: v === null ? null : v === "true" });
+  }
+  function updateAssigneeIds(ids: string[]) {
+    // Multi-select supersedes legacy single param
+    pushFilters({ assigneeIds: ids, assigneeId: ids.length > 0 ? null : filters.assigneeId });
+  }
+  function updateDeadline(next: { from: string; to: string; includeUndated: boolean }) {
+    pushFilters({
+      deadlineFrom: next.from,
+      deadlineTo: next.to,
+      includeUndated: next.includeUndated,
+    });
   }
 
   const canCreate = currentRole === "admin" || currentIsDirector || currentIsLeader || currentDeptId !== null;
@@ -193,7 +228,7 @@ export function KanbanClient({
           <select
             className="mt-1 h-9 rounded-md border border-input bg-transparent px-2 text-sm"
             value={filters.deptId !== null ? String(filters.deptId) : ""}
-            onChange={(e) => updateFilter("deptId", e.target.value || null)}
+            onChange={(e) => updateDept(e.target.value || null)}
           >
             <option value="">— Tất cả —</option>
             {departments.map((d) => (
@@ -202,11 +237,21 @@ export function KanbanClient({
           </select>
         </div>
         <div>
+          <Label className="text-xs">Người được giao</Label>
+          <div className="mt-1">
+            <AssigneeMultiSelect
+              options={viewableMembers}
+              selected={filters.assigneeIds}
+              onApply={updateAssigneeIds}
+            />
+          </div>
+        </div>
+        <div>
           <Label className="text-xs">Mức ưu tiên</Label>
           <select
             className="mt-1 h-9 rounded-md border border-input bg-transparent px-2 text-sm"
             value={filters.priority ?? ""}
-            onChange={(e) => updateFilter("priority", e.target.value || null)}
+            onChange={(e) => updatePriority(e.target.value || null)}
           >
             <option value="">— Tất cả —</option>
             <option value="cao">Cao</option>
@@ -219,13 +264,19 @@ export function KanbanClient({
           <select
             className="mt-1 h-9 rounded-md border border-input bg-transparent px-2 text-sm"
             value={filters.fromForm === null ? "" : String(filters.fromForm)}
-            onChange={(e) => updateFilter("fromForm", e.target.value || null)}
+            onChange={(e) => updateFromForm(e.target.value || null)}
           >
             <option value="">— Tất cả —</option>
             <option value="true">Từ phiếu phối hợp</option>
             <option value="false">Tạo tay</option>
           </select>
         </div>
+        <DeadlineRangePicker
+          from={filters.deadlineFrom}
+          to={filters.deadlineTo}
+          includeUndated={filters.includeUndated}
+          onChange={updateDeadline}
+        />
        </div>
         <ViewToggle value={view} />
       </div>

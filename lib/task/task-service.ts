@@ -88,8 +88,12 @@ export function moveRole(task: Task, ctx: UserContext, role: string): TaskMoveRo
 export async function listTasksForBoard(opts: {
   deptId?: number;
   assigneeId?: string;
+  assigneeIds?: string[];
   priority?: string;
   fromForm?: boolean;
+  deadlineFrom?: Date;
+  deadlineTo?: Date;
+  includeUndated?: boolean;
 }): Promise<{
   byStatus: Record<TaskStatus, TaskWithRelations[]>;
   ctx: UserContext;
@@ -97,20 +101,39 @@ export async function listTasksForBoard(opts: {
 }> {
   const { ctx, role, accessMap } = await requireContext();
 
-  const where: Prisma.TaskWhereInput = { parentId: null };
+  const andClauses: Prisma.TaskWhereInput[] = [{ parentId: null }];
 
   if (accessMap.scope === "scoped") {
     const ids = Array.from(accessMap.grants.keys());
-    const orClauses: Prisma.TaskWhereInput[] = [{ creatorId: ctx.userId }];
-    if (ids.length > 0) orClauses.push({ deptId: { in: ids } });
-    where.OR = orClauses;
+    const accessOr: Prisma.TaskWhereInput[] = [{ creatorId: ctx.userId }];
+    if (ids.length > 0) accessOr.push({ deptId: { in: ids } });
+    andClauses.push({ OR: accessOr });
   }
 
-  if (opts.deptId) where.deptId = opts.deptId;
-  if (opts.assigneeId) where.assigneeId = opts.assigneeId;
-  if (opts.priority) where.priority = opts.priority;
-  if (opts.fromForm === true) where.sourceFormId = { not: null };
-  if (opts.fromForm === false) where.sourceFormId = null;
+  if (opts.deptId) andClauses.push({ deptId: opts.deptId });
+
+  // assigneeIds (multi) takes precedence over assigneeId (legacy single)
+  if (opts.assigneeIds && opts.assigneeIds.length > 0) {
+    andClauses.push({ assigneeId: { in: opts.assigneeIds } });
+  } else if (opts.assigneeId) {
+    andClauses.push({ assigneeId: opts.assigneeId });
+  }
+
+  if (opts.priority) andClauses.push({ priority: opts.priority });
+  if (opts.fromForm === true) andClauses.push({ sourceFormId: { not: null } });
+  if (opts.fromForm === false) andClauses.push({ sourceFormId: null });
+
+  if (opts.deadlineFrom || opts.deadlineTo) {
+    const range: Prisma.DateTimeNullableFilter = {};
+    if (opts.deadlineFrom) range.gte = opts.deadlineFrom;
+    if (opts.deadlineTo) range.lte = opts.deadlineTo;
+    const includeUndated = opts.includeUndated !== false; // default true
+    const deadlineOr: Prisma.TaskWhereInput[] = [{ deadline: range }];
+    if (includeUndated) deadlineOr.push({ deadline: null });
+    andClauses.push({ OR: deadlineOr });
+  }
+
+  const where: Prisma.TaskWhereInput = andClauses.length === 1 ? andClauses[0] : { AND: andClauses };
 
   const items = await prisma.task.findMany({
     where,
@@ -392,6 +415,34 @@ export async function listDeptMembers(deptId: number): Promise<Array<{ id: strin
     orderBy: { name: "asc" },
   });
   return rows;
+}
+
+/**
+ * All members across the user's viewable departments, for cross-dept filters
+ * (e.g. assignee multi-select on the board). Returns global list when access
+ * scope is "all" (admin/director).
+ */
+export async function listViewableMembers(): Promise<Array<{ id: string; name: string }>> {
+  const { ctx, accessMap } = await requireContext();
+  const where: Prisma.UserWhereInput = {};
+  if (accessMap.scope === "scoped") {
+    const ids = Array.from(accessMap.grants.keys());
+    if (ids.length === 0) {
+      return ctx.departmentId !== null
+        ? prisma.user.findMany({
+            where: { departmentId: ctx.departmentId },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          })
+        : [];
+    }
+    where.departmentId = { in: ids };
+  }
+  return prisma.user.findMany({
+    where,
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
 }
 
 export { TASK_STATUSES };
