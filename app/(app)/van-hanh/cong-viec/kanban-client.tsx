@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
   DndContext,
   PointerSensor,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
@@ -17,14 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
-import { formatDate } from "@/lib/utils/format";
-import { Plus, Calendar, User as UserIcon, FileText } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   TASK_STATUSES,
   taskStatusLabel,
   type TaskStatus,
 } from "@/lib/task/state-machine";
 import type { TaskWithRelations } from "@/lib/task/task-service";
+import { regroupBySwimlane } from "@/lib/task/regroup-swimlane";
 import {
   assignTaskAction,
   createTaskAction,
@@ -33,10 +32,11 @@ import {
   updateTaskAction,
 } from "./actions";
 import { CommentSection } from "@/components/cong-viec/comment-section";
-import { OverdueBadge } from "@/components/task/overdue-badge";
-import { getOverdueLabel } from "@/lib/task/overdue";
 import { AttachmentSection } from "@/components/cong-viec/attachment-section";
 import { SubtaskSection } from "@/components/cong-viec/subtask-section";
+import { TaskCard } from "@/components/task/task-card";
+import { ViewToggle, type ViewMode } from "@/components/task/view-toggle";
+import { SwimlaneBoard } from "@/components/task/swimlane-board";
 
 interface DeptOpt {
   id: number;
@@ -64,6 +64,7 @@ interface Props {
   currentDeptId: number | null;
   currentIsLeader: boolean;
   currentIsDirector: boolean;
+  view: ViewMode;
   filters: Filters;
 }
 
@@ -72,18 +73,6 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   doing: "bg-sky-50 border-sky-300 dark:bg-sky-500/5 dark:border-sky-500/40",
   review: "bg-amber-50 border-amber-300 dark:bg-amber-500/5 dark:border-amber-500/40",
   done: "bg-emerald-50 border-emerald-300 dark:bg-emerald-500/5 dark:border-emerald-500/40",
-};
-
-const PRIORITY_COLORS: Record<string, string> = {
-  cao: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
-  trung_binh: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
-  thap: "bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
-};
-
-const PRIORITY_LABEL: Record<string, string> = {
-  cao: "Cao",
-  trung_binh: "Trung bình",
-  thap: "Thấp",
 };
 
 export function KanbanClient({
@@ -95,6 +84,7 @@ export function KanbanClient({
   currentDeptId,
   currentIsLeader,
   currentIsDirector,
+  view,
   filters,
 }: Props) {
   const router = useRouter();
@@ -123,7 +113,17 @@ export function KanbanClient({
     const { active, over } = e;
     if (!over) return;
     const taskId = Number(active.id);
-    const toStatus = String(over.id) as TaskStatus;
+    const overId = String(over.id);
+    // Swimlane drop zones encode "swimlane:<assigneeId>:<status>" — ignore
+    // the assignee portion (cross-row drag is reassignment, out of scope here)
+    // and only act on the status portion.
+    let toStatus: TaskStatus;
+    if (overId.startsWith("swimlane:")) {
+      const parts = overId.split(":");
+      toStatus = parts[parts.length - 1] as TaskStatus;
+    } else {
+      toStatus = overId as TaskStatus;
+    }
     if (!TASK_STATUSES.includes(toStatus)) return;
 
     const allTasks = (Object.values(optimistic) as TaskWithRelations[][]).flat();
@@ -164,6 +164,11 @@ export function KanbanClient({
 
   const canCreate = currentRole === "admin" || currentIsDirector || currentIsLeader || currentDeptId !== null;
 
+  const swimlaneGroups = useMemo(
+    () => (view === "swimlane" ? regroupBySwimlane(optimistic) : []),
+    [view, optimistic],
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -181,7 +186,8 @@ export function KanbanClient({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-3 items-end rounded-lg border bg-card p-3 shadow-sm">
+      <div className="flex flex-wrap gap-3 items-end justify-between rounded-lg border bg-card p-3 shadow-sm">
+       <div className="flex flex-wrap gap-3 items-end">
         <div>
           <Label className="text-xs">Phòng ban</Label>
           <select
@@ -220,21 +226,31 @@ export function KanbanClient({
             <option value="false">Tạo tay</option>
           </select>
         </div>
+       </div>
+        <ViewToggle value={view} />
       </div>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {TASK_STATUSES.map((status) => (
-            <Column
-              key={status}
-              status={status}
-              tasks={optimistic[status]}
-              colorClass={STATUS_COLORS[status]}
-              canDragTask={canDragTask}
-              onClickTask={(t) => setOpenEdit(t)}
-            />
-          ))}
-        </div>
+        {view === "swimlane" ? (
+          <SwimlaneBoard
+            groups={swimlaneGroups}
+            canDragTask={canDragTask}
+            onClickTask={(t) => setOpenEdit(t)}
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {TASK_STATUSES.map((status) => (
+              <Column
+                key={status}
+                status={status}
+                tasks={optimistic[status]}
+                colorClass={STATUS_COLORS[status]}
+                canDragTask={canDragTask}
+                onClickTask={(t) => setOpenEdit(t)}
+              />
+            ))}
+          </div>
+        )}
       </DndContext>
 
       {openCreate && (
@@ -319,85 +335,6 @@ function Column({
           <p className="text-xs text-muted-foreground text-center py-4">— Trống —</p>
         )}
       </div>
-    </div>
-  );
-}
-
-function TaskCard({
-  task,
-  draggable,
-  onClick,
-}: {
-  task: TaskWithRelations;
-  draggable: boolean;
-  onClick: () => void;
-}) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: task.id,
-    disabled: !draggable || !mounted,
-  });
-  const style: React.CSSProperties = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, opacity: isDragging ? 0.5 : 1 }
-    : {};
-  return (
-    <div
-      ref={mounted ? setNodeRef : undefined}
-      style={style}
-      {...(mounted ? listeners : {})}
-      {...(mounted ? attributes : {})}
-      suppressHydrationWarning
-      onClick={(e) => {
-        if (!isDragging) {
-          e.stopPropagation();
-          onClick();
-        }
-      }}
-      className={`rounded-md border bg-card p-2.5 shadow-sm hover:border-primary/40 transition-colors ${draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium line-clamp-2 flex-1">{task.title}</p>
-        {task.childCounts && task.childCounts.total > 0 && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground whitespace-nowrap tabular-nums">
-            {task.childCounts.done}/{task.childCounts.total}
-          </span>
-        )}
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5 items-center text-xs">
-        <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_COLORS[task.priority] ?? ""}`}>
-          {PRIORITY_LABEL[task.priority] ?? task.priority}
-        </span>
-        <OverdueBadge
-          label={getOverdueLabel({
-            deadline: task.deadline ? new Date(task.deadline) : null,
-            completedAt: task.completedAt ? new Date(task.completedAt) : null,
-          })}
-        />
-        {task.deadline && (
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <Calendar className="size-3" aria-hidden="true" />
-            {formatDate(task.deadline)}
-          </span>
-        )}
-        {task.assignee && (
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <UserIcon className="size-3" aria-hidden="true" />
-            {task.assignee.name}
-          </span>
-        )}
-        {task.sourceForm && (
-          <Link
-            href={`/van-hanh/phieu-phoi-hop/${task.sourceForm.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            <FileText className="size-3" aria-hidden="true" />
-            {task.sourceForm.code}
-          </Link>
-        )}
-      </div>
-      <p className="text-xs text-muted-foreground mt-1.5">{task.dept.code}</p>
     </div>
   );
 }

@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ deptId?: string; assigneeId?: string; priority?: string; fromForm?: string }>;
+  searchParams: Promise<{ deptId?: string; assigneeId?: string; priority?: string; fromForm?: string; view?: string }>;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/login");
@@ -65,6 +65,7 @@ export default async function Page({
       currentDeptId={ctx?.departmentId ?? null}
       currentIsLeader={ctx?.isLeader ?? false}
       currentIsDirector={ctx?.isDirector ?? false}
+      view={sp.view === "swimlane" ? "swimlane" : "kanban"}
       filters={{
         deptId: queryDeptId ?? null,
         assigneeId: sp.assigneeId ?? null,
