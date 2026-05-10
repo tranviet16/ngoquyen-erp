@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { ProjectsClient } from "./projects-client";
 import { listProjects } from "@/lib/master-data/project-service";
+import { serializeDecimals } from "@/lib/serialize";
 
 interface Props {
   searchParams: Promise<{ search?: string; page?: string }>;
@@ -16,7 +17,7 @@ export default async function ProjectsPage({ searchParams }: Props) {
   return (
     <Suspense>
       <ProjectsClient
-        data={result.items}
+        data={serializeDecimals(result.items)}
         total={result.total}
         page={result.page}
         pageSize={result.pageSize}

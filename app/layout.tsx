@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Be_Vietnam_Pro, Noto_Sans } from "next/font/google";
+import { cookies } from "next/headers";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -22,27 +23,23 @@ export const metadata: Metadata = {
   description: "Hệ thống quản lý ERP nội bộ",
 };
 
-const themeInitScript = `
-try {
-  var t = localStorage.getItem('nq-erp-theme');
-  if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  if (t === 'dark') document.documentElement.classList.add('dark');
-} catch (_) {}
-`;
-
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const c = await cookies();
+  const theme = c.get("nq-erp-theme")?.value === "dark" ? "dark" : "";
   return (
-    <html lang="vi" className={`${beVietnamPro.variable} ${notoSans.variable} h-full antialiased`} suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
+    <html
+      lang="vi"
+      className={`${beVietnamPro.variable} ${notoSans.variable} h-full antialiased ${theme}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-full bg-background text-foreground">
         {children}
         <Toaster richColors position="top-right" />
+        <div id="portal" />
       </body>
     </html>
   );
