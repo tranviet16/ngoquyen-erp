@@ -37,6 +37,13 @@ model User {
   deptAccess    UserDeptAccess[] @relation("UserAccess")
   accessGranted UserDeptAccess[] @relation("AccessGranter")
 
+  modulePermissions         ModulePermission[]  @relation("ModulePermissionUser")
+  modulePermissionsGranted  ModulePermission[]  @relation("ModulePermissionGranter")
+  projectPermissions        ProjectPermission[] @relation("ProjectPermissionUser")
+  projectPermissionsGranted ProjectPermission[] @relation("ProjectPermissionGranter")
+  projectGrantAll           ProjectGrantAll?    @relation("ProjectGrantAllUser")
+  projectGrantAllGranted    ProjectGrantAll[]   @relation("ProjectGrantAllGranter")
+
   @@index([departmentId])
   @@map("users")
 }
@@ -54,8 +61,8 @@ model Department {
   coordinationFormsAsCreator  CoordinationForm[] @relation("CFormCreatorDept")
   coordinationFormsAsExecutor CoordinationForm[] @relation("CFormExecutorDept")
 
-  tasks       Task[]
-  userAccess  UserDeptAccess[]
+  tasks      Task[]
+  userAccess UserDeptAccess[]
 
   @@map("departments")
 }
@@ -243,7 +250,8 @@ model Project {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  categories ProjectCategory[]
+  categories      ProjectCategory[]
+  userPermissions ProjectPermission[]
 
   // Partial unique enforced via raw SQL: projects_code_active_unique WHERE "deletedAt" IS NULL
   @@index([code])
@@ -939,6 +947,18 @@ model SlDtProgressStatus {
   @@map("sl_dt_progress_statuses")
 }
 
+model SlDtSubtotalLabel {
+  id        Int      @id @default(autoincrement())
+  scope     String
+  key       String
+  label     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, key])
+  @@map("sl_dt_subtotal_labels")
+}
+
 model Task {
   id            Int       @id @default(autoincrement())
   title         String
@@ -1021,4 +1041,50 @@ model Notification {
   @@index([userId, readAt])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+// ─── ACL: Module & Project Permissions ──────────────────────────────────────
+
+model ModulePermission {
+  userId    String
+  moduleKey String
+  level     String // "read" | "comment" | "edit" | "admin"
+  grantedAt DateTime @default(now())
+  grantedBy String?
+
+  user    User  @relation("ModulePermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  granter User? @relation("ModulePermissionGranter", fields: [grantedBy], references: [id])
+
+  @@id([userId, moduleKey])
+  @@index([userId])
+  @@map("module_permissions")
+}
+
+model ProjectPermission {
+  userId    String
+  projectId Int
+  level     String
+  grantedAt DateTime @default(now())
+  grantedBy String?
+
+  user    User    @relation("ProjectPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  granter User?   @relation("ProjectPermissionGranter", fields: [grantedBy], references: [id])
+
+  @@id([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
+  @@map("project_permissions")
+}
+
+model ProjectGrantAll {
+  userId    String   @id
+  level     String
+  grantedAt DateTime @default(now())
+  grantedBy String?
+
+  user    User  @relation("ProjectGrantAllUser", fields: [userId], references: [id], onDelete: Cascade)
+  granter User? @relation("ProjectGrantAllGranter", fields: [grantedBy], references: [id])
+
+  @@map("project_grant_all")
 }
