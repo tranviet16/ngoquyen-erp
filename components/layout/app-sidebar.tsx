@@ -1,129 +1,85 @@
-"use client";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { canAccess } from "@/lib/acl";
+import type { ModuleKey } from "@/lib/acl";
+import { AppSidebarClient, type NavGroupData, type NavItemData } from "./app-sidebar-client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Database,
-  Building2,
-  Package,
-  Receipt,
-  HardHat,
-  TrendingUp,
-  Wallet,
-  Upload,
-  Users,
-  ClipboardList,
-  KanbanSquare,
-  Bell,
-  type LucideIcon,
-} from "lucide-react";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarHeader,
-  SidebarFooter,
-} from "@/components/ui/sidebar";
+type NavItemSpec = NavItemData & { moduleKey: ModuleKey };
+type NavGroupSpec = { label: string; items: NavItemSpec[] };
 
-type NavItem = { label: string; href: string; icon: LucideIcon };
-type NavGroup = { label: string; items: NavItem[] };
-
-const NAV_GROUPS: NavGroup[] = [
+const NAV_GROUPS: NavGroupSpec[] = [
   {
     label: "Tổng quan",
     items: [
-      { label: "Bảng điều khiển", href: "/dashboard", icon: LayoutDashboard },
-      { label: "Dữ liệu nền tảng", href: "/master-data", icon: Database },
+      { label: "Bảng điều khiển", href: "/dashboard", icon: "LayoutDashboard", moduleKey: "dashboard" },
+      { label: "Dữ liệu nền tảng", href: "/master-data", icon: "Database", moduleKey: "master-data" },
     ],
   },
   {
     label: "Dự án & Sản xuất",
     items: [
-      { label: "Dự án xây dựng", href: "/du-an", icon: Building2 },
-      { label: "Vật tư – Nhà cung cấp", href: "/vat-tu-ncc", icon: Package },
-      { label: "Sản lượng – Doanh thu", href: "/sl-dt", icon: TrendingUp },
+      { label: "Dự án xây dựng", href: "/du-an", icon: "Building2", moduleKey: "du-an" },
+      { label: "Vật tư – Nhà cung cấp", href: "/vat-tu-ncc", icon: "Package", moduleKey: "vat-tu-ncc" },
+      { label: "Sản lượng – Doanh thu", href: "/sl-dt", icon: "TrendingUp", moduleKey: "sl-dt" },
     ],
   },
   {
     label: "Tài chính & Công nợ",
     items: [
-      { label: "Công nợ vật tư", href: "/cong-no-vt", icon: Receipt },
-      { label: "Công nợ nhân công", href: "/cong-no-nc", icon: HardHat },
-      { label: "Tài chính NQ", href: "/tai-chinh", icon: Wallet },
+      { label: "Công nợ vật tư", href: "/cong-no-vt", icon: "Receipt", moduleKey: "cong-no-vt" },
+      { label: "Công nợ nhân công", href: "/cong-no-nc", icon: "HardHat", moduleKey: "cong-no-nc" },
+      { label: "Tài chính NQ", href: "/tai-chinh", icon: "Wallet", moduleKey: "tai-chinh" },
     ],
   },
   {
-    label: "Cộng tác",
+    label: "Vận hành",
     items: [
-      { label: "Phiếu phối hợp", href: "/phieu-phoi-hop", icon: ClipboardList },
-      { label: "Bảng công việc", href: "/cong-viec", icon: KanbanSquare },
-      { label: "Thông báo", href: "/thong-bao", icon: Bell },
+      { label: "Bảng công việc", href: "/van-hanh/cong-viec", icon: "KanbanSquare", moduleKey: "van-hanh.cong-viec" },
+      { label: "Phiếu phối hợp", href: "/van-hanh/phieu-phoi-hop", icon: "ClipboardList", moduleKey: "van-hanh.phieu-phoi-hop" },
+      { label: "Hiệu suất", href: "/van-hanh/hieu-suat", icon: "TrendingUp", moduleKey: "van-hanh.hieu-suat" },
+      { label: "Thông báo", href: "/thong-bao", icon: "Bell", moduleKey: "thong-bao" },
     ],
   },
   {
     label: "Quản trị",
     items: [
-      { label: "Nhập dữ liệu", href: "/admin/import", icon: Upload },
-      { label: "Phòng ban", href: "/admin/phong-ban", icon: Users },
-      { label: "Người dùng", href: "/admin/nguoi-dung", icon: Users },
+      { label: "Nhập dữ liệu", href: "/admin/import", icon: "Upload", moduleKey: "admin.import" },
+      { label: "Phòng ban", href: "/admin/phong-ban", icon: "Users", moduleKey: "admin.phong-ban" },
+      { label: "Người dùng", href: "/admin/nguoi-dung", icon: "Users", moduleKey: "admin.nguoi-dung" },
+      { label: "Phân quyền", href: "/admin/permissions", icon: "Shield", moduleKey: "admin.permissions" },
     ],
   },
 ];
 
-export function AppSidebar() {
-  const pathname = usePathname();
+export async function AppSidebar() {
+  const h = await headers();
+  const session = await auth.api.getSession({ headers: h });
+  const userId = session?.user?.id;
+  if (!userId) return null;
 
-  return (
-    <Sidebar>
-      <SidebarHeader className="border-b px-4 py-3">
-        <Link href="/dashboard" className="flex flex-col gap-0.5">
-          <span className="font-bold text-base text-primary tracking-tight">ERP Ngô Quyền</span>
-          <span className="text-[11px] text-muted-foreground leading-tight">Hệ thống quản lý nội bộ</span>
-        </Link>
-      </SidebarHeader>
-      <SidebarContent>
-        {NAV_GROUPS.map((group) => (
-          <SidebarGroup key={group.label}>
-            <SidebarGroupLabel className="text-[11px] uppercase tracking-wider text-muted-foreground/80 font-semibold">
-              {group.label}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const isActive =
-                    item.href === "/dashboard"
-                      ? pathname === "/dashboard"
-                      : pathname.startsWith(item.href);
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        render={
-                          <Link href={item.href} className="flex items-center gap-2.5" />
-                        }
-                        isActive={isActive}
-                        tooltip={item.label}
-                      >
-                        <Icon className="size-4 shrink-0" aria-hidden="true" />
-                        <span className="truncate">{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
-      <SidebarFooter className="border-t px-4 py-2.5">
-        <p className="text-[11px] text-muted-foreground">Phiên bản 1.0.0</p>
-      </SidebarFooter>
-    </Sidebar>
+  // Flatten all items, resolve access in parallel, then re-group
+  const allItems = NAV_GROUPS.flatMap((g) => g.items.map((item) => ({ group: g, item })));
+  const accessResults = await Promise.all(
+    allItems.map(({ item }) =>
+      canAccess(userId, item.moduleKey, { minLevel: "read", scope: "module" }),
+    ),
   );
+
+  // Re-group by original group order, preserving only visible items
+  const groupMap = new Map<string, NavItemData[]>();
+  for (const group of NAV_GROUPS) {
+    groupMap.set(group.label, []);
+  }
+  for (let i = 0; i < allItems.length; i++) {
+    if (accessResults[i]) {
+      const { group, item } = allItems[i];
+      groupMap.get(group.label)!.push({ label: item.label, href: item.href, icon: item.icon });
+    }
+  }
+
+  const filteredGroups: NavGroupData[] = NAV_GROUPS
+    .map((g) => ({ label: g.label, items: groupMap.get(g.label)! }))
+    .filter((g) => g.items.length > 0);
+
+  return <AppSidebarClient groups={filteredGroups} />;
 }
