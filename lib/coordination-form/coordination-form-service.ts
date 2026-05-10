@@ -11,7 +11,7 @@ import { nextStatus, type FormStatus, type FormAction } from "./state-machine";
 import { nextFormCode, isUniqueViolation } from "./code-generator";
 import type { CreateDraftInput, UpdateDraftInput } from "./schemas";
 import type { CoordinationForm, CoordinationFormApproval, Department, User } from "@prisma/client";
-import { getDeptLeaders, getDirectorId } from "@/lib/department-rbac";
+import { getDeptLeaders } from "@/lib/department-rbac";
 
 const PAGE_SIZE = 20;
 
@@ -60,9 +60,8 @@ export async function listForms(opts: {
   total: number;
   page: number;
   pageSize: number;
-  pendingDirectorCount: number;
 }> {
-  const { ctx, role, accessMap } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
   const page = Math.max(1, opts.page ?? 1);
 
   const where: Record<string, unknown> = {};
@@ -77,13 +76,10 @@ export async function listForms(opts: {
       orClauses.push({ creatorDeptId: { in: viewableIds } });
       orClauses.push({ executorDeptId: { in: viewableIds } });
     }
-    if (ctx.isDirector) {
-      orClauses.push({ status: { in: ["pending_director", "approved", "rejected"] } });
-    }
     where.OR = orClauses;
   }
 
-  const [items, total, pendingDirectorCount] = await Promise.all([
+  const [items, total] = await Promise.all([
     prisma.coordinationForm.findMany({
       where,
       include: {
@@ -100,10 +96,9 @@ export async function listForms(opts: {
       take: PAGE_SIZE,
     }),
     prisma.coordinationForm.count({ where }),
-    prisma.coordinationForm.count({ where: { status: "pending_director" } }),
   ]);
 
-  return { items: items as FormWithRelations[], total, page, pageSize: PAGE_SIZE, pendingDirectorCount };
+  return { items: items as FormWithRelations[], total, page, pageSize: PAGE_SIZE };
 }
 
 export async function getFormById(id: number): Promise<FormWithRelations | null> {
@@ -205,7 +200,7 @@ async function applyTransition(
   id: number,
   expected: FormStatus,
   action: FormAction,
-  step: "creator" | "leader" | "director",
+  step: "creator" | "leader",
   approverId: string,
   comment: string | null,
   extraData: Record<string, unknown> = {},
@@ -306,33 +301,65 @@ async function requireLeaderForExecutor(formId: number): Promise<{
   return { ctx, form };
 }
 
-async function requireDirector(formId: number): Promise<{
-  ctx: UserContext;
-  form: CoordinationForm;
-}> {
-  const { ctx } = await requireContext();
-  const form = await prisma.coordinationForm.findUnique({ where: { id: formId } });
-  if (!form) throw new Error("Không tìm thấy phiếu");
-  if (!ctx.isDirector) throw new Error("Chỉ giám đốc được duyệt cuối");
-  return { ctx, form };
-}
+export async function leaderApprove(
+  id: number,
+  assigneeId: string,
+  comment?: string,
+): Promise<CoordinationForm> {
+  const { ctx, form } = await requireLeaderForExecutor(id);
+  if (!assigneeId) throw new Error("Cần chọn nhân viên phụ trách trước khi duyệt");
 
-export async function leaderApprove(id: number, comment?: string): Promise<CoordinationForm> {
-  const { ctx } = await requireLeaderForExecutor(id);
-  return applyTransition(id, "pending_leader", "leader_approve", "leader", ctx.userId, comment ?? null, {}, async (tx, updated) => {
-    const directorId = await getDirectorId();
-    if (directorId && directorId !== ctx.userId) {
-      await tx.notification.create({
+  const assignee = await prisma.user.findUnique({
+    where: { id: assigneeId },
+    select: { id: true, departmentId: true, name: true },
+  });
+  if (!assignee) throw new Error("Không tìm thấy nhân viên được giao");
+  if (assignee.departmentId !== form.executorDeptId) {
+    throw new Error("Nhân viên được giao phải thuộc phòng thực hiện");
+  }
+
+  return applyTransition(
+    id,
+    "pending_leader",
+    "leader_approve",
+    "leader",
+    ctx.userId,
+    comment ?? null,
+    { closedAt: new Date() },
+    async (tx, updated) => {
+      await tx.task.create({
         data: {
-          userId: directorId,
-          type: "form_submitted",
-          title: `Phiếu chờ giám đốc duyệt: ${updated.code}`,
-          body: updated.content.slice(0, 200),
-          link: `/phieu-phoi-hop/${updated.id}`,
+          title: updated.content.slice(0, 200),
+          description: `Từ phiếu ${updated.code}\n\n${updated.content}`,
+          deptId: updated.executorDeptId,
+          creatorId: updated.creatorId,
+          sourceFormId: updated.id,
+          priority: updated.priority,
+          deadline: updated.deadline,
+          status: "todo",
+          assigneeId: assignee.id,
         },
       });
-    }
-  });
+      await notifyCreator(
+        tx,
+        updated,
+        "form_approved",
+        `Phiếu ${updated.code} đã được duyệt`,
+        `Đã giao cho ${assignee.name}`,
+      );
+      if (assignee.id !== updated.creatorId) {
+        await tx.notification.create({
+          data: {
+            userId: assignee.id,
+            type: "task_assigned",
+            title: `Bạn được giao công việc mới từ phiếu ${updated.code}`,
+            body: updated.content.slice(0, 200),
+            link: `/cong-viec`,
+          },
+        });
+      }
+    },
+  );
 }
 
 export async function leaderRejectRevise(id: number, comment: string): Promise<CoordinationForm> {
@@ -353,62 +380,6 @@ export async function leaderRejectClose(id: number, comment: string): Promise<Co
   });
 }
 
-export async function directorApprove(id: number, comment?: string): Promise<CoordinationForm> {
-  const { ctx } = await requireDirector(id);
-  return applyTransition(id, "pending_director", "director_approve", "director", ctx.userId, comment ?? null, {
-    closedAt: new Date(),
-  }, async (tx, u) => {
-    // Auto-create Task linked to this form
-    await tx.task.create({
-      data: {
-        title: u.content.slice(0, 200),
-        description: `Từ phiếu ${u.code}\n\n${u.content}`,
-        deptId: u.executorDeptId,
-        creatorId: u.creatorId,
-        sourceFormId: u.id,
-        priority: u.priority,
-        deadline: u.deadline,
-        status: "todo",
-        assigneeId: null,
-      },
-    });
-    // Notify creator
-    await notifyCreator(tx, u, "form_approved", `Phiếu ${u.code} đã được duyệt`, "Task đã được tạo trong bảng công việc");
-    // Notify leaders of executor dept (so they assign the task)
-    const leaderIds = await getDeptLeaders(u.executorDeptId);
-    for (const leaderId of leaderIds) {
-      if (leaderId === ctx.userId || leaderId === u.creatorId) continue;
-      await tx.notification.create({
-        data: {
-          userId: leaderId,
-          type: "task_assigned",
-          title: `Task mới từ phiếu ${u.code}`,
-          body: "Cần phân công cho thành viên trong phòng",
-          link: `/cong-viec`,
-        },
-      });
-    }
-  });
-}
-
-export async function directorRejectRevise(id: number, comment: string): Promise<CoordinationForm> {
-  if (!comment || comment.trim().length < 5) throw new Error("Lý do tối thiểu 5 ký tự");
-  const { ctx } = await requireDirector(id);
-  return applyTransition(id, "pending_director", "director_reject_revise", "director", ctx.userId, comment, {}, async (tx, u) => {
-    await notifyCreator(tx, u, "form_revising", `Phiếu ${u.code} cần sửa lại (giám đốc)`, comment);
-  });
-}
-
-export async function directorRejectClose(id: number, comment: string): Promise<CoordinationForm> {
-  if (!comment || comment.trim().length < 5) throw new Error("Lý do tối thiểu 5 ký tự");
-  const { ctx } = await requireDirector(id);
-  return applyTransition(id, "pending_director", "director_reject_close", "director", ctx.userId, comment, {
-    closedAt: new Date(),
-  }, async (tx, u) => {
-    await notifyCreator(tx, u, "form_rejected", `Phiếu ${u.code} bị từ chối (giám đốc)`, comment);
-  });
-}
-
 // ─── Action resolution (server-side) ────────────────────────────────────────
 
 export type AvailableAction =
@@ -418,10 +389,7 @@ export type AvailableAction =
   | "cancel"
   | "leader_approve"
   | "leader_reject_revise"
-  | "leader_reject_close"
-  | "director_approve"
-  | "director_reject_revise"
-  | "director_reject_close";
+  | "leader_reject_close";
 
 export function resolveAvailableActions(
   form: CoordinationForm,
@@ -439,8 +407,16 @@ export function resolveAvailableActions(
   if (form.status === "pending_leader" && isExecutorLeader) {
     out.push("leader_approve", "leader_reject_revise", "leader_reject_close");
   }
-  if (form.status === "pending_director" && ctx.isDirector) {
-    out.push("director_approve", "director_reject_revise", "director_reject_close");
-  }
   return out;
+}
+
+// Helper for assignee picker UI: list users in executor dept.
+export async function listAssigneeCandidates(formId: number): Promise<Array<{ id: string; name: string; email: string }>> {
+  const { ctx } = await requireLeaderForExecutor(formId);
+  const users = await prisma.user.findMany({
+    where: { departmentId: ctx.departmentId! },
+    select: { id: true, name: true, email: true },
+    orderBy: { name: "asc" },
+  });
+  return users;
 }

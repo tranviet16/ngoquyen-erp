@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { formatDate } from "@/lib/utils/format";
 import { Plus, Calendar, User as UserIcon, FileText } from "lucide-react";
@@ -32,6 +33,8 @@ import {
   updateTaskAction,
 } from "./actions";
 import { CommentSection } from "@/components/cong-viec/comment-section";
+import { OverdueBadge } from "@/components/task/overdue-badge";
+import { getOverdueLabel } from "@/lib/task/overdue";
 import { AttachmentSection } from "@/components/cong-viec/attachment-section";
 import { SubtaskSection } from "@/components/cong-viec/subtask-section";
 
@@ -365,6 +368,12 @@ function TaskCard({
         <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_COLORS[task.priority] ?? ""}`}>
           {PRIORITY_LABEL[task.priority] ?? task.priority}
         </span>
+        <OverdueBadge
+          label={getOverdueLabel({
+            deadline: task.deadline ? new Date(task.deadline) : null,
+            completedAt: task.completedAt ? new Date(task.completedAt) : null,
+          })}
+        />
         {task.deadline && (
           <span className="inline-flex items-center gap-1 text-muted-foreground">
             <Calendar className="size-3" aria-hidden="true" />
@@ -481,7 +490,7 @@ function CreateTaskDialog({
         </div>
         <div>
           <Label>Hạn chót</Label>
-          <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+          <DateInput value={deadline} onChange={(v) => setDeadline(v)} />
         </div>
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button type="button" variant="outline" onClick={onClose} disabled={submitting || pending}>Hủy</Button>
@@ -607,7 +616,7 @@ function EditTaskDialog({
           </div>
           <div>
             <Label>Hạn chót</Label>
-            <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} disabled={!canEdit} />
+            <DateInput value={deadline} onChange={(v) => setDeadline(v)} disabled={!canEdit} />
           </div>
         </div>
         <div>

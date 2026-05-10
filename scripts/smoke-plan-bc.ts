@@ -106,10 +106,10 @@ function testStateMachine() {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Test 2: auto-create task on directorApprove (DB-level)
+// Test 2: auto-create task on leaderApprove with assignee (DB-level)
 // ────────────────────────────────────────────────────────────────────
 async function testAutoCreate(fx: Fixture) {
-  console.log("\n[test 2] Auto-create task on directorApprove (transactional)");
+  console.log("\n[test 2] Auto-create task on leaderApprove (transactional)");
 
   // Clean prior smoke forms/tasks for idempotency (single-row deletes for audit compatibility)
   const priorForms = await prisma.coordinationForm.findMany({
@@ -138,19 +138,16 @@ async function testAutoCreate(fx: Fixture) {
   check("draft form created", !!form.id);
 
   // Walk state machine via direct DB updates (bypassing session-bound services)
-  // Simulate what applyTransition + directorApprove tx callback does:
+  // Simulate what applyTransition + leaderApprove tx callback does:
   await prisma.$transaction(async (tx) => {
     await tx.coordinationForm.update({ where: { id: form.id }, data: { status: "pending_leader" } });
   });
   await prisma.$transaction(async (tx) => {
-    await tx.coordinationForm.update({ where: { id: form.id }, data: { status: "pending_director" } });
-  });
-  await prisma.$transaction(async (tx) => {
     const u = await tx.coordinationForm.update({
       where: { id: form.id },
-      data: { status: "approved" },
+      data: { status: "approved", closedAt: new Date() },
     });
-    // Mirror the directorApprove tx callback in coordination-form-service.ts
+    // Mirror the leaderApprove tx callback in coordination-form-service.ts
     await tx.task.create({
       data: {
         title: u.content.slice(0, 200),
@@ -161,7 +158,7 @@ async function testAutoCreate(fx: Fixture) {
         priority: u.priority,
         deadline: u.deadline,
         status: "todo",
-        assigneeId: null,
+        assigneeId: fx.deptB.member.id,
       },
     });
   });
@@ -173,7 +170,7 @@ async function testAutoCreate(fx: Fixture) {
     check("task.creatorId = form.creatorId", task.creatorId === fx.deptA.member.id);
     check("task.status = 'todo'", task.status === "todo");
     check("task.priority preserved", task.priority === form.priority);
-    check("task.assigneeId null (unassigned)", task.assigneeId === null);
+    check("task.assigneeId set to deptB member", task.assigneeId === fx.deptB.member.id);
   }
 
   // Cleanup

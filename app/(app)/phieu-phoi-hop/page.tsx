@@ -11,7 +11,6 @@ export const dynamic = "force-dynamic";
 const VALID_STATUS: FormStatus[] = [
   "draft",
   "pending_leader",
-  "pending_director",
   "approved",
   "rejected",
   "revising",

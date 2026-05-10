@@ -9,9 +9,7 @@ import {
   leaderApprove,
   leaderRejectRevise,
   leaderRejectClose,
-  directorApprove,
-  directorRejectRevise,
-  directorRejectClose,
+  listAssigneeCandidates,
 } from "@/lib/coordination-form/coordination-form-service";
 import { createDraftSchema, updateDraftSchema } from "@/lib/coordination-form/schemas";
 
@@ -44,10 +42,11 @@ export async function cancelFormAction(id: number) {
   return form;
 }
 
-export async function leaderApproveAction(id: number, comment?: string) {
-  const form = await leaderApprove(id, comment);
+export async function leaderApproveAction(id: number, assigneeId: string, comment?: string) {
+  const form = await leaderApprove(id, assigneeId, comment);
   revalidatePath(`/phieu-phoi-hop/${id}`);
   revalidatePath("/phieu-phoi-hop");
+  revalidatePath("/cong-viec");
   return form;
 }
 
@@ -65,23 +64,6 @@ export async function leaderRejectCloseAction(id: number, comment: string) {
   return form;
 }
 
-export async function directorApproveAction(id: number, comment?: string) {
-  const form = await directorApprove(id, comment);
-  revalidatePath(`/phieu-phoi-hop/${id}`);
-  revalidatePath("/phieu-phoi-hop");
-  return form;
-}
-
-export async function directorRejectReviseAction(id: number, comment: string) {
-  const form = await directorRejectRevise(id, comment);
-  revalidatePath(`/phieu-phoi-hop/${id}`);
-  revalidatePath("/phieu-phoi-hop");
-  return form;
-}
-
-export async function directorRejectCloseAction(id: number, comment: string) {
-  const form = await directorRejectClose(id, comment);
-  revalidatePath(`/phieu-phoi-hop/${id}`);
-  revalidatePath("/phieu-phoi-hop");
-  return form;
+export async function listAssigneeCandidatesAction(formId: number) {
+  return listAssigneeCandidates(formId);
 }

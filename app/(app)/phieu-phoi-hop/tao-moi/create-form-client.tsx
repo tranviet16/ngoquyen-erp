@@ -6,6 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { createDraftAction } from "../actions";
 
@@ -69,7 +70,7 @@ export function CreateFormClient({ departments, currentDeptId }: Props) {
       </div>
 
       {noDept && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
           Bạn chưa thuộc phòng ban nào. Liên hệ admin để được gán phòng trước khi tạo phiếu.
         </div>
       )}
@@ -144,10 +145,9 @@ export function CreateFormClient({ departments, currentDeptId }: Props) {
 
           <div>
             <Label>Hạn chót (tùy chọn)</Label>
-            <Input
-              type="date"
+            <DateInput
               value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
+              onChange={(v) => setDeadline(v)}
               disabled={noDept || pending}
               className="mt-1"
             />

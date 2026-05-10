@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { formatDate, formatDateTime } from "@/lib/utils/format";
@@ -22,9 +22,7 @@ import {
   leaderApproveAction,
   leaderRejectReviseAction,
   leaderRejectCloseAction,
-  directorApproveAction,
-  directorRejectReviseAction,
-  directorRejectCloseAction,
+  listAssigneeCandidatesAction,
 } from "../actions";
 
 interface DeptOption {
@@ -42,7 +40,6 @@ interface Props {
 const STATUS_BADGE: Record<FormStatus, string> = {
   draft: "bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
   pending_leader: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
-  pending_director: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
   approved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
   rejected: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
   revising: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
@@ -58,19 +55,14 @@ const PRIORITY_LABEL: Record<string, string> = {
 const ACTION_LABEL: Record<string, string> = {
   submit: "Gửi duyệt",
   resubmit: "Gửi lại",
-  leader_approve: "Lãnh đạo duyệt",
-  leader_reject_revise: "Lãnh đạo yêu cầu sửa",
-  leader_reject_close: "Lãnh đạo từ chối",
-  director_approve: "Giám đốc duyệt",
-  director_reject_revise: "Giám đốc yêu cầu sửa",
-  director_reject_close: "Giám đốc từ chối",
+  leader_approve: "Trưởng phòng duyệt",
+  leader_reject_revise: "Trưởng phòng yêu cầu sửa",
+  leader_reject_close: "Trưởng phòng từ chối",
   cancel: "Hủy phiếu",
 };
 
-type RejectKind = {
-  step: "leader" | "director";
-  type: "revise" | "close";
-};
+type RejectKind = { type: "revise" | "close" };
+type Candidate = { id: string; name: string; email: string };
 
 export function DetailClient({ form, availableActions, departments }: Props) {
   const router = useRouter();
@@ -87,7 +79,13 @@ export function DetailClient({ form, availableActions, departments }: Props) {
   );
   const [editExecutor, setEditExecutor] = useState<number>(form.executorDeptId);
 
-  function run(name: string, fn: () => Promise<unknown>, successMsg: string) {
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [approveComment, setApproveComment] = useState("");
+
+  function run(fn: () => Promise<unknown>, successMsg: string) {
     startTransition(async () => {
       try {
         await fn();
@@ -100,19 +98,48 @@ export function DetailClient({ form, availableActions, departments }: Props) {
   }
 
   function doSubmit() {
-    run("submit", () => submitFormAction(form.id), "Đã gửi duyệt");
+    run(() => submitFormAction(form.id), "Đã gửi duyệt");
   }
   function doCancel() {
     if (!confirm("Hủy phiếu này? Hành động không thể hoàn tác.")) return;
-    run("cancel", () => cancelFormAction(form.id), "Đã hủy phiếu");
+    run(() => cancelFormAction(form.id), "Đã hủy phiếu");
   }
-  function doApprove(kind: "leader" | "director") {
-    const fn = kind === "leader" ? leaderApproveAction : directorApproveAction;
-    run("approve", () => fn(form.id), "Đã duyệt");
+  async function openApprove() {
+    setApproveOpen(true);
+    setAssigneeId("");
+    setApproveComment("");
+    if (!candidates) {
+      setLoadingCandidates(true);
+      try {
+        const list = await listAssigneeCandidatesAction(form.id);
+        setCandidates(list);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+        setApproveOpen(false);
+      } finally {
+        setLoadingCandidates(false);
+      }
+    }
   }
-  function openReject(step: "leader" | "director", type: "revise" | "close") {
+  function doApprove() {
+    if (!assigneeId) {
+      toast.error("Vui lòng chọn nhân viên phụ trách");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await leaderApproveAction(form.id, assigneeId, approveComment.trim() || undefined);
+        toast.success("Đã duyệt và giao việc");
+        setApproveOpen(false);
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+      }
+    });
+  }
+  function openReject(type: "revise" | "close") {
     setRejectComment("");
-    setRejectDialog({ step, type });
+    setRejectDialog({ type });
   }
   function doReject() {
     if (!rejectDialog) return;
@@ -121,13 +148,7 @@ export function DetailClient({ form, availableActions, departments }: Props) {
       return;
     }
     const fn =
-      rejectDialog.step === "leader"
-        ? rejectDialog.type === "revise"
-          ? leaderRejectReviseAction
-          : leaderRejectCloseAction
-        : rejectDialog.type === "revise"
-        ? directorRejectReviseAction
-        : directorRejectCloseAction;
+      rejectDialog.type === "revise" ? leaderRejectReviseAction : leaderRejectCloseAction;
     startTransition(async () => {
       try {
         await fn(form.id, rejectComment.trim());
@@ -257,10 +278,9 @@ export function DetailClient({ form, availableActions, departments }: Props) {
               </div>
               <div>
                 <Label>Hạn chót</Label>
-                <Input
-                  type="date"
+                <DateInput
                   value={editDeadline}
-                  onChange={(e) => setEditDeadline(e.target.value)}
+                  onChange={(v) => setEditDeadline(v)}
                   className="mt-1"
                 />
               </div>
@@ -330,14 +350,14 @@ export function DetailClient({ form, availableActions, departments }: Props) {
             </Button>
           )}
           {availableActions.includes("leader_approve") && (
-            <Button onClick={() => doApprove("leader")} disabled={pending}>
-              Duyệt (Lãnh đạo)
+            <Button onClick={openApprove} disabled={pending}>
+              Duyệt & giao việc
             </Button>
           )}
           {availableActions.includes("leader_reject_revise") && (
             <Button
               variant="outline"
-              onClick={() => openReject("leader", "revise")}
+              onClick={() => openReject("revise")}
               disabled={pending}
             >
               Yêu cầu sửa
@@ -346,30 +366,7 @@ export function DetailClient({ form, availableActions, departments }: Props) {
           {availableActions.includes("leader_reject_close") && (
             <Button
               variant="destructive"
-              onClick={() => openReject("leader", "close")}
-              disabled={pending}
-            >
-              Từ chối (đóng)
-            </Button>
-          )}
-          {availableActions.includes("director_approve") && (
-            <Button onClick={() => doApprove("director")} disabled={pending}>
-              Duyệt cuối (Giám đốc)
-            </Button>
-          )}
-          {availableActions.includes("director_reject_revise") && (
-            <Button
-              variant="outline"
-              onClick={() => openReject("director", "revise")}
-              disabled={pending}
-            >
-              Yêu cầu sửa
-            </Button>
-          )}
-          {availableActions.includes("director_reject_close") && (
-            <Button
-              variant="destructive"
-              onClick={() => openReject("director", "close")}
+              onClick={() => openReject("close")}
               disabled={pending}
             >
               Từ chối (đóng)
@@ -387,6 +384,80 @@ export function DetailClient({ form, availableActions, departments }: Props) {
           )}
         </div>
       )}
+
+      <CrudDialog
+        title="Duyệt phiếu & giao việc"
+        open={approveOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setApproveOpen(false);
+            setAssigneeId("");
+            setApproveComment("");
+          }
+        }}
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Chọn nhân viên phụ trách trong phòng <strong>{form.executorDept.name}</strong>. Sau khi
+            duyệt, hệ thống tự tạo công việc đã giao cho người này.
+          </p>
+          <div>
+            <Label>Nhân viên phụ trách *</Label>
+            {loadingCandidates ? (
+              <p className="text-xs text-muted-foreground mt-1">Đang tải danh sách...</p>
+            ) : !candidates || candidates.length === 0 ? (
+              <p className="text-xs text-destructive mt-1">
+                Phòng thực hiện chưa có nhân viên nào.
+              </p>
+            ) : (
+              <select
+                className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                autoFocus
+              >
+                <option value="">— Chọn nhân viên —</option>
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.email})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div>
+            <Label>
+              Ghi chú (tuỳ chọn){" "}
+              <span className="text-xs text-muted-foreground">
+                ({approveComment.length}/500)
+              </span>
+            </Label>
+            <textarea
+              className="mt-1 w-full min-h-20 rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              value={approveComment}
+              onChange={(e) => setApproveComment(e.target.value)}
+              maxLength={500}
+              rows={3}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setApproveOpen(false);
+                setAssigneeId("");
+                setApproveComment("");
+              }}
+              disabled={pending}
+            >
+              Hủy
+            </Button>
+            <Button onClick={doApprove} disabled={pending || !assigneeId}>
+              {pending ? "Đang xử lý..." : "Duyệt & giao việc"}
+            </Button>
+          </div>
+        </div>
+      </CrudDialog>
 
       <CrudDialog
         title={

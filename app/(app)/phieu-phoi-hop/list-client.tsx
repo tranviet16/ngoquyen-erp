@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { statusLabel, type FormStatus } from "@/lib/coordination-form/state-machine";
 import type { FormWithRelations } from "@/lib/coordination-form/coordination-form-service";
 import { formatDate } from "@/lib/utils/format";
-import { Plus, AlertTriangle } from "lucide-react";
+import { Plus } from "lucide-react";
 
 interface DeptRow {
   id: number;
@@ -21,7 +21,6 @@ interface Props {
     total: number;
     page: number;
     pageSize: number;
-    pendingDirectorCount: number;
   };
   departments: DeptRow[];
   filter: { status?: FormStatus; scope: "mine" | "all"; page: number };
@@ -30,7 +29,6 @@ interface Props {
 const STATUS_BADGE: Record<FormStatus, string> = {
   draft: "bg-slate-100 text-slate-700 dark:bg-slate-700/40 dark:text-slate-300",
   pending_leader: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
-  pending_director: "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
   approved: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
   rejected: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
   revising: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
@@ -46,8 +44,7 @@ const PRIORITY_LABEL: Record<string, string> = {
 const FILTERS: { key: string; label: string; status?: FormStatus; scope?: "mine" | "all" }[] = [
   { key: "all", label: "Tất cả", scope: "all" },
   { key: "mine", label: "Của tôi", scope: "mine" },
-  { key: "pending_leader", label: "Chờ lãnh đạo", status: "pending_leader" },
-  { key: "pending_director", label: "Chờ giám đốc", status: "pending_director" },
+  { key: "pending_leader", label: "Chờ duyệt", status: "pending_leader" },
   { key: "approved", label: "Đã duyệt", status: "approved" },
   { key: "rejected", label: "Từ chối", status: "rejected" },
   { key: "revising", label: "Đang sửa", status: "revising" },
@@ -82,14 +79,8 @@ export function ListClient({ data, departments, filter }: Props) {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Phiếu phối hợp công việc</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Quản lý phiếu phối hợp giữa các phòng ban — quy trình duyệt 3 bước.
+            Quản lý phiếu phối hợp giữa các phòng ban — trưởng phòng duyệt và phân công.
           </p>
-          {data.pendingDirectorCount > 0 && (
-            <p className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 mt-2">
-              <AlertTriangle className="size-3.5" aria-hidden="true" />
-              Có {data.pendingDirectorCount} phiếu đang chờ giám đốc duyệt
-            </p>
-          )}
         </div>
         <Link href="/phieu-phoi-hop/tao-moi">
           <Button>

@@ -6,6 +6,8 @@ import { listDepartments } from "@/lib/department-service";
 import { getUserContext } from "@/lib/department-rbac";
 import { listViewableDeptIds } from "@/lib/dept-access";
 import { KanbanClient } from "./kanban-client";
+import { OverdueSummary } from "./overdue-summary";
+import { serializeDecimals } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +50,14 @@ export default async function Page({
       : allDepartments.filter((d) => viewableIds.includes(d.id));
 
   return (
+    <div className="space-y-3">
+      <OverdueSummary
+        userId={session.user.id}
+        isLeader={ctx?.isLeader ?? false}
+        deptId={ctx?.departmentId ?? null}
+      />
     <KanbanClient
-      byStatus={byStatus}
+      byStatus={serializeDecimals(byStatus)}
       departments={departments.map((d) => ({ id: d.id, code: d.code, name: d.name }))}
       members={members}
       currentUserId={session.user.id}
@@ -64,5 +72,6 @@ export default async function Page({
         fromForm: fromForm ?? null,
       }}
     />
+    </div>
   );
 }
