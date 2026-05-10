@@ -3,9 +3,10 @@ title: Performance dashboard MVP (Plan C)
 description: >-
   /van-hanh/hieu-suat — dept + individual performance metrics. Tasks completed,
   on-time %, avg time-to-close, overdue count. Role-based scope (member/leader/director).
-status: pending
+status: completed
 priority: P2
 created: 2026-05-10T00:00:00.000Z
+completed: 2026-05-11T00:00:00.000Z
 blockedBy: [260510-van-hanh-acl-refactor]
 ---
 
@@ -19,9 +20,9 @@ Replace placeholder `/van-hanh/hieu-suat` with real dashboard. Metrics from `Tas
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Metrics service + queries](./phase-01-metrics-service.md) | Pending |
-| 2 | [Dashboard UI + filters](./phase-02-dashboard-ui-filters.md) | Pending |
-| 3 | [Drill-down (dept → individual)](./phase-03-drill-down.md) | Pending |
+| 1 | [Metrics service + queries](./phase-01-metrics-service.md) | Completed |
+| 2 | [Dashboard UI + filters](./phase-02-dashboard-ui-filters.md) | Completed |
+| 3 | [Drill-down (dept → individual)](./phase-03-drill-down.md) | Completed |
 
 ## Key Decisions
 
@@ -59,4 +60,10 @@ Replace placeholder `/van-hanh/hieu-suat` with real dashboard. Metrics from `Tas
 
 ## Notes
 
-Detailed phase files to be written via `/ck:plan` once Plan A is in progress.
+Shipped 2026-05-11. Adapted spec field `fullName` → `name` (schema uses `name`).
+Refactored `getMetricsForUser` to take `(callerId, targetUserId, range)` with
+`resolveDrillScope` instead of separate `getMetricsForUserAsCaller` — single
+API surface. Skipped `?taskId=N` auto-open in cong-viec; drill task rows link
+to `/van-hanh/cong-viec?taskId=N` (existing handler can pick up later).
+Tests: 23 unit tests across aggregators + period helpers (no Prisma-mock infra,
+service-layer integration deferred consistent with Plan B precedent).

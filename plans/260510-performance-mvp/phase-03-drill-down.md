@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Drill-down (dept → individual)"
-status: pending
+status: completed
 priority: P3
 effort: "4h"
 dependencies: [2]

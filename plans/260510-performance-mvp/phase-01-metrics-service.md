@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Metrics service + queries"
-status: pending
+status: completed
 priority: P2
 effort: "5h"
 dependencies: []
