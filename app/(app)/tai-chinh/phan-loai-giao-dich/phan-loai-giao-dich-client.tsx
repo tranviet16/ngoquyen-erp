@@ -1,19 +1,29 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
+import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
-import {
-  AgGridBase,
-  vndFormatter,
-} from "@/components/ag-grid-base";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/utils/format";
+import { vndFormatter } from "@/lib/format";
 import type {
   ExpenseClassificationRow,
   ExpenseClassificationSummary,
 } from "@/lib/tai-chinh/expense-classification-service";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+}) => ReactElement;
 
 interface Props {
   rows: ExpenseClassificationRow[];
@@ -21,36 +31,40 @@ interface Props {
   initialFilters: { category: string; from: string; to: string };
 }
 
-export function PhanLoaiGiaoDichClient({ rows, summary, initialFilters }: Props) {
+interface ExpenseGridRow extends RowWithId {
+  date: string;
+  categoryName: string;
+  description: string;
+  amountVnd: number;
+  projectName: string;
+  note: string;
+}
+
+export function PhanLoaiGiaoDichClient({ rows: source, summary, initialFilters }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [category, setCategory] = useState(initialFilters.category);
   const [from, setFrom] = useState(initialFilters.from);
   const [to, setTo] = useState(initialFilters.to);
 
-  const colDefs = useMemo<ColDef<ExpenseClassificationRow>[]>(
-    () => [
-      {
-        field: "date",
-        headerName: "Ngày",
-        width: 110,
-        valueFormatter: (p) => formatDate(p.value as string | null, ""),
-      },
-      { field: "categoryName", headerName: "Loại GD", minWidth: 200, flex: 1 },
-      { field: "description", headerName: "Nội dung", minWidth: 280, flex: 2 },
-      {
-        field: "amountVnd",
-        headerName: "Số tiền",
-        width: 160,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      { field: "projectName", headerName: "Dự án", minWidth: 160, flex: 1 },
-      { field: "note", headerName: "Ghi chú", minWidth: 160, flex: 1 },
-    ],
-    [],
-  );
+  const rows: ExpenseGridRow[] = source.map((r) => ({
+    id: r.id,
+    date: formatDate(r.date, ""),
+    categoryName: r.categoryName,
+    description: r.description ?? "",
+    amountVnd: r.amountVnd,
+    projectName: r.projectName ?? "",
+    note: r.note ?? "",
+  }));
+
+  const columns: DataGridColumn<ExpenseGridRow>[] = [
+    { id: "date", title: "Ngày", kind: "text", width: 110, readonly: true },
+    { id: "categoryName", title: "Loại GD", kind: "text", width: 200, readonly: true },
+    { id: "description", title: "Nội dung", kind: "text", width: 320, readonly: true },
+    { id: "amountVnd", title: "Số tiền", kind: "currency", width: 160, readonly: true },
+    { id: "projectName", title: "Dự án", kind: "text", width: 180, readonly: true },
+    { id: "note", title: "Ghi chú", kind: "text", width: 180, readonly: true },
+  ];
 
   const apply = () => {
     const params = new URLSearchParams();
@@ -110,19 +124,15 @@ export function PhanLoaiGiaoDichClient({ rows, summary, initialFilters }: Props)
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Từ ngày</label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <DateInput value={from} onChange={(v) => setFrom(v)} />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Đến ngày</label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <DateInput value={to} onChange={(v) => setTo(v)} />
           </div>
           <div className="flex items-end gap-2">
-            <Button onClick={apply} disabled={pending}>
-              Lọc
-            </Button>
-            <Button variant="outline" onClick={reset} disabled={pending}>
-              Đặt lại
-            </Button>
+            <Button onClick={apply} disabled={pending}>Lọc</Button>
+            <Button variant="outline" onClick={reset} disabled={pending}>Đặt lại</Button>
           </div>
         </div>
       </div>
@@ -142,20 +152,12 @@ export function PhanLoaiGiaoDichClient({ rows, summary, initialFilters }: Props)
         </div>
       </div>
 
-      <AgGridBase rowData={rows} columnDefs={colDefs} />
+      <DataGrid<ExpenseGridRow> columns={columns} rows={rows} handlers={{}} height={520} />
     </div>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
+function SummaryCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="text-xs text-muted-foreground">{label}</div>

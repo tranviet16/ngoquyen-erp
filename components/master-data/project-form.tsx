@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { projectSchema } from "@/lib/master-data/schemas";
 
@@ -122,7 +123,7 @@ export function ProjectForm({ defaultValues, onSubmit, isSubmitting }: ProjectFo
               <FormItem>
                 <FormLabel>Ngày khởi công</FormLabel>
                 <FormControl>
-                  <Input type="date" {...field} />
+                  <DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -136,7 +137,7 @@ export function ProjectForm({ defaultValues, onSubmit, isSubmitting }: ProjectFo
               <FormItem>
                 <FormLabel>Ngày hoàn thành dự kiến</FormLabel>
                 <FormControl>
-                  <Input type="date" {...field} />
+                  <DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

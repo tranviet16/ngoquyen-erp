@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { createPrAdjustment } from "@/lib/tai-chinh/pr-adjustment-service";
@@ -77,13 +78,13 @@ export function PrClient({ rows }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-lg border p-3 border-red-200 bg-red-50">
+        <div className="rounded-lg border p-3 border-red-200 bg-red-50 dark:border-red-500/30 dark:bg-red-500/10">
           <p className="text-xs text-muted-foreground">Tổng phải trả</p>
-          <p className="text-xl font-bold text-red-600">{VND.format(Number(totalPayable))} ₫</p>
+          <p className="text-xl font-bold text-red-600 dark:text-red-400">{VND.format(Number(totalPayable))} ₫</p>
         </div>
-        <div className="rounded-lg border p-3 border-green-200 bg-green-50">
+        <div className="rounded-lg border p-3 border-green-200 bg-green-50 dark:border-green-500/30 dark:bg-green-500/10">
           <p className="text-xs text-muted-foreground">Tổng phải thu</p>
-          <p className="text-xl font-bold text-green-600">{VND.format(Number(totalReceivable))} ₫</p>
+          <p className="text-xl font-bold text-green-600 dark:text-green-400">{VND.format(Number(totalReceivable))} ₫</p>
         </div>
       </div>
 
@@ -117,7 +118,7 @@ export function PrClient({ rows }: Props) {
                   <td className="px-3 py-2 text-xs">{SOURCE_LABELS[r.source]}</td>
                   <td className="px-3 py-2">{r.partyName}</td>
                   <td className="px-3 py-2">
-                    <span className={`px-1.5 py-0.5 rounded text-xs ${r.type === "payable" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${r.type === "payable" ? "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" : "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-300"}`}>
                       {r.type === "payable" ? "Phải trả" : "Phải thu"}
                     </span>
                   </td>
@@ -134,7 +135,7 @@ export function PrClient({ rows }: Props) {
       <CrudDialog title="Thêm điều chỉnh phải thu/trả" open={dialogOpen} onOpenChange={setDialogOpen}>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Ngày *</Label><Input type="date" value={form.date} onChange={e => set("date", e.target.value)} required /></div>
+            <div><Label>Ngày *</Label><DateInput value={form.date} onChange={(v) => set("date", v)} required /></div>
             <div>
               <Label>Loại *</Label>
               <select className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
@@ -158,7 +159,7 @@ export function PrClient({ rows }: Props) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Số tiền (VND) *</Label><Input type="number" min="0" value={form.amountVnd} onChange={e => set("amountVnd", e.target.value)} required /></div>
-            <div><Label>Ngày hạn</Label><Input type="date" value={form.dueDate} onChange={e => set("dueDate", e.target.value)} /></div>
+            <div><Label>Ngày hạn</Label><DateInput value={form.dueDate} onChange={(v) => set("dueDate", v)} /></div>
           </div>
           <div><Label>Ghi chú</Label><Input value={form.note} onChange={e => set("note", e.target.value)} /></div>
           <div className="flex justify-end gap-2 pt-2">

@@ -3,6 +3,7 @@ import {
   getExpenseClassificationSummary,
 } from "@/lib/tai-chinh/expense-classification-service";
 import { PhanLoaiGiaoDichClient } from "./phan-loai-giao-dich-client";
+import { serializeDecimals } from "@/lib/serialize";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +24,8 @@ export default async function PhanLoaiGiaoDichPage({ searchParams }: Props) {
   ]);
   return (
     <PhanLoaiGiaoDichClient
-      rows={rows}
-      summary={summary}
+      rows={serializeDecimals(rows)}
+      summary={serializeDecimals(summary)}
       initialFilters={{
         category: sp.category ?? "",
         from: sp.from ?? "",

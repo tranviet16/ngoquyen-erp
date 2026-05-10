@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { listReconciliations } from "@/lib/vat-tu-ncc/reconciliation-service";
+import { serializeDecimals } from "@/lib/serialize";
 import { DoiChieuClient } from "./doi-chieu-client";
 import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 
@@ -32,7 +33,7 @@ export default async function DoiChieuPage({ params }: Props) {
         </div>
       </div>
       <Suspense>
-        <DoiChieuClient supplierId={id} initialData={reconciliations} />
+        <DoiChieuClient supplierId={id} initialData={serializeDecimals(reconciliations)} />
       </Suspense>
       {/* Signature section for print */}
       <div className="print-signatures hidden">

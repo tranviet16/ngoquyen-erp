@@ -5,6 +5,17 @@ import { Moon, Sun } from "lucide-react";
 
 const STORAGE_KEY = "nq-erp-theme";
 
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function writeCookie(name: string, value: string) {
+  // 1 year, root path, lax
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
+}
+
 function applyTheme(theme: "light" | "dark") {
   const root = document.documentElement;
   if (theme === "dark") root.classList.add("dark");
@@ -16,10 +27,14 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null;
-    const initial = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const stored =
+      (readCookie(STORAGE_KEY) as "light" | "dark" | null) ??
+      (localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null);
+    const initial =
+      stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(initial);
     applyTheme(initial);
+    if (!readCookie(STORAGE_KEY)) writeCookie(STORAGE_KEY, initial);
     setMounted(true);
   }, []);
 
@@ -27,7 +42,10 @@ export function ThemeToggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
     applyTheme(next);
-    localStorage.setItem(STORAGE_KEY, next);
+    writeCookie(STORAGE_KEY, next);
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {}
   }
 
   return (

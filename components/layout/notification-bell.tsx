@@ -107,7 +107,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-12 z-50 w-80 max-h-96 overflow-y-auto rounded-lg border bg-white shadow-xl">
+          <div className="absolute right-0 top-12 z-50 w-80 max-h-96 overflow-y-auto rounded-lg border bg-popover text-popover-foreground shadow-xl">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <h3 className="font-semibold text-sm">Thông báo</h3>
               <Link
@@ -129,7 +129,7 @@ export function NotificationBell() {
                     key={n.id}
                     onClick={() => handleClick(n)}
                     className={`cursor-pointer border-b px-3 py-2 text-sm hover:bg-muted ${
-                      !n.readAt ? "bg-blue-50" : ""
+                      !n.readAt ? "bg-blue-50 dark:bg-blue-500/15" : ""
                     }`}
                   >
                     <p className="font-medium line-clamp-1">{n.title}</p>

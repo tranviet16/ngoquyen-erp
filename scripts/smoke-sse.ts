@@ -39,7 +39,7 @@ async function main() {
   check("sign-in 200", signIn.ok(), `status=${signIn.status()}`);
 
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/cong-viec`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/van-hanh/cong-viec`, { waitUntil: "domcontentloaded" });
 
   // Inject EventSource and capture events on window.
   await page.evaluate(() => {

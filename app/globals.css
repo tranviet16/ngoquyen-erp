@@ -130,6 +130,24 @@
   html {
     @apply font-sans;
   }
+
+  /* Native form controls (select, input[type=date], scrollbars): tell the browser
+     which scheme to use so OS-rendered chrome (option panel, picker) matches theme. */
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
+
+  /* Native <select>: OS-rendered option panel ignores most CSS in older Chromium,
+     so set both the trigger and option panel to popover tokens. !important needed
+     because Tailwind's bg-transparent utility (heavily used) wins specificity battles
+     against our base layer rule, leaving the option panel unstyled in dark mode. */
+  select {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  select option {
+    background-color: var(--popover) !important;
+    color: var(--popover-foreground) !important;
+  }
 }
 
 /* ── Print styles ──────────────────────────────────────────────────────────────

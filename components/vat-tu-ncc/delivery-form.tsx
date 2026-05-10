@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,7 +45,7 @@ export function DeliveryForm({ supplierId, items, projects, defaultValues, onSub
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="date" render={({ field }) => (
             <FormItem><FormLabel>Ngày</FormLabel><FormControl>
-              <Input type="date" {...field} />
+              <DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
             </FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="projectId" render={({ field }) => (

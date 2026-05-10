@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getProjectById } from "@/lib/master-data/project-service";
 import { ProjectDetailClient } from "./project-detail-client";
+import { serializeDecimals } from "@/lib/serialize";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,7 +19,7 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   return (
     <Suspense>
-      <ProjectDetailClient project={project} />
+      <ProjectDetailClient project={serializeDecimals(project)} />
     </Suspense>
   );
 }

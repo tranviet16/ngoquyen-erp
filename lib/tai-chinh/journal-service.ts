@@ -124,3 +124,67 @@ export async function softDeleteJournalEntry(id: number) {
   revalidatePath("/tai-chinh/nhat-ky");
   revalidatePath("/tai-chinh");
 }
+
+export async function softDeleteJournalEntries(ids: number[]) {
+  const role = await getRole();
+  requireRole(role, "admin");
+  if (!ids.length) return;
+  await prisma.journalEntry.updateMany({
+    where: { id: { in: ids } },
+    data: { deletedAt: new Date() },
+  });
+  revalidatePath("/tai-chinh/nhat-ky");
+  revalidatePath("/tai-chinh");
+}
+
+export async function patchJournalEntry(id: number, patch: Record<string, unknown>) {
+  const role = await getRole();
+  requireRole(role, "ketoan");
+  const current = await prisma.journalEntry.findUnique({ where: { id } });
+  if (!current || current.deletedAt) throw new Error(`Bút toán #${id} không tồn tại`);
+
+  const merged: JournalEntryInput = {
+    date: (patch.date as string | undefined) ?? current.date.toISOString(),
+    entryType: (patch.entryType as JournalEntryInput["entryType"]) ?? (current.entryType as JournalEntryInput["entryType"]),
+    amountVnd: "amountVnd" in patch ? String(patch.amountVnd ?? "0") : current.amountVnd.toString(),
+    fromAccount: "fromAccount" in patch ? (patch.fromAccount as string | null) : current.fromAccount,
+    toAccount: "toAccount" in patch ? (patch.toAccount as string | null) : current.toAccount,
+    expenseCategoryId: "expenseCategoryId" in patch
+      ? (patch.expenseCategoryId == null || patch.expenseCategoryId === "" ? null : Number(patch.expenseCategoryId))
+      : current.expenseCategoryId,
+    refModule: current.refModule,
+    refId: current.refId,
+    description: "description" in patch ? String(patch.description ?? "") : current.description,
+    attachmentUrl: current.attachmentUrl,
+    note: "note" in patch ? (patch.note as string | null) : current.note,
+  };
+  return updateJournalEntry(id, merged);
+}
+
+export async function bulkUpsertJournalEntries(
+  rows: Array<Record<string, unknown> & { id?: number }>,
+) {
+  const role = await getRole();
+  requireRole(role, "ketoan");
+  const out: unknown[] = [];
+  for (const row of rows) {
+    const { id, ...rest } = row;
+    if (id != null && id > 0) {
+      out.push(await patchJournalEntry(id, rest));
+    } else {
+      const input: JournalEntryInput = {
+        date: (rest.date as string | undefined) ?? new Date().toISOString().slice(0, 10),
+        entryType: (rest.entryType as JournalEntryInput["entryType"]) ?? "chi",
+        amountVnd: String(rest.amountVnd ?? "0"),
+        fromAccount: (rest.fromAccount as string | null) ?? null,
+        toAccount: (rest.toAccount as string | null) ?? null,
+        expenseCategoryId: rest.expenseCategoryId == null || rest.expenseCategoryId === ""
+          ? null : Number(rest.expenseCategoryId),
+        description: String(rest.description ?? ""),
+        note: (rest.note as string | null) ?? null,
+      };
+      out.push(await createJournalEntry(input));
+    }
+  }
+  return out;
+}

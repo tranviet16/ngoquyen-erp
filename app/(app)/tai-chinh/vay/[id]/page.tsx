@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getLoanContract } from "@/lib/tai-chinh/loan-service";
 import { LoanPaymentSchedule } from "@/components/tai-chinh/loan-payment-schedule";
+import { serializeDecimals } from "@/lib/serialize";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatVND, formatDate, formatPercent } from "@/lib/utils/format";
 
@@ -79,7 +80,7 @@ export default async function LoanDetailPage({ params }: Props) {
         <h2 className="text-lg font-semibold">
           Lịch trả nợ <span className="text-muted-foreground font-normal">({contract.payments.length} kỳ)</span>
         </h2>
-        <LoanPaymentSchedule payments={contract.payments} contractId={contract.id} />
+        <LoanPaymentSchedule payments={serializeDecimals(contract.payments)} contractId={contract.id} />
       </div>
     </div>
   );

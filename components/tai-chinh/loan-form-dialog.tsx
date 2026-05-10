@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { createLoanContract } from "@/lib/tai-chinh/loan-service";
 
@@ -86,11 +87,11 @@ export function LoanFormDialog({ open, onOpenChange, onCreated }: Props) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Ngày bắt đầu *</Label>
-            <Input type="date" value={form.startDate} onChange={e => set("startDate", e.target.value)} required />
+            <DateInput value={form.startDate} onChange={(v) => set("startDate", v)} required />
           </div>
           <div>
             <Label>Ngày đáo hạn *</Label>
-            <Input type="date" value={form.endDate} onChange={e => set("endDate", e.target.value)} required />
+            <DateInput value={form.endDate} onChange={(v) => set("endDate", v)} required />
           </div>
         </div>
         <div>

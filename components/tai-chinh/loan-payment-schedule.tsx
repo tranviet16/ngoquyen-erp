@@ -1,14 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
-import { AgGridReact } from "ag-grid-react";
-import type { ColDef } from "ag-grid-community";
+import type { ReactElement } from "react";
 import { toast } from "sonner";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { recordLoanPayment } from "@/lib/tai-chinh/loan-service";
 import { formatVND, formatDate } from "@/lib/utils/format";
 import type { Prisma } from "@prisma/client";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+  onSelectionChange?: (ids: number[]) => void;
+}) => ReactElement;
 
 interface PaymentRow {
   id: number;
@@ -27,13 +40,22 @@ interface Props {
   contractId: number;
 }
 
-function formatVnd(v: Prisma.Decimal | null | undefined): string {
-  return v == null ? "—" : formatVND(Number(v));
-}
-
 const STATUS_LABELS: Record<string, string> = { pending: "Chưa trả", paid: "Đã trả", overdue: "Quá hạn" };
 
+interface PaymentGridRow extends RowWithId {
+  dueDate: string;
+  principalDue: number;
+  interestDue: number;
+  totalDue: number;
+  paidDate: string;
+  principalPaid: number;
+  interestPaid: number;
+  status: string;
+  note: string;
+}
+
 export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props) {
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));
   const [principalPaid, setPrincipalPaid] = useState("");
@@ -41,22 +63,48 @@ export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props
   const [loading, setLoading] = useState(false);
 
   const selected = payments.find(p => p.id === selectedId);
+  const selectedSinglePending =
+    selectedIds.length === 1
+      ? payments.find(p => p.id === selectedIds[0] && p.status === "pending") ?? null
+      : null;
 
-  const colDefs: ColDef<PaymentRow>[] = [
-    { field: "dueDate", headerName: "Kỳ hạn", width: 120, valueFormatter: p => formatDate(p.value, "") },
-    { field: "principalDue", headerName: "Gốc phải trả", width: 140, valueFormatter: p => formatVnd(p.value) },
-    { field: "interestDue", headerName: "Lãi phải trả", width: 140, valueFormatter: p => formatVnd(p.value) },
-    { headerName: "Tổng phải trả", width: 140, valueFormatter: p => {
-      const row = p.data as PaymentRow | undefined;
-      if (!row) return "";
-      return formatVnd(row.principalDue.plus(row.interestDue));
-    }},
-    { field: "paidDate", headerName: "Ngày trả", width: 120, valueFormatter: p => formatDate(p.value) },
-    { field: "principalPaid", headerName: "Gốc đã trả", width: 130, valueFormatter: p => formatVnd(p.value) },
-    { field: "interestPaid", headerName: "Lãi đã trả", width: 130, valueFormatter: p => formatVnd(p.value) },
-    { field: "status", headerName: "Trạng thái", width: 110, valueFormatter: p => STATUS_LABELS[p.value] ?? p.value },
-    { field: "note", headerName: "Ghi chú", flex: 1 },
+  const rows: PaymentGridRow[] = payments.map(p => ({
+    id: p.id,
+    dueDate: formatDate(p.dueDate, ""),
+    principalDue: Number(p.principalDue),
+    interestDue: Number(p.interestDue),
+    totalDue: Number(p.principalDue.plus(p.interestDue)),
+    paidDate: p.paidDate ? formatDate(p.paidDate, "") : "",
+    principalPaid: p.principalPaid != null ? Number(p.principalPaid) : 0,
+    interestPaid: p.interestPaid != null ? Number(p.interestPaid) : 0,
+    status: STATUS_LABELS[p.status] ?? p.status,
+    note: p.note ?? "",
+  }));
+
+  const columns: DataGridColumn<PaymentGridRow>[] = [
+    { id: "dueDate", title: "Kỳ hạn", kind: "text", width: 120, readonly: true },
+    { id: "principalDue", title: "Gốc phải trả", kind: "currency", width: 140, readonly: true },
+    { id: "interestDue", title: "Lãi phải trả", kind: "currency", width: 140, readonly: true },
+    { id: "totalDue", title: "Tổng phải trả", kind: "currency", width: 140, readonly: true },
+    { id: "paidDate", title: "Ngày trả", kind: "text", width: 120, readonly: true },
+    {
+      id: "principalPaid", title: "Gốc đã trả", kind: "currency", width: 130, readonly: true,
+      format: (v) => Number(v) > 0 ? formatVND(Number(v)) : "—",
+    },
+    {
+      id: "interestPaid", title: "Lãi đã trả", kind: "currency", width: 130, readonly: true,
+      format: (v) => Number(v) > 0 ? formatVND(Number(v)) : "—",
+    },
+    { id: "status", title: "Trạng thái", kind: "text", width: 110, readonly: true },
+    { id: "note", title: "Ghi chú", kind: "text", width: 200, readonly: true },
   ];
+
+  const openRecordForm = () => {
+    if (!selectedSinglePending) return;
+    setSelectedId(selectedSinglePending.id);
+    setPrincipalPaid(String(selectedSinglePending.principalDue));
+    setInterestPaid(String(selectedSinglePending.interestDue));
+  };
 
   async function handleRecord() {
     if (!selectedId || !principalPaid || !interestPaid) {
@@ -79,21 +127,24 @@ export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props
 
   return (
     <div className="space-y-4">
-      <div className="ag-theme-quartz h-72 rounded-md border">
-        <AgGridReact
-          rowData={payments}
-          columnDefs={colDefs}
-          rowSelection="single"
-          onRowClicked={e => {
-            const row = e.data as PaymentRow;
-            if (row.status === "pending") {
-              setSelectedId(row.id);
-              setPrincipalPaid(String(row.principalDue));
-              setInterestPaid(String(row.interestDue));
-            }
-          }}
-        />
+      <div className="flex items-center justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!selectedSinglePending}
+          onClick={openRecordForm}
+        >
+          Ghi nhận thanh toán
+        </Button>
       </div>
+
+      <DataGrid<PaymentGridRow>
+        columns={columns}
+        rows={rows}
+        handlers={{}}
+        height={300}
+        onSelectionChange={setSelectedIds}
+      />
 
       {selected && (
         <div className="rounded-lg border p-4 space-y-3 bg-muted/40">
@@ -101,7 +152,7 @@ export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-muted-foreground">Ngày trả</label>
-              <Input type="date" value={paidDate} onChange={e => setPaidDate(e.target.value)} />
+              <DateInput value={paidDate} onChange={(v) => setPaidDate(v)} />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Gốc đã trả (VND)</label>

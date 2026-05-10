@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -37,12 +38,12 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="periodFrom" render={({ field }) => (
             <FormItem><FormLabel>Từ ngày</FormLabel><FormControl>
-              <Input type="date" {...field} value={field.value ?? ""} />
+              <DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
             </FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="periodTo" render={({ field }) => (
             <FormItem><FormLabel>Đến ngày</FormLabel><FormControl>
-              <Input type="date" {...field} value={field.value ?? ""} />
+              <DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
             </FormControl><FormMessage /></FormItem>
           )} />
         </div>
@@ -81,7 +82,7 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
           )} />
           <FormField control={form.control} name="signedDate" render={({ field }) => (
             <FormItem><FormLabel>Ngày ký</FormLabel><FormControl>
-              <Input type="date" {...field} value={field.value ?? ""} />
+              <DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} />
             </FormControl><FormMessage /></FormItem>
           )} />
         </div>

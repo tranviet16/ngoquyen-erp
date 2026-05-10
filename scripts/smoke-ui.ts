@@ -1,5 +1,5 @@
 /**
- * Playwright UI smoke for /cong-viec + /thong-bao.
+ * Playwright UI smoke for /van-hanh/cong-viec + /thong-bao.
  *
  * Logs in via better-auth /sign-in/email POST then drives Chromium to render
  * the kanban + notification pages, captures screenshots + console errors.
@@ -52,13 +52,13 @@ async function main() {
   });
   page.on("pageerror", (err) => consoleErrors.push(`pageerror: ${err.message}`));
 
-  // /cong-viec
-  const r1 = await page.goto(`${BASE}/cong-viec`, { waitUntil: "networkidle", timeout: 30000 });
-  check(`/cong-viec status`, r1?.ok() ?? false, `status=${r1?.status()}`);
+  // /van-hanh/cong-viec
+  const r1 = await page.goto(`${BASE}/van-hanh/cong-viec`, { waitUntil: "networkidle", timeout: 30000 });
+  check(`/van-hanh/cong-viec status`, r1?.ok() ?? false, `status=${r1?.status()}`);
   await page.screenshot({ path: `${SHOTS}/cong-viec.png`, fullPage: true });
   // Verify kanban columns rendered
   const colsCount = await page.locator("text=/Cần làm|Đang làm|Chờ duyệt|Hoàn thành/").count();
-  check(`/cong-viec renders ≥4 column headers`, colsCount >= 4, `found ${colsCount}`);
+  check(`/van-hanh/cong-viec renders ≥4 column headers`, colsCount >= 4, `found ${colsCount}`);
 
   // /thong-bao
   const r2 = await page.goto(`${BASE}/thong-bao`, { waitUntil: "networkidle", timeout: 30000 });

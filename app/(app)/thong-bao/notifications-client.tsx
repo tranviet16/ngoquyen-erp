@@ -90,7 +90,7 @@ export function NotificationsClient({ items, unreadCount, unreadOnly }: Props) {
             <li
               key={n.id}
               onClick={() => markOne(n.id, n.link)}
-              className={`cursor-pointer px-4 py-3 hover:bg-muted ${!n.readAt ? "bg-blue-50" : ""}`}
+              className={`cursor-pointer px-4 py-3 hover:bg-muted ${!n.readAt ? "bg-blue-50 dark:bg-blue-500/15" : ""}`}
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="font-medium">{n.title}</p>

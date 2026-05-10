@@ -18,11 +18,12 @@ async function getSessionRole(): Promise<string | null> {
   }
 }
 
-export async function listProjects(opts?: { search?: string; status?: string; includeDeleted?: boolean; page?: number; pageSize?: number }) {
-  const { search = "", status, includeDeleted = false, page = 1, pageSize = 20 } = opts ?? {};
+export async function listProjects(opts?: { search?: string; status?: string; includeDeleted?: boolean; page?: number; pageSize?: number; ids?: number[] }) {
+  const { search = "", status, includeDeleted = false, page = 1, pageSize = 20, ids } = opts ?? {};
   const where = {
     ...(includeDeleted ? {} : { deletedAt: null }),
     ...(status ? { status } : {}),
+    ...(ids !== undefined ? { id: { in: ids } } : {}),
     ...(search
       ? {
           OR: [

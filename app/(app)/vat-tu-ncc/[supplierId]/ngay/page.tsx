@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { listDeliveries } from "@/lib/vat-tu-ncc/delivery-service";
+import { serializeDecimals } from "@/lib/serialize";
 import { DeliveryGrid } from "@/components/vat-tu-ncc/delivery-grid";
 
 interface Props {
@@ -25,9 +26,9 @@ export default async function NgayPage({ params }: Props) {
     <Suspense>
       <DeliveryGrid
         supplierId={id}
-        initialData={deliveries}
-        items={items}
-        projects={projects}
+        initialData={serializeDecimals(deliveries)}
+        items={serializeDecimals(items)}
+        projects={serializeDecimals(projects)}
       />
     </Suspense>
   );

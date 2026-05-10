@@ -4,7 +4,7 @@
  * Returns: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
  *
  * Supported templates:
- *   - cong-no-monthly: { ledgerType, year, entityId? }
+ *   - cong-no-monthly: { ledgerType, year, month, entityId }
  *   - doi-chieu: { ledgerType, entityId?, partyId?, projectId? }
  *   - du-toan: { projectId }
  *   - sl-dt: { year, month?, projectId? }
@@ -47,9 +47,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case "cong-no-monthly": {
         const ledgerType = String(params.ledgerType ?? "material") as LedgerType;
         const year = Number(params.year ?? new Date().getFullYear());
-        const entityId = params.entityId ? Number(params.entityId) : undefined;
-        buffer = await buildCongNoMonthlyExcel(ledgerType, year, entityId);
-        filename = `cong-no-thang-${ledgerType}-${year}.xlsx`;
+        const month = Number(params.month);
+        const entityId = Number(params.entityId);
+        if (!Number.isFinite(month) || month < 1 || month > 12) {
+          return NextResponse.json({ error: "month required (1-12)" }, { status: 400 });
+        }
+        if (!Number.isFinite(entityId) || entityId <= 0) {
+          return NextResponse.json({ error: "entityId required" }, { status: 400 });
+        }
+        buffer = await buildCongNoMonthlyExcel(ledgerType, year, month, entityId);
+        const slug = ledgerType === "material" ? "vt" : "nc";
+        filename = `bao-cao-thang-${slug}-${entityId}-${String(month).padStart(2, "0")}-${year}.xlsx`;
         break;
       }
       case "doi-chieu": {

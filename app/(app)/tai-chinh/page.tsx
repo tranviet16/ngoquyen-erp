@@ -3,6 +3,7 @@ import { getDashboardData } from "@/lib/tai-chinh/dashboard-service";
 import { DashboardCard } from "@/components/tai-chinh/dashboard-card";
 import { CashflowBarChart, DebtPieChart } from "@/components/tai-chinh/cashflow-chart";
 import { formatVND, formatDate } from "@/lib/utils/format";
+import { serializeDecimals } from "@/lib/serialize";
 import { AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -86,11 +87,11 @@ export default async function TaiChinhDashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="rounded-lg border p-4">
           <h2 className="text-sm font-semibold mb-3">Dòng tiền 6 tháng (Thu / Chi)</h2>
-          <CashflowBarChart data={cashflowTrend} />
+          <CashflowBarChart data={serializeDecimals(cashflowTrend)} />
         </div>
         <div className="rounded-lg border p-4">
           <h2 className="text-sm font-semibold mb-3">Cơ cấu công nợ</h2>
-          <DebtPieChart data={debtByCategory} />
+          <DebtPieChart data={serializeDecimals(debtByCategory)} />
         </div>
       </div>
 
