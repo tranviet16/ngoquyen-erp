@@ -19,9 +19,9 @@ Replace placeholder `/van-hanh/hieu-suat` with real dashboard. Metrics from `Tas
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Metrics service + queries | Pending |
-| 2 | Dashboard UI + filters | Pending |
-| 3 | Drill-down (dept → individual) | Pending |
+| 1 | [Metrics service + queries](./phase-01-metrics-service.md) | Pending |
+| 2 | [Dashboard UI + filters](./phase-02-dashboard-ui-filters.md) | Pending |
+| 3 | [Drill-down (dept → individual)](./phase-03-drill-down.md) | Pending |
 
 ## Key Decisions
 

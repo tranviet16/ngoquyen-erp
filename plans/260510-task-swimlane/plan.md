@@ -19,8 +19,8 @@ Add view toggle (Kanban / Swimlane) to `/van-hanh/cong-viec`. Swimlane rows = us
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Swimlane data + view toggle | Pending |
-| 2 | Filters & polish | Pending |
+| 1 | [Swimlane view + toggle](./phase-01-swimlane-view-toggle.md) | Pending |
+| 2 | [Filters & polish](./phase-02-filters-polish.md) | Pending |
 
 ## Key Decisions
 
