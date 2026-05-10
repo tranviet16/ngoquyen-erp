@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Mockup: Tab Doanh Thu — Grouped Header</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #f1f5f9;
+    --muted-fg: #64748b;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --accent: #0ea5e9;
+    --group-1: #fef3c7;  /* Thô — vàng nhạt */
+    --group-2: #dbeafe;  /* Trát — xanh nhạt */
+    --group-3: #dcfce7;  /* Tổng — xanh lá nhạt */
+    --group-4: #f3e8ff;  /* % — tím nhạt */
+    --group-1-h: #fde68a;
+    --group-2-h: #bfdbfe;
+    --group-3-h: #bbf7d0;
+    --group-4-h: #e9d5ff;
+    --readonly-bg: #f8fafc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", system-ui, sans-serif;
+    margin: 0;
+    padding: 32px;
+    background: #f8fafc;
+    color: var(--fg);
+    font-size: 14px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; font-weight: 700; }
+  h2 { font-size: 16px; margin: 32px 0 12px; font-weight: 600; color: var(--muted-fg); text-transform: uppercase; letter-spacing: 0.05em; }
+  .subtitle { color: var(--muted-fg); margin-bottom: 24px; }
+  .card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .label-bad, .label-good {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .label-bad { background: #fee2e2; color: #991b1b; }
+  .label-good { background: #dcfce7; color: #166534; }
+  .scroll {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  thead th {
+    font-weight: 600;
+    background: var(--muted);
+    border-bottom: 1px solid var(--border-strong);
+    text-align: right;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  thead tr.tier1 th {
+    text-align: center;
+    border-bottom: 1px solid var(--border-strong);
+    border-right: 1px solid var(--border-strong);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  thead tr.tier2 th {
+    text-align: right;
+    font-size: 11px;
+    color: var(--muted-fg);
+    font-weight: 500;
+    border-right: 1px solid var(--border);
+    padding: 4px 10px;
+  }
+  th.col-lo, td.col-lo {
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: var(--bg);
+    z-index: 1;
+    border-right: 1px solid var(--border-strong);
+    min-width: 110px;
+  }
+  thead th.col-lo {
+    background: var(--muted);
+    z-index: 3;
+  }
+  /* group bg */
+  .g-tho { background: var(--group-1) !important; }
+  .g-trat { background: var(--group-2) !important; }
+  .g-tong { background: var(--group-3) !important; }
+  .g-pct { background: var(--group-4) !important; }
+  thead .g-tho { background: var(--group-1-h) !important; }
+  thead .g-trat { background: var(--group-2-h) !important; }
+  thead .g-tong { background: var(--group-3-h) !important; }
+  thead .g-pct { background: var(--group-4-h) !important; }
+  /* group separator */
+  .sep-l { border-left: 2px solid var(--border-strong) !important; }
+  /* numeric cells */
+  td.num {
+    text-align: right;
+    font-feature-settings: "tnum";
+    font-family: "SF Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    font-size: 12px;
+  }
+  td.num.input { background: #fffef0; }
+  td.num.readonly { color: var(--muted-fg); background: var(--readonly-bg); }
+  td.num.computed-strong { color: var(--fg); font-weight: 600; background: var(--readonly-bg); }
+  tbody tr:hover td:not(.col-lo) { background: #f8fafc; }
+  .row-lot {
+    font-weight: 500;
+    font-size: 12px;
+  }
+  .row-lot .sub {
+    color: var(--muted-fg);
+    font-size: 10px;
+    margin-top: 1px;
+  }
+  /* before table - cramped */
+  .before th, .before td {
+    padding: 3px 4px;
+    font-size: 11px;
+  }
+  .before .num {
+    font-family: inherit;
+  }
+  .before .sym {
+    color: var(--muted-fg);
+    font-weight: 400;
+    font-size: 10px;
+  }
+  /* legend */
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: var(--muted-fg);
+    background: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-strong); }
+  .footer-note {
+    padding: 12px 16px;
+    background: var(--muted);
+    border-top: 1px solid var(--border);
+    color: var(--muted-fg);
+    font-size: 12px;
+  }
+  .footer-note ul { margin: 8px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+
+<h1>Mockup — Tab Doanh Thu</h1>
+<p class="subtitle">So sánh cách hiển thị bảng "Doanh thu" trong trang <code>/sl-dt/nhap-thang-moi</code> trước và sau khi áp dụng grouped headers theo phong cách Excel.</p>
+
+<h2>Trước (hiện tại)</h2>
+<div class="card">
+  <span class="label-bad" style="margin: 12px 0 0 12px;">❌ 15 cột linear, ký hiệu (D)–(Q) khó tracking</span>
+  <div class="scroll">
+    <table class="before">
+      <thead>
+        <tr>
+          <th class="col-lo">Lô</th>
+          <th>HĐ <span class="sym">(D)</span></th>
+          <th>KH kỳ <span class="sym">(E)</span></th>
+          <th>Thô kỳ <span class="sym">(F)</span></th>
+          <th>Thô LK <span class="sym">(G)</span></th>
+          <th>CN thô <span class="sym">(H)</span></th>
+          <th>QT trát <span class="sym">(I)</span></th>
+          <th>Trát kỳ <span class="sym">(J)</span></th>
+          <th>Trát LK <span class="sym">(K)</span></th>
+          <th>CN trát <span class="sym">(L)</span></th>
+          <th>DT kỳ <span class="sym">(M)</span></th>
+          <th>DT LK <span class="sym">(N)</span></th>
+          <th>CN tổng <span class="sym">(O)</span></th>
+          <th>% KH <span class="sym">(P)</span></th>
+          <th>% LK <span class="sym">(Q)</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-lo row-lot">A.01-12<div class="sub">Block A · Tháng 12</div></td>
+          <td class="num input">12.500.000.000</td>
+          <td class="num input">1.200.000.000</td>
+          <td class="num input">980.000.000</td>
+          <td class="num readonly">8.450.000.000</td>
+          <td class="num readonly">4.050.000.000</td>
+          <td class="num input">650.000.000</td>
+          <td class="num input">420.000.000</td>
+          <td class="num readonly">2.180.000.000</td>
+          <td class="num readonly">230.000.000</td>
+          <td class="num readonly">1.400.000.000</td>
+          <td class="num readonly">10.630.000.000</td>
+          <td class="num readonly">4.280.000.000</td>
+          <td class="num readonly">81,7%</td>
+          <td class="num readonly">67,6%</td>
+        </tr>
+        <tr>
+          <td class="col-lo row-lot">B.03-12<div class="sub">Block B · Tháng 12</div></td>
+          <td class="num input">8.900.000.000</td>
+          <td class="num input">850.000.000</td>
+          <td class="num input">720.000.000</td>
+          <td class="num readonly">6.120.000.000</td>
+          <td class="num readonly">2.780.000.000</td>
+          <td class="num input">480.000.000</td>
+          <td class="num input">310.000.000</td>
+          <td class="num readonly">1.560.000.000</td>
+          <td class="num readonly">170.000.000</td>
+          <td class="num readonly">1.030.000.000</td>
+          <td class="num readonly">7.680.000.000</td>
+          <td class="num readonly">2.950.000.000</td>
+          <td class="num readonly">84,7%</td>
+          <td class="num readonly">68,7%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h2>Sau (đề xuất — Excel-style grouped header)</h2>
+<div class="card">
+  <span class="label-good" style="margin: 12px 0 0 12px;">✓ 4 nhóm rõ ràng + tabular-nums + sticky lô + spacing thoáng</span>
+  <div class="legend">
+    <div class="legend-item"><span class="swatch" style="background: #fffef0; border-color: #f3e8aa;"></span>Ô nhập liệu</div>
+    <div class="legend-item"><span class="swatch" style="background: var(--readonly-bg);"></span>Tính tự động</div>
+    <div class="legend-item"><span class="swatch" style="background: var(--group-1-h);"></span>Thô</div>
+    <div class="legend-item"><span class="swatch" style="background: var(--group-2-h);"></span>Trát</div>
+    <div class="legend-item"><span class="swatch" style="background: var(--group-3-h);"></span>Tổng DT</div>
+    <div class="legend-item"><span class="swatch" style="background: var(--group-4-h);"></span>% Tiến độ</div>
+  </div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <!-- Tier 1: nhóm -->
+        <tr class="tier1">
+          <th class="col-lo" rowspan="2">Lô</th>
+          <th rowspan="2">Giá HĐ</th>
+          <th rowspan="2">KH kỳ</th>
+          <th class="g-tho sep-l" colspan="3">DT Thô</th>
+          <th class="g-trat sep-l" colspan="4">DT Trát</th>
+          <th class="g-tong sep-l" colspan="3">Tổng DT</th>
+          <th class="g-pct sep-l" colspan="2">% Tiến độ</th>
+        </tr>
+        <!-- Tier 2: chi tiết -->
+        <tr class="tier2">
+          <th class="g-tho sep-l">Kỳ này</th>
+          <th class="g-tho">Lũy kế</th>
+          <th class="g-tho">Còn lại</th>
+          <th class="g-trat sep-l">QT trát</th>
+          <th class="g-trat">Kỳ này</th>
+          <th class="g-trat">Lũy kế</th>
+          <th class="g-trat">Còn lại</th>
+          <th class="g-tong sep-l">Kỳ này</th>
+          <th class="g-tong">Lũy kế</th>
+          <th class="g-tong">Còn lại</th>
+          <th class="g-pct sep-l">vs KH</th>
+          <th class="g-pct">vs HĐ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="col-lo row-lot">A.01-12<div class="sub">Block A · Tháng 12</div></td>
+          <td class="num input">12.500.000.000</td>
+          <td class="num input">1.200.000.000</td>
+          <td class="num input sep-l">980.000.000</td>
+          <td class="num readonly">8.450.000.000</td>
+          <td class="num readonly">4.050.000.000</td>
+          <td class="num input sep-l">650.000.000</td>
+          <td class="num input">420.000.000</td>
+          <td class="num readonly">2.180.000.000</td>
+          <td class="num readonly">230.000.000</td>
+          <td class="num computed-strong sep-l">1.400.000.000</td>
+          <td class="num computed-strong">10.630.000.000</td>
+          <td class="num computed-strong">4.280.000.000</td>
+          <td class="num computed-strong sep-l">81,7%</td>
+          <td class="num computed-strong">67,6%</td>
+        </tr>
+        <tr>
+          <td class="col-lo row-lot">B.03-12<div class="sub">Block B · Tháng 12</div></td>
+          <td class="num input">8.900.000.000</td>
+          <td class="num input">850.000.000</td>
+          <td class="num input sep-l">720.000.000</td>
+          <td class="num readonly">6.120.000.000</td>
+          <td class="num readonly">2.780.000.000</td>
+          <td class="num input sep-l">480.000.000</td>
+          <td class="num input">310.000.000</td>
+          <td class="num readonly">1.560.000.000</td>
+          <td class="num readonly">170.000.000</td>
+          <td class="num computed-strong sep-l">1.030.000.000</td>
+          <td class="num computed-strong">7.680.000.000</td>
+          <td class="num computed-strong">2.950.000.000</td>
+          <td class="num computed-strong sep-l">84,7%</td>
+          <td class="num computed-strong">68,7%</td>
+        </tr>
+        <tr>
+          <td class="col-lo row-lot">C.05-12<div class="sub">Block C · Tháng 12</div></td>
+          <td class="num input">15.300.000.000</td>
+          <td class="num input">1.500.000.000</td>
+          <td class="num input sep-l">1.380.000.000</td>
+          <td class="num readonly">11.200.000.000</td>
+          <td class="num readonly">4.100.000.000</td>
+          <td class="num input sep-l">820.000.000</td>
+          <td class="num input">540.000.000</td>
+          <td class="num readonly">3.020.000.000</td>
+          <td class="num readonly">270.000.000</td>
+          <td class="num computed-strong sep-l">1.920.000.000</td>
+          <td class="num computed-strong">14.220.000.000</td>
+          <td class="num computed-strong">4.370.000.000</td>
+          <td class="num computed-strong sep-l">92,0%</td>
+          <td class="num computed-strong">73,2%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="footer-note">
+    <strong>Cải thiện chính:</strong>
+    <ul>
+      <li><strong>Header 2 tầng</strong>: Tier 1 = nhóm (Thô · Trát · Tổng DT · %), Tier 2 = chi tiết (Kỳ · Lũy kế · Còn lại). Bỏ ký hiệu (D)–(Q).</li>
+      <li><strong>Background nhạt theo nhóm</strong> giúp mắt scan ngang nhanh, tách biệt rõ vùng dữ liệu.</li>
+      <li><strong>Border-l 2px</strong> giữa các nhóm = đường ngăn dày hơn → giống bảng Excel.</li>
+      <li><strong>Tabular-nums + monospace</strong> cho cột số → hàng nghìn/triệu thẳng cột, không "nhảy" khi giá trị thay đổi.</li>
+      <li><strong>Phân biệt input vs computed</strong>: ô nhập (vàng nhạt) vs ô tự tính (xám) → user biết chỗ nào click được.</li>
+      <li><strong>Sticky lô</strong> cố định bên trái khi scroll ngang.</li>
+      <li><strong>Spacing thoáng hơn</strong>: padding 6px/10px thay vì 1px/2px.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Ghi chú kỹ thuật</h2>
+<div class="card" style="padding: 16px;">
+  <p style="margin: 0 0 8px;"><strong>Mapping cột với code hiện tại:</strong></p>
+  <ul style="margin: 0; font-size: 13px; color: var(--muted-fg);">
+    <li><code>HĐ (D)</code> → <code>contractValue</code> · <code>KH kỳ (E)</code> → <code>dtKeHoachKy</code></li>
+    <li><code>Thô [Kỳ/LK/Còn]</code> = <code>dtThoKy / dtThoLuyKe / contractValue − dtThoLuyKe</code></li>
+    <li><code>Trát [QT/Kỳ/LK/Còn]</code> = <code>qtTratChua / dtTratKy / dtTratLuyKe / qtTratChua − dtTratLuyKe</code></li>
+    <li><code>Tổng [Kỳ/LK/Còn]</code> = <code>F+J / G+K / H+L</code></li>
+    <li><code>% [vs KH/vs HĐ]</code> = <code>dtThoKy/dtKeHoachKy · dtThoLuyKe/contractValue</code></li>
+  </ul>
+  <p style="margin: 12px 0 0; font-size: 13px;">Pattern này có thể tái sử dụng cho <strong>TabSanLuong, BaoCaoSL, BaoCaoDT, MonthlyReport</strong> — tách thành component <code>&lt;GroupedTableHeader groups={[...]}/&gt;</code>.</p>
+</div>
+
+</body>
+</html>

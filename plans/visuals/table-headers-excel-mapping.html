@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Đối chiếu cấu trúc bảng: Excel ↔ UI</title>
+<style>
+  :root {
+    --bg: #fff; --fg: #0f172a;
+    --muted: #f1f5f9; --muted-fg: #64748b;
+    --border: #e2e8f0; --border-strong: #cbd5e1;
+    --excel-tier1: #d1fae5; --excel-tier2: #ecfccb;
+    --ui-tier1: #dbeafe; --ui-tier2: #e0f2fe;
+    --readonly: #f8fafc; --input: #fffef0;
+    --warn: #fef3c7;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,"Segoe UI","Inter",sans-serif; margin:0; padding:24px 32px; background:#f8fafc; color:var(--fg); font-size:14px; line-height:1.5; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; padding-bottom: 6px; border-bottom: 2px solid var(--border-strong); }
+  h3 { font-size: 14px; margin: 20px 0 6px; color: var(--muted-fg); text-transform: uppercase; letter-spacing: 0.05em; }
+  .subtitle { color: var(--muted-fg); margin-bottom: 24px; max-width: 800px; }
+  .card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .card-body { padding: 12px 16px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 8px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+  thead th { background: var(--muted); font-weight: 600; text-align: center; border-bottom: 1px solid var(--border-strong); }
+  thead .tier1 { background: var(--excel-tier1); border-right: 2px solid var(--border-strong) !important; font-size: 11px; }
+  thead .tier2 { background: var(--excel-tier2); font-size: 10px; color: var(--muted-fg); font-weight: 500; }
+  .ui thead .tier1 { background: var(--ui-tier1); }
+  .ui thead .tier2 { background: var(--ui-tier2); }
+  td { text-align: right; font-family: "SF Mono", Consolas, monospace; font-size: 11px; }
+  td.lbl { text-align: left; font-family: inherit; font-size: 11px; }
+  td.input { background: var(--input); }
+  td.computed { background: var(--readonly); color: var(--muted-fg); }
+  td.strong { background: var(--readonly); font-weight: 600; }
+  .sticky-l { position: sticky; left: 0; background: var(--bg); z-index: 1; border-right: 2px solid var(--border-strong) !important; min-width: 90px; }
+  thead .sticky-l { background: var(--muted); z-index: 3; }
+  .sep-l { border-left: 2px solid var(--border-strong) !important; }
+  .label { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 8px; }
+  .label-excel { background: var(--excel-tier1); color: #064e3b; }
+  .label-bad { background: #fee2e2; color: #991b1b; }
+  .label-good { background: #dcfce7; color: #166534; }
+  .label-warn { background: var(--warn); color: #92400e; }
+  .meta { font-size: 12px; color: var(--muted-fg); padding: 8px 16px; background: var(--muted); border-bottom: 1px solid var(--border); }
+  .meta code { background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  .field-map { font-size: 12px; padding: 8px 16px; background: #fefce8; border-top: 1px solid var(--border); color: #713f12; }
+  .field-map ul { margin: 4px 0 0; padding-left: 20px; }
+  .field-map code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+  .nav { position: sticky; top: 0; background: rgba(248,250,252,0.95); backdrop-filter: blur(8px); padding: 12px 0; margin: -12px -32px 16px; padding: 12px 32px; border-bottom: 1px solid var(--border); z-index: 10; font-size: 12px; }
+  .nav a { margin-right: 16px; color: var(--muted-fg); text-decoration: none; }
+  .nav a:hover { color: var(--fg); }
+  .toc { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+  .toc h3 { margin: 0 0 12px; }
+  .toc ol { margin: 0; padding-left: 20px; font-size: 13px; }
+  .toc li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Đối chiếu cấu trúc bảng — Excel ↔ UI hiện tại ↔ Đề xuất</h1>
+<p class="subtitle">Cấu trúc header (rowSpan/colSpan) lấy <strong>trực tiếp từ file SOP Excel</strong> qua phân tích merged cells. Mỗi bảng kèm 3 phần: (1) Excel gốc — (2) UI hiện tại — (3) Đề xuất align với Excel. Field mapping với code dưới mỗi bảng.</p>
+
+<div class="nav">
+  <a href="#tab-doanh-thu">1. TabDoanhThu</a>
+  <a href="#tab-san-luong">2. TabSanLuong</a>
+  <a href="#chi-tieu">3. ChiTieuClient</a>
+  <a href="#bao-cao-sl">4. BaoCaoSL</a>
+  <a href="#bao-cao-dt">5. BaoCaoDT</a>
+  <a href="#monthly-report">6. MonthlyReport</a>
+  <a href="#debt-matrix">7. DebtMatrix</a>
+</div>
+
+<div class="toc">
+  <h3>Tóm tắt tình trạng</h3>
+  <ol>
+    <li><strong>TabDoanhThu</strong> ↔ Excel <code>BC_DoanhThu</code> rows 8-9 — có 4 nhóm cần colSpan: <em>Doanh thu Thô / Trát / Tổng / Tỷ lệ%</em></li>
+    <li><strong>TabSanLuong</strong> ↔ Excel <code>BC_SanLuong</code> rows 7-8 — có 2 nhóm: <em>Sản lượng thực hiện thô / Tỷ lệ%</em></li>
+    <li><strong>ChiTieuClient</strong> ↔ Excel <code>CT_SL_DT</code> rows 8-9 — có 2 nhóm: <em>Sản lượng kỳ này / Doanh thu kỳ này</em>, mỗi nhóm [Chỉ tiêu | Thực hiện]</li>
+    <li><strong>BaoCaoSL</strong> ↔ Cùng cấu trúc <code>BC_SanLuong</code> (ở chế độ xem-only)</li>
+    <li><strong>BaoCaoDT</strong> ↔ Cùng cấu trúc <code>BC_DoanhThu</code> (ở chế độ xem-only)</li>
+    <li><strong>MonthlyReport</strong> ↔ Excel <code>Báo Cáo Tháng</code> rows 7-8 — 2 nhóm lớn: <em>THỰC TẾ / HỢP ĐỒNG</em>, mỗi nhóm 4 cột [Đầu kỳ | PS Phải Trả | PS Đã Trả | Cuối kỳ]</li>
+    <li><strong>DebtMatrix</strong> ↔ Excel <code>Tổng Hợp Công Nợ / Công Nợ</code> — đã làm 3-tier đúng pattern Excel ✓</li>
+  </ol>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="tab-doanh-thu">1. TabDoanhThu — <code>app/(app)/sl-dt/nhap-thang-moi/tab-doanh-thu.tsx</code></h2>
+
+<h3>Excel gốc <span class="label label-excel">SOP/SL - DT 2025.xlsx → BC_DoanhThu (rows 8-9)</span></h3>
+<div class="card">
+  <div class="meta">Header 2 tầng. Các cột group có colSpan=2 ở R8, mỗi sub-col 1 cell ở R9. Cột không group có rowSpan=2.</div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2" class="sticky-l">STT</th>
+          <th rowspan="2">Danh mục</th>
+          <th rowspan="2">Tên cty/Tên lô</th>
+          <th rowspan="2">Giá trị HĐ/xuất HĐ/DT,QT (Thô)</th>
+          <th rowspan="2">Doanh thu dự kiến</th>
+          <th colspan="2" class="tier1">Doanh thu (Thô)</th>
+          <th rowspan="2">Công nợ phải thu (Thô)</th>
+          <th rowspan="2">QT (Trát) chưa VAT</th>
+          <th colspan="2" class="tier1">Doanh thu (Trát)</th>
+          <th rowspan="2">Công nợ phải thu (Trát)</th>
+          <th colspan="2" class="tier1">Doanh thu (Thô+Trát)</th>
+          <th rowspan="2">Công nợ phải thu (Thô+Trát)</th>
+          <th colspan="2" class="tier1">Tỷ lệ hoàn thành (%)</th>
+        </tr>
+        <tr>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kế hoạch</th><th class="tier2">Lũy kế</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">1</td>
+          <td class="lbl">Xây nhà</td>
+          <td class="lbl">Lô 5A</td>
+          <td>1.058.030.000</td>
+          <td>300.000.000</td>
+          <td class="sep-l">0</td><td>700.000.000</td>
+          <td>358.030.000</td>
+          <td>0</td>
+          <td class="sep-l">0</td><td>0</td>
+          <td>0</td>
+          <td class="sep-l">0</td><td>700.000.000</td>
+          <td>358.030.000</td>
+          <td class="sep-l">0,0%</td><td>66,2%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="field-map">
+    <strong>Mapping → Prisma fields:</strong>
+    <ul>
+      <li>Giá trị HĐ → <code>contractValue</code></li>
+      <li>DT dự kiến → <code>dtKeHoachKy</code> (UI hiện đặt nhầm là "KH kỳ")</li>
+      <li>DT Thô [Kỳ/LK] → <code>dtThoKy</code> / <code>dtThoLuyKe</code></li>
+      <li>CN Thô → tính: <code>contractValue − dtThoLuyKe</code></li>
+      <li>QT Trát → <code>qtTratChua</code></li>
+      <li>DT Trát [Kỳ/LK] → <code>dtTratKy</code> / <code>dtTratLuyKe</code></li>
+      <li>CN Trát → tính: <code>qtTratChua − dtTratLuyKe</code></li>
+      <li>DT Tổng → tính tổng tương ứng. % KH → <code>dtThoKy/dtKeHoachKy</code>. % LK → <code>dtThoLuyKe/contractValue</code></li>
+    </ul>
+  </div>
+</div>
+
+<h3>UI hiện tại <span class="label label-bad">❌ 15 cột linear, ký hiệu (D)–(Q), không group</span></h3>
+<div class="card">
+  <div class="meta">15 cột thẳng hàng — user phải tự suy ra "Thô kỳ + Trát kỳ = DT kỳ M".</div>
+  <div class="scroll">
+    <table class="ui">
+      <thead>
+        <tr>
+          <th class="sticky-l">Lô</th>
+          <th>HĐ (D)</th><th>KH kỳ (E)</th>
+          <th>Thô kỳ (F)</th><th>Thô LK (G)</th><th>CN thô (H)</th>
+          <th>QT trát (I)</th><th>Trát kỳ (J)</th><th>Trát LK (K)</th><th>CN trát (L)</th>
+          <th>DT kỳ (M)</th><th>DT LK (N)</th><th>CN tổng (O)</th>
+          <th>% KH (P)</th><th>% LK (Q)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">Lô 5A</td>
+          <td>1.058.030.000</td><td>300.000.000</td>
+          <td>0</td><td>700.000.000</td><td>358.030.000</td>
+          <td>0</td><td>0</td><td>0</td><td>0</td>
+          <td>0</td><td>700.000.000</td><td>358.030.000</td>
+          <td>0,0%</td><td>66,2%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>Đề xuất <span class="label label-good">✓ Match Excel 1:1 — bỏ ký hiệu, thêm STT/Danh mục</span></h3>
+<div class="card">
+  <div class="meta">Áp dụng đúng 4 nhóm colSpan từ Excel: <em>Doanh thu Thô · Trát · Tổng · Tỷ lệ%</em>. Bỏ ký hiệu (D)–(Q).</div>
+  <div class="scroll">
+    <table class="ui">
+      <thead>
+        <tr>
+          <th rowspan="2" class="sticky-l">Lô</th>
+          <th rowspan="2">Giá HĐ</th>
+          <th rowspan="2">DT dự kiến</th>
+          <th colspan="2" class="tier1">Doanh thu (Thô)</th>
+          <th rowspan="2">CN phải thu (Thô)</th>
+          <th rowspan="2">QT Trát</th>
+          <th colspan="2" class="tier1">Doanh thu (Trát)</th>
+          <th rowspan="2">CN phải thu (Trát)</th>
+          <th colspan="2" class="tier1">Doanh thu (Thô+Trát)</th>
+          <th rowspan="2">CN phải thu Tổng</th>
+          <th colspan="2" class="tier1">Tỷ lệ hoàn thành</th>
+        </tr>
+        <tr>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kế hoạch</th><th class="tier2">Lũy kế</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">Lô 5A</td>
+          <td class="input">1.058.030.000</td>
+          <td class="input">300.000.000</td>
+          <td class="input sep-l">0</td><td class="computed">700.000.000</td>
+          <td class="computed">358.030.000</td>
+          <td class="input sep-l">0</td>
+          <td class="input sep-l">0</td><td class="computed">0</td>
+          <td class="computed">0</td>
+          <td class="strong sep-l">0</td><td class="strong">700.000.000</td>
+          <td class="strong">358.030.000</td>
+          <td class="strong sep-l">0,0%</td><td class="strong">66,2%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="tab-san-luong">2. TabSanLuong — <code>app/(app)/sl-dt/nhap-thang-moi/tab-san-luong.tsx</code></h2>
+
+<h3>Excel gốc <span class="label label-excel">SOP/SL - DT 2025.xlsx → BC_SanLuong (rows 7-8)</span></h3>
+<div class="card">
+  <div class="meta">2 nhóm colSpan: <em>Sản lượng thực hiện (xây thô) [Kỳ/Lũy kế]</em> và <em>Tỷ lệ hoàn thành [Kế hoạch kỳ này | Tổng lũy kế]</em>.</div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2" class="sticky-l">STT</th>
+          <th rowspan="2">Danh mục</th>
+          <th rowspan="2">Giá trị dự toán phần thô / QT</th>
+          <th rowspan="2">Sản lượng kế hoạch</th>
+          <th colspan="2" class="tier1">Sản lượng thực hiện (xây thô)</th>
+          <th rowspan="2">Sản lượng trát</th>
+          <th rowspan="2">Tổng thô+trát</th>
+          <th rowspan="2">Còn phải thực hiện</th>
+          <th colspan="2" class="tier1">Tỷ lệ hoàn thành (%)</th>
+          <th rowspan="2">Ghi chú</th>
+        </tr>
+        <tr>
+          <th class="tier2">Kỳ này</th><th class="tier2">Lũy kế</th>
+          <th class="tier2">Kế hoạch kỳ này</th><th class="tier2">Tổng lũy kế</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">1</td>
+          <td class="lbl">Lô 5A</td>
+          <td>1.140.788.000</td>
+          <td>0</td>
+          <td class="sep-l">173.974.500</td><td>1.027.692.225</td>
+          <td>0</td>
+          <td>1.027.692.225</td>
+          <td>113.095.775</td>
+          <td class="sep-l">0,0%</td><td>90,1%</td>
+          <td class="lbl">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>UI hiện tại <span class="label label-bad">❌ 8-12 cột flat (cần đọc lại file thực tế để map chính xác)</span></h3>
+
+<h3>Đề xuất <span class="label label-good">✓ 2 nhóm colSpan như Excel</span></h3>
+<div class="card">
+  <div class="card-body" style="font-size:12px;color:var(--muted-fg);">
+    Cùng pattern như TabDoanhThu nhưng simpler: chỉ 2 nhóm cần group (<em>Sản lượng thực hiện</em> và <em>Tỷ lệ%</em>).
+    Các cột còn lại đều rowSpan=2.
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="chi-tieu">3. ChiTieuClient — <code>app/(app)/sl-dt/chi-tieu/chi-tieu-client.tsx</code></h2>
+
+<h3>Excel gốc <span class="label label-excel">SOP/SL - DT 2025.xlsx → CT_SL_DT (rows 8-9)</span></h3>
+<div class="card">
+  <div class="meta">Pattern khác hẳn: 2 nhóm group là <strong>"Sản lượng kỳ này" + "Doanh thu kỳ này"</strong>, mỗi nhóm có sub-cols [<em>Chỉ tiêu | Thực hiện</em>] — không phải [Kỳ này | Lũy kế].</div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2" class="sticky-l">STT</th>
+          <th rowspan="2">Danh mục</th>
+          <th rowspan="2">Giá trị dự toán phần thô / QT</th>
+          <th rowspan="2">Sản lượng luỹ kế đầu kỳ</th>
+          <th rowspan="2">Doanh thu luỹ kế đầu kỳ</th>
+          <th colspan="2" class="tier1">Sản lượng kỳ này</th>
+          <th colspan="2" class="tier1">Doanh thu kỳ này</th>
+          <th rowspan="2">Sản lượng trát</th>
+          <th rowspan="2">Doanh thu trát</th>
+          <th rowspan="2">DT cần TH theo tiến độ</th>
+          <th rowspan="2">Công việc cần hoàn thành theo DT lũy kế</th>
+          <th rowspan="2">Tiến độ thực tế (Khung BTCT)</th>
+          <th rowspan="2">Tình trạng TH doanh thu</th>
+          <th rowspan="2">Ghi chú</th>
+        </tr>
+        <tr>
+          <th class="tier2">Chỉ tiêu</th><th class="tier2">Thực hiện</th>
+          <th class="tier2">Chỉ tiêu</th><th class="tier2">Thực hiện</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">1</td>
+          <td class="lbl">Lô 5A</td>
+          <td>1.140.788.000</td>
+          <td>853.717.725</td>
+          <td>700.000.000</td>
+          <td class="sep-l">0</td><td>173.974.500</td>
+          <td class="sep-l">300.000.000</td><td>300.000.000</td>
+          <td>0</td>
+          <td>0</td>
+          <td class="lbl">—</td>
+          <td class="lbl">—</td>
+          <td class="lbl">Mái tầng 3</td>
+          <td class="lbl">—</td>
+          <td class="lbl">Xong khung BTCT</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>UI hiện tại <span class="label label-warn">⚠ Đã có rowSpan/colSpan nhưng tier 2 lệch alignment</span></h3>
+<div class="card">
+  <div class="card-body" style="font-size:12px;">
+    File <code>chi-tieu-client.tsx:59-83</code> đã có rowSpan=2 + colSpan=2 cho "Sản lượng kỳ này" và "Doanh thu kỳ này" — <strong>đúng hướng</strong>.
+    Vấn đề: tier 2 row có cells lệch (không có <code>&lt;th&gt;</code> đúng vị trí cho các cột rowSpan=2). Cần audit lại số cells trong tier 2.
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="bao-cao-sl">4. BaoCaoSL — <code>app/(app)/sl-dt/bao-cao-sl/page.tsx</code></h2>
+<div class="card">
+  <div class="card-body" style="font-size:12px;color:var(--muted-fg);">
+    Cùng cấu trúc với <strong>TabSanLuong (mục 2)</strong> — chỉ khác chế độ xem-only thay vì input.
+    Áp dụng cùng header pattern: 2 nhóm colSpan (<em>Sản lượng thực hiện thô</em> + <em>Tỷ lệ hoàn thành</em>).
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="bao-cao-dt">5. BaoCaoDT — <code>app/(app)/sl-dt/bao-cao-dt/page.tsx</code></h2>
+<div class="card">
+  <div class="card-body" style="font-size:12px;color:var(--muted-fg);">
+    Cùng cấu trúc với <strong>TabDoanhThu (mục 1)</strong> — chỉ khác chế độ xem-only.
+    Áp dụng cùng 4-nhóm colSpan từ Excel <code>BC_DoanhThu</code>.
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="monthly-report">6. MonthlyReport — <code>components/ledger/monthly-report.tsx</code></h2>
+
+<h3>Excel gốc <span class="label label-excel">SOP/Quản Lý Công Nợ Vật Tư.xlsx → Báo Cáo Tháng (rows 7-8)</span></h3>
+<div class="card">
+  <div class="meta">2 nhóm lớn (<em>THỰC TẾ</em> · <em>HỢP ĐỒNG</em>), mỗi nhóm 4 cột [<em>Đầu kỳ | PS Phải Trả | PS Đã Trả | Cuối kỳ</em>]. <strong>Lưu ý:</strong> Excel ghi "HỢP ĐỒNG" chứ không phải "Hóa Đơn". Code hiện gọi là HĐ — cần thống nhất terminology.</div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2" class="sticky-l">STT</th>
+          <th rowspan="2">Danh Mục</th>
+          <th colspan="4" class="tier1">THỰC TẾ</th>
+          <th colspan="4" class="tier1">HỢP ĐỒNG</th>
+        </tr>
+        <tr>
+          <th class="tier2">Phải Trả Đầu Kỳ</th>
+          <th class="tier2">Phát Sinh Phải Trả</th>
+          <th class="tier2">Phát Sinh Đã Trả</th>
+          <th class="tier2">Phải Trả Cuối Kỳ</th>
+          <th class="tier2">Phải Trả Đầu Kỳ</th>
+          <th class="tier2">Phát Sinh Phải Trả</th>
+          <th class="tier2">Phát Sinh Đã Trả</th>
+          <th class="tier2">Phải Trả Cuối Kỳ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">1</td>
+          <td class="lbl">Quang Minh</td>
+          <td>54.528.000</td><td>47.673.600</td><td>0</td><td class="strong">102.201.600</td>
+          <td class="sep-l">−180.996.900</td><td>71.253.000</td><td>0</td><td class="strong">−109.743.900</td>
+        </tr>
+        <tr>
+          <td class="lbl sticky-l">2</td>
+          <td class="lbl">Anh Thư</td>
+          <td>12.630.000</td><td>9.600.000</td><td>0</td><td class="strong">22.230.000</td>
+          <td class="sep-l">−455.263.000</td><td>0</td><td>0</td><td class="strong">−455.263.000</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>UI hiện tại <span class="label label-bad">❌ 10 cột flat: "LH TT", "TT TT", "Cuối TT", "LH HĐ"...</span></h3>
+<div class="card">
+  <div class="meta">File <code>monthly-report.tsx:25-57</code> hiện liệt kê tất cả các cột ngang hàng. Cần group theo Excel pattern.</div>
+</div>
+
+<h3>Đề xuất <span class="label label-good">✓ 2 nhóm × 4 cột — match Excel</span></h3>
+<div class="card">
+  <div class="card-body" style="font-size:12px;">
+    Đổi terminology: dùng <strong>"THỰC TẾ" / "HỢP ĐỒNG"</strong> theo Excel (không phải TT/HĐ tắt).
+    Cell "Phải Trả Cuối Kỳ" in đậm (kết quả tính), 3 cell còn lại trong nhóm là input/computed thường.
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2 id="debt-matrix">7. DebtMatrix — <code>components/ledger/debt-matrix.tsx</code></h2>
+
+<h3>Excel gốc <span class="label label-excel">SOP/Quản Lý Công Nợ Vật Tư.xlsx → Công Nợ (rows 2-4)</span></h3>
+<div class="card">
+  <div class="meta"><strong>3 tầng header</strong>: Tier 1 = chủ thể (Cty Quản Lý / LV Huyên / LM Xuân / TỔNG). Tier 2 = ── THỰC TẾ ── / ── HÓA ĐƠN ──. Tier 3 = LH/Trả/Nợ × TT/HĐ.</div>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="3" class="sticky-l">Nhà Cung Cấp</th>
+          <th colspan="6" class="tier1">Công ty quản lý</th>
+          <th colspan="6" class="tier1">Lê Văn Huyên</th>
+          <th colspan="6" class="tier1">TỔNG CÔNG TY</th>
+        </tr>
+        <tr>
+          <th colspan="3" class="tier2">── THỰC TẾ ──</th>
+          <th colspan="3" class="tier2">── HÓA ĐƠN ──</th>
+          <th colspan="3" class="tier2">── THỰC TẾ ──</th>
+          <th colspan="3" class="tier2">── HÓA ĐƠN ──</th>
+          <th colspan="3" class="tier2">── THỰC TẾ ──</th>
+          <th colspan="3" class="tier2">── HÓA ĐƠN ──</th>
+        </tr>
+        <tr>
+          <th class="tier2">LH</th><th class="tier2">Trả</th><th class="tier2">Nợ</th>
+          <th class="tier2">LH</th><th class="tier2">Trả</th><th class="tier2">Nợ</th>
+          <th class="tier2">LH</th><th class="tier2">Trả</th><th class="tier2">Nợ</th>
+          <th class="tier2">LH</th><th class="tier2">Trả</th><th class="tier2">Nợ</th>
+          <th class="tier2">LH</th><th class="tier2">Trả</th><th class="tier2">Nợ</th>
+          <th class="tier2">LH</th><th class="tier2">Trả</th><th class="tier2">Nợ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="lbl sticky-l">Quang Minh</td>
+          <td>402M</td><td>300M</td><td class="strong">102M</td>
+          <td class="sep-l">240M</td><td>350M</td><td class="strong">−110M</td>
+          <td class="sep-l">86M</td><td>60M</td><td class="strong">26M</td>
+          <td class="sep-l">228M</td><td>0</td><td class="strong">228M</td>
+          <td class="sep-l">900M</td><td>550M</td><td class="strong">350M</td>
+          <td class="sep-l">279M</td><td>350M</td><td class="strong">−71M</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<h3>UI hiện tại <span class="label label-good">✓ Đã làm đúng pattern Excel — KHÔNG cần đổi</span></h3>
+<div class="card">
+  <div class="card-body" style="font-size:12px;">
+    File <code>debt-matrix.tsx:75-150</code> đã implement đúng 3-tier với rowSpan/colSpan. <strong>Đây là template tham khảo</strong> cho các bảng khác.
+  </div>
+</div>
+
+<!-- ========================================================================== -->
+<h2>Plan triển khai (sau confirm)</h2>
+<div class="card">
+  <div class="card-body" style="font-size:13px;">
+    <strong>Đợt 1</strong> (cao nhất): TabDoanhThu + TabSanLuong → 2 file, mock đã chính xác Excel<br>
+    <strong>Đợt 2</strong>: ChiTieuClient (sửa tier 2 alignment) + BaoCaoSL + BaoCaoDT → 3 file (cùng pattern Đợt 1)<br>
+    <strong>Đợt 3</strong>: MonthlyReport refactor terminology + colSpan → 1 file<br>
+    <strong>Bonus</strong>: Tách <code>&lt;GroupedTableHeader&gt;</code> reusable component sau khi 5/6 bảng đã viết tay (tránh premature abstraction).
+  </div>
+</div>
+
+</body>
+</html>
