@@ -157,8 +157,8 @@ export function DebtMatrix({ rows, entities, partyLabel }: Props) {
           ))}
         </tbody>
         <tfoot>
-          <tr className="bg-muted font-semibold">
-            <td className="border p-2 sticky left-0 bg-muted z-10">Tổng</td>
+          <tr className="border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold [&>td]:py-2.5">
+            <td className="border p-2 sticky left-0 bg-indigo-50 dark:bg-indigo-950 z-10">Tổng</td>
             {entities.map((e) => {
               const c = colTotals[String(e.id)];
               return GROUPS.map((g) => (

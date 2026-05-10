@@ -124,8 +124,8 @@ export default async function CongNoNcPage() {
             </tbody>
             {summaryRows.length > 0 && (
               <tfoot>
-                <tr className="bg-muted/60 font-semibold">
-                  <td colSpan={8} className="border-t px-3 py-2.5">Tổng cộng</td>
+                <tr className="border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold">
+                  <td colSpan={8} className="px-3 py-2.5">Tổng cộng</td>
                   <td className={`border-t px-3 py-2.5 text-right tabular-nums ${colorClass(grandTt)}`}>{fmt(grandTt)}</td>
                   <td className={`border-t px-3 py-2.5 text-right tabular-nums ${colorClass(grandHd)}`}>{fmt(grandHd)}</td>
                 </tr>

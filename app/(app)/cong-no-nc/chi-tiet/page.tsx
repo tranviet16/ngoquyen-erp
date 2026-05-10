@@ -2,6 +2,7 @@ import { getLaborDebtMatrix } from "@/lib/cong-no-nc/labor-ledger-service";
 import { prisma } from "@/lib/prisma";
 import { DebtMatrix, type DebtMatrixRow } from "@/components/ledger/debt-matrix";
 import { MultiSelectFilter } from "@/components/ledger/multi-select-filter";
+import { serializeDecimals } from "@/lib/serialize";
 
 interface PageProps {
   searchParams: Promise<{ entity?: string }>;
@@ -45,7 +46,7 @@ export default async function ChiTietNcPage({ searchParams }: PageProps) {
         <MultiSelectFilter options={allEntities} selected={entityIds} paramName="entity" label="chủ thể" />
       </div>
 
-      <DebtMatrix rows={rows} entities={visibleEntities} partyLabel="Đội thi công" />
+      <DebtMatrix rows={serializeDecimals(rows)} entities={visibleEntities} partyLabel="Đội thi công" />
     </div>
   );
 }

@@ -50,18 +50,15 @@ export interface SummaryRow {
   balanceHd: Prisma.Decimal;
 }
 
-export interface MonthlyReportRow {
-  month: number;
-  year: number;
-  entityId: number;
+export interface MonthlyByPartyRow {
+  partyId: number;
+  partyName: string;
   openingTt: Prisma.Decimal;
   openingHd: Prisma.Decimal;
   layHangTt: Prisma.Decimal;
   layHangHd: Prisma.Decimal;
   thanhToanTt: Prisma.Decimal;
   thanhToanHd: Prisma.Decimal;
-  dieuChinhTt: Prisma.Decimal;
-  dieuChinhHd: Prisma.Decimal;
   closingTt: Prisma.Decimal;
   closingHd: Prisma.Decimal;
 }

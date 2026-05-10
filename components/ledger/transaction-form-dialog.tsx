@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import type { TransactionInput } from "@/lib/cong-no-vt/schemas";
 import type { LookupOption, TransactionRow } from "./transaction-grid";
@@ -77,7 +78,7 @@ export function TransactionFormDialog({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Ngày</Label>
-            <Input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} required />
+            <DateInput value={form.date} onChange={(v) => set("date", v)} required />
           </div>
           <div>
             <Label>Loại giao dịch</Label>

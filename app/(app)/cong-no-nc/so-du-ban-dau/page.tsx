@@ -1,23 +1,24 @@
-import { listLaborOpeningBalances, setLaborOpeningBalance, deleteLaborOpeningBalance } from "@/lib/cong-no-nc/labor-ledger-service";
+import {
+  listLaborOpeningBalances,
+  patchLaborOpeningBalance,
+  bulkUpsertLaborOpeningBalances,
+  deleteLaborOpeningBalances,
+} from "@/lib/cong-no-nc/labor-ledger-service";
 import { prisma } from "@/lib/prisma";
-import { OpeningBalanceClient } from "@/components/ledger/opening-balance-client";
+import { LedgerOpeningGrid, type OpeningRow } from "@/components/ledger-grid/opening-grid";
 
 export default async function SoDuBanDauNcPage() {
-  const [balances, entities, contractors] = await Promise.all([
+  const [balances, entities, contractors, projects] = await Promise.all([
     listLaborOpeningBalances(),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.contractor.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.project.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const entityMap = Object.fromEntries(entities.map((e) => [e.id, e.name]));
-  const contractorMap = Object.fromEntries(contractors.map((c) => [c.id, c.name]));
-
-  const rows = balances.map((b) => ({
+  const rows: OpeningRow[] = balances.map((b) => ({
     id: b.id,
     entityId: b.entityId,
-    entityName: entityMap[b.entityId] ?? `#${b.entityId}`,
     partyId: b.partyId,
-    partyName: contractorMap[b.partyId] ?? `#${b.partyId}`,
     projectId: b.projectId,
     balanceTt: b.balanceTt.toString(),
     balanceHd: b.balanceHd.toString(),
@@ -29,15 +30,22 @@ export default async function SoDuBanDauNcPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Số dư ban đầu - Nhân công</h1>
-        <p className="text-sm text-muted-foreground">Số dư nợ đầu kỳ tính theo (Chủ thể, Đội thi công, Dự án)</p>
+        <p className="text-sm text-muted-foreground">
+          Số dư nợ đầu kỳ (Chủ thể, Đội thi công, Dự án). Edit in-place, paste range, thêm/xóa dòng.
+        </p>
       </div>
-      <OpeningBalanceClient
+      <LedgerOpeningGrid
         initialData={rows}
         entities={entities}
         partyOptions={contractors}
+        projects={projects}
         partyLabel="Đội thi công"
-        onSet={setLaborOpeningBalance}
-        onDelete={deleteLaborOpeningBalance}
+        defaults={{ entityId: entities[0]?.id ?? 0, partyId: contractors[0]?.id ?? 0 }}
+        actions={{
+          patch: patchLaborOpeningBalance,
+          bulkUpsert: bulkUpsertLaborOpeningBalances,
+          deleteMany: deleteLaborOpeningBalances,
+        }}
       />
     </div>
   );

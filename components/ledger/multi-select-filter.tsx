@@ -73,7 +73,7 @@ export function MultiSelectFilter({ options, selected, paramName, label }: Props
         <span className="ml-2 opacity-60">▾</span>
       </Button>
       {open && (
-        <div className="absolute z-20 mt-1 w-[320px] rounded-md border bg-popover shadow-lg">
+        <div className="absolute z-50 mt-1 w-[320px] rounded-md border bg-popover shadow-lg">
           <div className="p-2 border-b">
             <Input
               placeholder={`Tìm ${label}...`}

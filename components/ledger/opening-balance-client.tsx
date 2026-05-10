@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import type { OpeningBalanceInput } from "@/lib/cong-no-vt/schemas";
@@ -171,7 +172,7 @@ function ObForm({ open, onOpenChange, entities, partyOptions, partyLabel, defaul
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Ngày đầu kỳ</Label>
-            <Input type="date" value={form.asOfDate} onChange={(e) => set("asOfDate", e.target.value)} required />
+            <DateInput value={form.asOfDate} onChange={(v) => set("asOfDate", v)} required />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">

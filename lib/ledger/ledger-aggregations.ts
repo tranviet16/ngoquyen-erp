@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { LedgerType, SummaryRow, MonthlyReportRow, CurrentBalance, MatrixRow, MatrixCell } from "./ledger-types";
+import type { LedgerType, SummaryRow, MonthlyByPartyRow, CurrentBalance, MatrixRow, MatrixCell } from "./ledger-types";
 
 function emptyCell(): MatrixCell {
   return { openTt: 0, openHd: 0, layTt: 0, layHd: 0, traTt: 0, traHd: 0, closeTt: 0, closeHd: 0 };
@@ -107,67 +107,119 @@ export async function querySummary(
   }));
 }
 
-interface MonthlyRawRow {
-  month: number;
-  year: number;
-  entity_id: number;
-  lay_hang_tt: Prisma.Decimal;
-  lay_hang_hd: Prisma.Decimal;
-  thanh_toan_tt: Prisma.Decimal;
-  thanh_toan_hd: Prisma.Decimal;
-  dieu_chinh_tt: Prisma.Decimal;
-  dieu_chinh_hd: Prisma.Decimal;
+interface MonthlyByPartyRawRow {
+  party_id: number;
+  open_tt: Prisma.Decimal;
+  open_hd: Prisma.Decimal;
+  lay_tt: Prisma.Decimal;
+  lay_hd: Prisma.Decimal;
+  tra_tt: Prisma.Decimal;
+  tra_hd: Prisma.Decimal;
 }
 
-export async function queryMonthlyReport(
+export async function queryMonthlyByParty(
   ledgerType: LedgerType,
   year: number,
-  entityId?: number
-): Promise<MonthlyReportRow[]> {
-  const rows = await prisma.$queryRaw<MonthlyRawRow[]>`
+  month: number,
+  entityId: number
+): Promise<Omit<MonthlyByPartyRow, "partyName">[]> {
+  const rows = await prisma.$queryRaw<MonthlyByPartyRawRow[]>`
+    WITH first_of_month AS (SELECT make_date(${year}::int, ${month}::int, 1) AS d),
+         last_of_month  AS (SELECT (make_date(${year}::int, ${month}::int, 1) + interval '1 month' - interval '1 day')::date AS d),
+    opening AS (
+      SELECT party_id,
+             COALESCE(SUM(tt_signed), 0) AS open_tt,
+             COALESCE(SUM(hd_signed), 0) AS open_hd
+      FROM (
+        SELECT "partyId" AS party_id,
+               COALESCE("balanceTt", 0) AS tt_signed,
+               COALESCE("balanceHd", 0) AS hd_signed
+        FROM ledger_opening_balances
+        WHERE "ledgerType" = ${ledgerType} AND "entityId" = ${entityId}
+
+        UNION ALL
+
+        SELECT "partyId",
+          CASE "transactionType"
+            WHEN 'lay_hang'   THEN "totalTt"
+            WHEN 'thanh_toan' THEN -"totalTt"
+            ELSE "totalTt"
+          END,
+          CASE "transactionType"
+            WHEN 'lay_hang'   THEN "totalHd"
+            WHEN 'thanh_toan' THEN -"totalHd"
+            ELSE "totalHd"
+          END
+        FROM ledger_transactions
+        WHERE "ledgerType" = ${ledgerType}
+          AND "entityId" = ${entityId}
+          AND "deletedAt" IS NULL
+          AND date < (SELECT d FROM first_of_month)
+      ) all_prior
+      GROUP BY party_id
+    ),
+    period AS (
+      SELECT "partyId" AS party_id,
+        COALESCE(SUM(CASE
+          WHEN "transactionType" = 'lay_hang' THEN "totalTt"
+          WHEN "transactionType" = 'dieu_chinh' AND "totalTt" > 0 THEN "totalTt"
+          ELSE 0 END), 0) AS lay_tt,
+        COALESCE(SUM(CASE
+          WHEN "transactionType" = 'lay_hang' THEN "totalHd"
+          WHEN "transactionType" = 'dieu_chinh' AND "totalHd" > 0 THEN "totalHd"
+          ELSE 0 END), 0) AS lay_hd,
+        COALESCE(SUM(CASE
+          WHEN "transactionType" = 'thanh_toan' THEN "totalTt"
+          WHEN "transactionType" = 'dieu_chinh' AND "totalTt" < 0 THEN -"totalTt"
+          ELSE 0 END), 0) AS tra_tt,
+        COALESCE(SUM(CASE
+          WHEN "transactionType" = 'thanh_toan' THEN "totalHd"
+          WHEN "transactionType" = 'dieu_chinh' AND "totalHd" < 0 THEN -"totalHd"
+          ELSE 0 END), 0) AS tra_hd
+      FROM ledger_transactions
+      WHERE "ledgerType" = ${ledgerType}
+        AND "entityId" = ${entityId}
+        AND "deletedAt" IS NULL
+        AND date >= (SELECT d FROM first_of_month)
+        AND date <= (SELECT d FROM last_of_month)
+      GROUP BY "partyId"
+    )
     SELECT
-      EXTRACT(MONTH FROM date)::int AS month,
-      EXTRACT(YEAR FROM date)::int AS year,
-      "entityId" AS entity_id,
-      COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_hang_tt,
-      COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_hang_hd,
-      COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS thanh_toan_tt,
-      COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS thanh_toan_hd,
-      COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'dieu_chinh'), 0) AS dieu_chinh_tt,
-      COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'dieu_chinh'), 0) AS dieu_chinh_hd
-    FROM ledger_transactions
-    WHERE "ledgerType" = ${ledgerType}
-      AND "deletedAt" IS NULL
-      AND EXTRACT(YEAR FROM date) = ${year}
-      AND (${entityId ?? null}::int IS NULL OR "entityId" = ${entityId ?? null}::int)
-    GROUP BY EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date), "entityId"
-    ORDER BY year, month, entity_id
+      COALESCE(o.party_id, p.party_id) AS party_id,
+      COALESCE(o.open_tt, 0) AS open_tt,
+      COALESCE(o.open_hd, 0) AS open_hd,
+      COALESCE(p.lay_tt, 0)  AS lay_tt,
+      COALESCE(p.lay_hd, 0)  AS lay_hd,
+      COALESCE(p.tra_tt, 0)  AS tra_tt,
+      COALESCE(p.tra_hd, 0)  AS tra_hd
+    FROM opening o
+    FULL OUTER JOIN period p USING (party_id)
+    WHERE COALESCE(o.open_tt, 0) <> 0
+       OR COALESCE(o.open_hd, 0) <> 0
+       OR COALESCE(p.lay_tt, 0) <> 0
+       OR COALESCE(p.lay_hd, 0) <> 0
+       OR COALESCE(p.tra_tt, 0) <> 0
+       OR COALESCE(p.tra_hd, 0) <> 0
+    ORDER BY party_id
   `;
 
-  // Build running balance: for each (year+entityId) group, carry forward closing → opening
-  // Simplified: opening of month 1 = opening balance from LedgerOpeningBalance
-  // For brevity, we return monthly rows with computed closing. Caller can chain.
   return rows.map((r) => {
-    const lhTt = new Prisma.Decimal(r.lay_hang_tt);
-    const lhHd = new Prisma.Decimal(r.lay_hang_hd);
-    const ttTt = new Prisma.Decimal(r.thanh_toan_tt);
-    const ttHd = new Prisma.Decimal(r.thanh_toan_hd);
-    const dcTt = new Prisma.Decimal(r.dieu_chinh_tt);
-    const dcHd = new Prisma.Decimal(r.dieu_chinh_hd);
+    const openingTt = new Prisma.Decimal(r.open_tt);
+    const openingHd = new Prisma.Decimal(r.open_hd);
+    const layHangTt = new Prisma.Decimal(r.lay_tt);
+    const layHangHd = new Prisma.Decimal(r.lay_hd);
+    const thanhToanTt = new Prisma.Decimal(r.tra_tt);
+    const thanhToanHd = new Prisma.Decimal(r.tra_hd);
     return {
-      month: Number(r.month),
-      year: Number(r.year),
-      entityId: Number(r.entity_id),
-      openingTt: new Prisma.Decimal(0), // filled by service layer
-      openingHd: new Prisma.Decimal(0),
-      layHangTt: lhTt,
-      layHangHd: lhHd,
-      thanhToanTt: ttTt,
-      thanhToanHd: ttHd,
-      dieuChinhTt: dcTt,
-      dieuChinhHd: dcHd,
-      closingTt: lhTt.minus(ttTt).plus(dcTt),
-      closingHd: lhHd.minus(ttHd).plus(dcHd),
+      partyId: Number(r.party_id),
+      openingTt,
+      openingHd,
+      layHangTt,
+      layHangHd,
+      thanhToanTt,
+      thanhToanHd,
+      closingTt: openingTt.plus(layHangTt).minus(thanhToanTt),
+      closingHd: openingHd.plus(layHangHd).minus(thanhToanHd),
     };
   });
 }

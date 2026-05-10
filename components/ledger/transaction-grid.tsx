@@ -1,14 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
-import { AgGridBase, VND_COL_DEF, vndFormatter } from "@/components/ag-grid-base";
+import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
-import { DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
+import { vndFormatter } from "@/lib/format";
+import { formatDate } from "@/lib/utils/format";
 import type { TransactionInput } from "@/lib/cong-no-vt/schemas";
 import { TransactionFormDialog } from "./transaction-form-dialog";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+  onSelectionChange?: (ids: number[]) => void;
+}) => ReactElement;
 
 export interface TransactionRow {
   id: number;
@@ -68,6 +81,23 @@ const STATUS_LABELS: Record<string, string> = {
   paid: "Đã trả",
 };
 
+interface TxGridRow extends RowWithId {
+  date: string;
+  txTypeLabel: string;
+  entityName: string;
+  partyName: string;
+  projectName: string;
+  content: string;
+  amountTt: number;
+  vatPctTt: number;
+  totalTt: number;
+  amountHd: number;
+  vatPctHd: number;
+  totalHd: number;
+  invoiceNo: string;
+  status: string;
+}
+
 export function TransactionGrid({
   initialData, partyLabel, entities, partyOptions, projects, items,
   onCreate, onUpdate, onDelete, title,
@@ -75,72 +105,107 @@ export function TransactionGrid({
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<TransactionRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [, startTransition] = useTransition();
+
+  const rowsById = new Map(initialData.map((r) => [r.id, r]));
 
   function refresh() {
     startTransition(() => router.refresh());
   }
 
-  async function handleCellValueChanged(event: CellValueChangedEvent<TransactionRow>) {
-    const row = event.data;
-    try {
-      await onUpdate(row.id, {
-        date: row.date,
-        transactionType: row.transactionType as "lay_hang" | "thanh_toan" | "dieu_chinh",
-        entityId: row.entityId,
-        partyId: row.partyId,
-        projectId: row.projectId,
-        itemId: row.itemId,
-        amountTt: String(row.amountTt),
-        vatPctTt: String(row.vatPctTt),
-        amountHd: String(row.amountHd),
-        vatPctHd: String(row.vatPctHd),
-        invoiceNo: row.invoiceNo,
-        content: row.content,
-        status: (row.status as "pending" | "approved" | "paid") ?? "pending",
-        note: row.note,
-      });
-      toast.success("Đã lưu");
-      refresh();
-    } catch (err) {
-      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
-      refresh();
-    }
-  }
+  const rows: TxGridRow[] = initialData.map((r) => ({
+    id: r.id,
+    date: formatDate(new Date(r.date), ""),
+    txTypeLabel: TX_TYPE_LABELS[r.transactionType] ?? r.transactionType,
+    entityName: r.entityName,
+    partyName: r.partyName,
+    projectName: r.projectName ?? "",
+    content: r.content ?? "",
+    amountTt: Number(r.amountTt),
+    vatPctTt: Number(r.vatPctTt),
+    totalTt: Number(r.totalTt),
+    amountHd: Number(r.amountHd),
+    vatPctHd: Number(r.vatPctHd),
+    totalHd: Number(r.totalHd),
+    invoiceNo: r.invoiceNo ?? "",
+    status: r.status,
+  }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const colDefs: ColDef<any>[] = [
-    { field: "date", headerName: "Ngày", width: 110, valueFormatter: (p) => p.value ? new Date(p.value).toLocaleDateString("vi-VN") : "" },
-    { field: "transactionType", headerName: "Loại GD", width: 110, valueFormatter: (p) => TX_TYPE_LABELS[p.value] ?? p.value },
-    { field: "entityName", headerName: "Chủ thể", flex: 1, minWidth: 120 },
-    { field: "partyName", headerName: partyLabel, flex: 1, minWidth: 120 },
-    { field: "projectName", headerName: "Dự án", width: 120 },
-    { field: "content", headerName: "Nội dung", flex: 1, minWidth: 140, editable: true },
-    { field: "amountTt", headerName: "Tiền TT", ...VND_COL_DEF, width: 120, editable: true },
-    { field: "vatPctTt", headerName: "VAT% TT", width: 90, type: "numericColumn", cellStyle: { textAlign: "right" },
-      valueFormatter: (p) => p.value != null ? `${(Number(p.value) * 100).toFixed(0)}%` : "" },
-    { field: "totalTt", headerName: "Tổng TT", ...VND_COL_DEF, width: 120 },
-    { field: "amountHd", headerName: "Tiền HĐ", ...VND_COL_DEF, width: 120, editable: true },
-    { field: "vatPctHd", headerName: "VAT% HĐ", width: 90, type: "numericColumn", cellStyle: { textAlign: "right" },
-      valueFormatter: (p) => p.value != null ? `${(Number(p.value) * 100).toFixed(0)}%` : "" },
-    { field: "totalHd", headerName: "Tổng HĐ", ...VND_COL_DEF, width: 120 },
-    { field: "invoiceNo", headerName: "Số HĐ", width: 110, editable: true },
-    { field: "status", headerName: "TT", width: 90, valueFormatter: (p) => STATUS_LABELS[p.value] ?? p.value },
+  const statusOptions: SelectOption[] = Object.entries(STATUS_LABELS).map(([v, l]) => ({ id: v, name: l }));
+
+  const patchTx = async (id: number, patch: Partial<TxGridRow>) => {
+    const current = rowsById.get(id);
+    if (!current) throw new Error(`GD #${id} không tồn tại`);
+    const input: TransactionInput = {
+      date: current.date,
+      transactionType: current.transactionType as "lay_hang" | "thanh_toan" | "dieu_chinh",
+      entityId: current.entityId,
+      partyId: current.partyId,
+      projectId: current.projectId,
+      itemId: current.itemId,
+      amountTt: typeof patch.amountTt === "number" ? String(patch.amountTt) : String(current.amountTt),
+      vatPctTt: String(current.vatPctTt),
+      amountHd: typeof patch.amountHd === "number" ? String(patch.amountHd) : String(current.amountHd),
+      vatPctHd: String(current.vatPctHd),
+      invoiceNo: typeof patch.invoiceNo === "string" ? (patch.invoiceNo || null) : current.invoiceNo,
+      content: typeof patch.content === "string" ? (patch.content || null) : current.content,
+      status: (typeof patch.status === "string" ? patch.status : current.status) as "pending" | "approved" | "paid",
+      note: current.note,
+    };
+    await onUpdate(id, input);
+  };
+
+  const columns: DataGridColumn<TxGridRow>[] = [
+    { id: "date", title: "Ngày", kind: "text", width: 110, readonly: true },
+    { id: "txTypeLabel", title: "Loại GD", kind: "text", width: 110, readonly: true },
+    { id: "entityName", title: "Chủ thể", kind: "text", width: 140, readonly: true },
+    { id: "partyName", title: partyLabel, kind: "text", width: 140, readonly: true },
+    { id: "projectName", title: "Dự án", kind: "text", width: 120, readonly: true },
+    { id: "content", title: "Nội dung", kind: "text", width: 200 },
+    { id: "amountTt", title: "Tiền TT", kind: "currency", width: 120 },
     {
-      headerName: "Thao tác", width: 110, pinned: "right",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      cellRenderer: (p: { data: TransactionRow }) => (
-        <div className="flex gap-1 items-center h-full">
-          <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
-          <DeleteConfirmDialog
-            itemName={`GD ${p.data.id}`}
-            onConfirm={async () => { await onDelete(p.data.id); refresh(); }}
-            trigger={<Button variant="outline" size="sm" className="text-destructive">Xóa</Button>}
-          />
-        </div>
-      ),
+      id: "vatPctTt", title: "VAT% TT", kind: "number", width: 90, readonly: true,
+      format: (v) => v != null ? `${(Number(v) * 100).toFixed(0)}%` : "",
+    },
+    { id: "totalTt", title: "Tổng TT", kind: "currency", width: 120, readonly: true },
+    { id: "amountHd", title: "Tiền HĐ", kind: "currency", width: 120 },
+    {
+      id: "vatPctHd", title: "VAT% HĐ", kind: "number", width: 90, readonly: true,
+      format: (v) => v != null ? `${(Number(v) * 100).toFixed(0)}%` : "",
+    },
+    { id: "totalHd", title: "Tổng HĐ", kind: "currency", width: 120, readonly: true },
+    { id: "invoiceNo", title: "Số HĐ", kind: "text", width: 110 },
+    {
+      id: "status", title: "TT", kind: "select", width: 100, options: statusOptions,
+      format: (v) => STATUS_LABELS[String(v)] ?? String(v ?? ""),
     },
   ];
+
+  const handlers: DataGridHandlers<TxGridRow> = {
+    onCellEdit: async (id, col, value) => {
+      try {
+        await patchTx(id, { [col]: value } as Partial<TxGridRow>);
+        toast.success("Đã lưu");
+        refresh();
+      } catch (err) {
+        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+        refresh();
+      }
+    },
+    onDeleteRows: async (ids) => {
+      for (const id of ids) {
+        await onDelete(id);
+      }
+      refresh();
+    },
+  };
+
+  const editSelected = () => {
+    if (selectedIds.length !== 1) return;
+    const target = rowsById.get(selectedIds[0]);
+    if (target) setEditTarget(target);
+  };
 
   const grandTotalTt = initialData.reduce((s, r) => s + Number(r.totalTt), 0);
   const grandTotalHd = initialData.reduce((s, r) => s + Number(r.totalHd), 0);
@@ -154,14 +219,20 @@ export function TransactionGrid({
             Tổng TT: <strong>{vndFormatter(grandTotalTt)}</strong> | Tổng HĐ: <strong>{vndFormatter(grandTotalHd)}</strong>
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+            Sửa đầy đủ
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
+        </div>
       </div>
 
-      <AgGridBase
-        rowData={initialData}
-        columnDefs={colDefs}
+      <DataGrid<TxGridRow>
+        columns={columns}
+        rows={rows}
+        handlers={handlers}
         height={550}
-        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+        onSelectionChange={setSelectedIds}
       />
 
       <TransactionFormDialog

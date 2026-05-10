@@ -11,14 +11,14 @@ import type {
   LedgerTransactionInput,
   LedgerTransactionFilter,
   SummaryRow,
-  MonthlyReportRow,
+  MonthlyByPartyRow,
   CurrentBalance,
   MatrixRow,
   OpeningBalanceInput,
 } from "./ledger-types";
 import {
   querySummary,
-  queryMonthlyReport,
+  queryMonthlyByParty,
   queryCurrentBalance,
   queryDebtMatrix,
 } from "./ledger-aggregations";
@@ -146,8 +146,32 @@ export class LedgerService {
     return querySummary(this.ledgerType, filter);
   }
 
-  async monthlyReport(year: number, entityId?: number): Promise<MonthlyReportRow[]> {
-    return queryMonthlyReport(this.ledgerType, year, entityId);
+  async monthlyByParty(
+    year: number,
+    month: number,
+    entityId: number
+  ): Promise<Omit<MonthlyByPartyRow, "partyName">[]> {
+    return queryMonthlyByParty(this.ledgerType, year, month, entityId);
+  }
+
+  async firstEntityWithActivity(year: number, month: number): Promise<number | null> {
+    const r = await prisma.$queryRaw<{ entityId: number }[]>`
+      SELECT "entityId" FROM ledger_transactions
+      WHERE "ledgerType" = ${this.ledgerType}
+        AND "deletedAt" IS NULL
+        AND EXTRACT(YEAR FROM date) = ${year}
+        AND EXTRACT(MONTH FROM date) = ${month}
+      GROUP BY "entityId"
+      ORDER BY MIN(date) ASC
+      LIMIT 1
+    `;
+    if (r[0]) return Number(r[0].entityId);
+    const ob = await prisma.ledgerOpeningBalance.findFirst({
+      where: { ledgerType: this.ledgerType },
+      orderBy: { entityId: "asc" },
+      select: { entityId: true },
+    });
+    return ob?.entityId ?? null;
   }
 
   async currentBalance(

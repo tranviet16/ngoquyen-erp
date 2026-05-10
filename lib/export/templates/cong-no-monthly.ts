@@ -1,54 +1,87 @@
 /**
  * Export template: Báo cáo tháng Công nợ Vật tư / Nhân công
- * Data source: lib/ledger/ledger-aggregations.ts → queryMonthlyReport
+ * Pivot: party (NCC / Đội) × 1 month, 10 columns + dòng tổng (matches SOP).
  */
 
 import { createWorkbook, addSheet, workbookToBuffer, type SheetColumn } from "../excel-exporter";
-import { queryMonthlyReport } from "@/lib/ledger/ledger-aggregations";
+import { queryMonthlyByParty } from "@/lib/ledger/ledger-aggregations";
+import { prisma } from "@/lib/prisma";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
 
 const COLUMNS: SheetColumn[] = [
-  { header: "Năm", key: "year", width: 8 },
-  { header: "Tháng", key: "month", width: 8 },
-  { header: "Chủ thể", key: "entityId", width: 12 },
-  { header: "Lấy hàng (TT)", key: "layHangTt", width: 18, numFmt: "#,##0" },
-  { header: "Lấy hàng (HĐ)", key: "layHangHd", width: 18, numFmt: "#,##0" },
-  { header: "Thanh toán (TT)", key: "thanhToanTt", width: 18, numFmt: "#,##0" },
-  { header: "Thanh toán (HĐ)", key: "thanhToanHd", width: 18, numFmt: "#,##0" },
-  { header: "Điều chỉnh (TT)", key: "dieuChinhTt", width: 18, numFmt: "#,##0" },
-  { header: "Điều chỉnh (HĐ)", key: "dieuChinhHd", width: 18, numFmt: "#,##0" },
-  { header: "Dư cuối (TT)", key: "closingTt", width: 18, numFmt: "#,##0" },
-  { header: "Dư cuối (HĐ)", key: "closingHd", width: 18, numFmt: "#,##0" },
+  { header: "STT", key: "stt", width: 6 },
+  { header: "Danh Mục", key: "partyName", width: 30 },
+  { header: "Phải Trả Đầu Kỳ (TT)", key: "openingTt", width: 20, numFmt: "#,##0" },
+  { header: "PS Phải Trả (TT)", key: "layHangTt", width: 20, numFmt: "#,##0" },
+  { header: "PS Đã Trả (TT)", key: "thanhToanTt", width: 20, numFmt: "#,##0" },
+  { header: "Phải Trả Cuối Kỳ (TT)", key: "closingTt", width: 20, numFmt: "#,##0" },
+  { header: "Phải Trả Đầu Kỳ (HĐ)", key: "openingHd", width: 20, numFmt: "#,##0" },
+  { header: "PS Phải Trả (HĐ)", key: "layHangHd", width: 20, numFmt: "#,##0" },
+  { header: "PS Đã Trả (HĐ)", key: "thanhToanHd", width: 20, numFmt: "#,##0" },
+  { header: "Phải Trả Cuối Kỳ (HĐ)", key: "closingHd", width: 20, numFmt: "#,##0" },
 ];
 
 export async function buildCongNoMonthlyExcel(
   ledgerType: LedgerType,
   year: number,
-  entityId?: number
+  month: number,
+  entityId: number
 ): Promise<Buffer> {
-  const rows = await queryMonthlyReport(ledgerType, year, entityId);
-  const wb = createWorkbook();
+  const rawRows = await queryMonthlyByParty(ledgerType, year, month, entityId);
 
-  const label = ledgerType === "material" ? "Vật tư" : "Nhân công";
-  addSheet(
-    wb,
-    `Báo cáo tháng`,
-    COLUMNS,
-    rows.map((r) => ({
-      year: r.year,
-      month: r.month,
-      entityId: r.entityId,
-      layHangTt: r.layHangTt.toNumber(),
-      layHangHd: r.layHangHd.toNumber(),
-      thanhToanTt: r.thanhToanTt.toNumber(),
-      thanhToanHd: r.thanhToanHd.toNumber(),
-      dieuChinhTt: r.dieuChinhTt.toNumber(),
-      dieuChinhHd: r.dieuChinhHd.toNumber(),
-      closingTt: r.closingTt.toNumber(),
-      closingHd: r.closingHd.toNumber(),
-    })),
-    { title: `Báo cáo tháng Công nợ ${label} — Năm ${year}` }
+  const partyIds = rawRows.map((r) => r.partyId);
+  const [parties, entity] = await Promise.all([
+    ledgerType === "material"
+      ? prisma.supplier.findMany({
+          where: { id: { in: partyIds }, deletedAt: null },
+          select: { id: true, name: true },
+        })
+      : prisma.contractor.findMany({
+          where: { id: { in: partyIds }, deletedAt: null },
+          select: { id: true, name: true },
+        }),
+    prisma.entity.findUnique({ where: { id: entityId }, select: { name: true } }),
+  ]);
+  const prefix = ledgerType === "material" ? "NCC" : "Đội";
+  const partyMap = new Map(parties.map((p) => [p.id, p.name]));
+
+  const rows = rawRows
+    .map((r) => ({ ...r, partyName: partyMap.get(r.partyId) ?? `${prefix} #${r.partyId}` }))
+    .sort((a, b) => a.partyName.localeCompare(b.partyName, "vi"));
+
+  const dataRows = rows.map((r, i) => ({
+    stt: i + 1,
+    partyName: r.partyName,
+    openingTt: r.openingTt.toNumber(),
+    layHangTt: r.layHangTt.toNumber(),
+    thanhToanTt: r.thanhToanTt.toNumber(),
+    closingTt: r.closingTt.toNumber(),
+    openingHd: r.openingHd.toNumber(),
+    layHangHd: r.layHangHd.toNumber(),
+    thanhToanHd: r.thanhToanHd.toNumber(),
+    closingHd: r.closingHd.toNumber(),
+  }));
+
+  const totals = dataRows.reduce(
+    (acc, r) => ({
+      openingTt: acc.openingTt + r.openingTt,
+      layHangTt: acc.layHangTt + r.layHangTt,
+      thanhToanTt: acc.thanhToanTt + r.thanhToanTt,
+      closingTt: acc.closingTt + r.closingTt,
+      openingHd: acc.openingHd + r.openingHd,
+      layHangHd: acc.layHangHd + r.layHangHd,
+      thanhToanHd: acc.thanhToanHd + r.thanhToanHd,
+      closingHd: acc.closingHd + r.closingHd,
+    }),
+    { openingTt: 0, layHangTt: 0, thanhToanTt: 0, closingTt: 0, openingHd: 0, layHangHd: 0, thanhToanHd: 0, closingHd: 0 }
   );
+  const totalRow = { stt: "" as unknown as number, partyName: "TỔNG", ...totals };
+
+  const wb = createWorkbook();
+  const label = ledgerType === "material" ? "Vật tư" : "Nhân công";
+  addSheet(wb, "Báo cáo tháng", COLUMNS, [...dataRows, totalRow], {
+    title: `Báo cáo tháng Công nợ ${label} — Tháng ${month}/${year} — Chủ thể: ${entity?.name ?? `#${entityId}`}`,
+  });
 
   return workbookToBuffer(wb);
 }
