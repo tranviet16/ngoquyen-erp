@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { suggestTargetMilestone, computeDtCanThucHien, computeTinhTrangDoanhThu, type PaymentPlanLite } from "@/lib/sl-dt/compute";
-import { saveMonthlyData } from "./actions";
 import { TabSanLuong } from "./tab-san-luong";
 import { TabDoanhThu } from "./tab-doanh-thu";
 import { TabChiTieu } from "./tab-chi-tieu";
@@ -63,6 +61,7 @@ interface Props {
   milestoneOptions: string[];
   stageOptions: StageOptions;
   scoreMap: Record<string, number>;
+  role?: string;
 }
 
 type TabId = "sl" | "dt" | "ct" | "tdx";
@@ -74,31 +73,21 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "tdx", label: "Tiến độ XD" },
 ];
 
-export function NhapThangMoiClient({ year, month, rows: initial, milestoneOptions, stageOptions, scoreMap: scoreMapObj }: Props) {
+export function NhapThangMoiClient({ year, month, rows: initial, milestoneOptions, stageOptions, scoreMap: scoreMapObj, role }: Props) {
   const scoreMap = new Map(Object.entries(scoreMapObj));
-  const router = useRouter();
   const [tab, setTab] = useState<TabId>("sl");
   const [rows, setRows] = useState<RowState[]>(initial);
-  const [dirty, setDirty] = useState(false);
-  const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
 
   const updateRow = (lotId: number, patch: Partial<RowState>) => {
     setRows((prev) => prev.map((r) => {
       if (r.lotId !== lotId) return r;
       const next = { ...r, ...patch };
-      // Auto-recompute lũy kế
-      if ("slThucKyTho" in patch) {
-        next.slLuyKeTho = next.prevSlLuyKeTho + next.slThucKyTho;
-      }
+      if ("slThucKyTho" in patch) next.slLuyKeTho = next.prevSlLuyKeTho + next.slThucKyTho;
       if ("dtThoKy" in patch) {
         next.dtThoLuyKe = next.prevDtThoLuyKe + next.dtThoKy;
         next.suggestedTarget = suggestTargetMilestone(next.dtThoLuyKe, next.plan);
       }
-      if ("dtTratKy" in patch) {
-        next.dtTratLuyKe = next.prevDtTratLuyKe + next.dtTratKy;
-      }
-      // Recompute DT cần thực hiện + Tình trạng when relevant inputs change
+      if ("dtTratKy" in patch) next.dtTratLuyKe = next.prevDtTratLuyKe + next.dtTratKy;
       if ("milestoneText" in patch || "settlementStatus" in patch || "estimateValue" in patch) {
         next.dtCanThucHien = computeDtCanThucHien(
           next.milestoneText, next.settlementStatus, next.estimateValue, next.plan, scoreMap,
@@ -107,38 +96,6 @@ export function NhapThangMoiClient({ year, month, rows: initial, milestoneOption
       next.tinhTrang = computeTinhTrangDoanhThu(next.dtThoLuyKe, next.dtCanThucHien);
       return next;
     }));
-    setDirty(true);
-    setMsg(null);
-  };
-
-  const onSave = () => {
-    setMsg(null);
-    start(async () => {
-      try {
-        const res = await saveMonthlyData({
-          year, month,
-          rows: rows.map((r) => ({
-            lotId: r.lotId,
-            slKeHoachKy: r.slKeHoachKy, slThucKyTho: r.slThucKyTho,
-            slLuyKeTho: r.slLuyKeTho, slTrat: r.slTrat,
-            estimateValue: r.estimateValue || null,
-            dtKeHoachKy: r.dtKeHoachKy, dtThoKy: r.dtThoKy,
-            dtThoLuyKe: r.dtThoLuyKe, qtTratChua: r.qtTratChua,
-            dtTratKy: r.dtTratKy, dtTratLuyKe: r.dtTratLuyKe,
-            contractValue: r.contractValue || null,
-            milestoneText: r.milestoneText, targetMilestone: r.targetMilestone,
-            settlementStatus: r.settlementStatus, ghiChu: r.ghiChu,
-            khungBtct: r.khungBtct, xayTuong: r.xayTuong, tratNgoai: r.tratNgoai,
-            xayTho: r.xayTho, tratHoanThien: r.tratHoanThien, hoSoQuyetToan: r.hoSoQuyetToan,
-          })),
-        });
-        setDirty(false);
-        setMsg(`Đã lưu ${res.saved} dòng.`);
-        router.refresh();
-      } catch (e) {
-        setMsg(`Lỗi: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    });
   };
 
   return (
@@ -158,23 +115,15 @@ export function NhapThangMoiClient({ year, month, rows: initial, milestoneOption
         ))}
       </div>
 
-      <div>
-        {tab === "sl" && <TabSanLuong rows={rows} onUpdate={updateRow} />}
-        {tab === "dt" && <TabDoanhThu rows={rows} onUpdate={updateRow} />}
-        {tab === "ct" && <TabChiTieu rows={rows} onUpdate={updateRow} milestoneOptions={milestoneOptions} />}
-        {tab === "tdx" && <TabTienDoXd rows={rows} onUpdate={updateRow} options={stageOptions} />}
-      </div>
+      <p className="text-xs text-muted-foreground">
+        Tự động lưu sau mỗi chỉnh sửa (300ms). Lũy kế tính lại từ tháng trước trên server.
+      </p>
 
-      <div className="sticky bottom-0 bg-background border-t pt-3 flex items-center gap-3">
-        <button
-          onClick={onSave}
-          disabled={!dirty || pending}
-          className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded disabled:opacity-50"
-        >
-          {pending ? "Đang lưu…" : `Lưu T${month}/${year}`}
-        </button>
-        {dirty && <span className="text-xs text-orange-600">Có thay đổi chưa lưu</span>}
-        {msg && <span className="text-xs text-muted-foreground">{msg}</span>}
+      <div>
+        {tab === "sl" && <TabSanLuong year={year} month={month} rows={rows} onUpdate={updateRow} role={role} />}
+        {tab === "dt" && <TabDoanhThu year={year} month={month} rows={rows} onUpdate={updateRow} role={role} />}
+        {tab === "ct" && <TabChiTieu year={year} month={month} rows={rows} onUpdate={updateRow} milestoneOptions={milestoneOptions} role={role} />}
+        {tab === "tdx" && <TabTienDoXd year={year} month={month} rows={rows} onUpdate={updateRow} options={stageOptions} role={role} />}
       </div>
     </div>
   );

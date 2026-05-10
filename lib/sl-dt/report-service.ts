@@ -237,7 +237,16 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
     };
   });
 
-  return buildChiTieuHierarchy(lotRows);
+  const labels = await prisma.slDtSubtotalLabel.findMany();
+  const labelMap = new Map(labels.map((l) => [`${l.scope}:${l.key}`, l.label]));
+  return buildChiTieuHierarchy(lotRows, labelMap);
+}
+
+export function subtotalLabelKey(row: { kind: string; phaseCode: string; groupCode: string }): string | null {
+  if (row.kind === "grand") return "grand:_";
+  if (row.kind === "phase") return `phase:${row.phaseCode}`;
+  if (row.kind === "group") return `group:${row.phaseCode}/${row.groupCode}`;
+  return null;
 }
 
 function emptySubtotal(kind: "group" | "phase" | "grand", lotName: string, phaseCode: string, groupCode: string, sortOrder: number): ChiTieuRow {
@@ -263,7 +272,7 @@ function sumInto(target: ChiTieuRow, src: ChiTieuRow) {
   for (const k of NUMERIC_KEYS) target[k] += src[k];
 }
 
-function buildChiTieuHierarchy(lotRows: ChiTieuRow[]): ChiTieuRow[] {
+function buildChiTieuHierarchy(lotRows: ChiTieuRow[], labelMap: Map<string, string> = new Map()): ChiTieuRow[] {
   const result: ChiTieuRow[] = [];
   const byPhase = new Map<string, Map<string, ChiTieuRow[]>>();
 
@@ -274,16 +283,19 @@ function buildChiTieuHierarchy(lotRows: ChiTieuRow[]): ChiTieuRow[] {
     byGroup.get(r.groupCode)!.push(r);
   }
 
-  const grand = emptySubtotal("grand", "Tổng cộng", "", "", 999999);
+  const grandLabel = labelMap.get("grand:_") ?? "Tổng cộng";
+  const grand = emptySubtotal("grand", grandLabel, "", "", 999999);
 
   for (const [phaseCode, byGroup] of byPhase) {
-    const phaseSub = emptySubtotal("phase", `Tổng giai đoạn ${phaseCode}`, phaseCode, "", 99999);
+    const phaseLabel = labelMap.get(`phase:${phaseCode}`) ?? `Tổng giai đoạn ${phaseCode}`;
+    const phaseSub = emptySubtotal("phase", phaseLabel, phaseCode, "", 99999);
 
     for (const [groupCode, lots] of byGroup) {
       const sorted = [...lots].sort((a, b) => a.sortOrder - b.sortOrder);
       result.push(...sorted);
 
-      const groupSub = emptySubtotal("group", `Tổng nhóm ${groupCode}`, phaseCode, groupCode, 9999);
+      const groupLabel = labelMap.get(`group:${phaseCode}/${groupCode}`) ?? `Tổng nhóm ${groupCode}`;
+      const groupSub = emptySubtotal("group", groupLabel, phaseCode, groupCode, 9999);
       for (const r of sorted) sumInto(groupSub, r);
       sumInto(phaseSub, groupSub);
       result.push(groupSub);

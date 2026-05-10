@@ -1,5 +1,6 @@
 import { getMilestoneScores } from "@/lib/sl-dt/report-service";
 import { CauHinhClient } from "./cau-hinh-client";
+import { serializeDecimals } from "@/lib/serialize";
 
 export default async function CauHinhPage() {
   const scores = await getMilestoneScores();
@@ -11,7 +12,7 @@ export default async function CauHinhPage() {
         <p className="text-sm text-muted-foreground">Quản lý bảng mốc tiến độ — điểm — dùng để tính phải nộp tiền</p>
       </div>
 
-      <CauHinhClient scores={scores} />
+      <CauHinhClient scores={serializeDecimals(scores)} />
     </div>
   );
 }

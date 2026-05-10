@@ -1,9 +1,13 @@
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { getMilestoneScores, getAvailableMonths } from "@/lib/sl-dt/report-service";
 import { suggestTargetMilestone, computeDtCanThucHien, computeTinhTrangDoanhThu } from "@/lib/sl-dt/compute";
 import { NhapThangMoiClient } from "./nhap-thang-moi-client";
 import { CloneBanner } from "./clone-banner";
 import { prevMonth } from "./helpers";
+import { MonthYearPicker } from "@/components/ui/month-year-picker";
+import { serializeDecimals } from "@/lib/serialize";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>;
@@ -23,6 +27,9 @@ const dec = (v: unknown) => (v == null ? 0 : Number(v));
 
 export default async function NhapThangMoiPage({ searchParams }: Props) {
   const params = await searchParams;
+  const h = await headers();
+  const session = await auth.api.getSession({ headers: h });
+  const role = session?.user?.role ?? undefined;
   const availableMonths = await getAvailableMonths();
   const tgt = params.year && params.month
     ? { year: parseInt(params.year, 10), month: parseInt(params.month, 10) }
@@ -52,7 +59,6 @@ export default async function NhapThangMoiPage({ searchParams }: Props) {
   const isEmpty = monthInputs.length === 0;
 
   const yearOptions = [...new Set([tgt.year - 1, tgt.year, tgt.year + 1, ...availableMonths.map((m) => m.year)])].sort();
-  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
 
   // Build distinct stage texts for Tiến độ XD dropdowns
   const allProgress = await prisma.slDtProgressStatus.findMany({
@@ -145,20 +151,10 @@ export default async function NhapThangMoiPage({ searchParams }: Props) {
         </p>
       </div>
 
-      <form className="flex gap-3 items-end flex-wrap">
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Năm</label>
-          <select name="year" defaultValue={tgt.year} className="border rounded px-2 py-1.5 text-sm">
-            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Tháng</label>
-          <select name="month" defaultValue={tgt.month} className="border rounded px-2 py-1.5 text-sm">
-            {monthOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
-          </select>
-        </div>
-        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Mở</button>
+      <form className="flex gap-2 items-center flex-wrap">
+        <label className="text-sm text-muted-foreground">Kỳ:</label>
+        <MonthYearPicker year={tgt.year} month={tgt.month} yearOptions={yearOptions} />
+        <button type="submit" className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Mở</button>
       </form>
 
       {isEmpty ? (
@@ -167,10 +163,11 @@ export default async function NhapThangMoiPage({ searchParams }: Props) {
         <NhapThangMoiClient
           year={tgt.year}
           month={tgt.month}
-          rows={initialRows}
+          rows={serializeDecimals(initialRows)}
           milestoneOptions={milestoneOptions}
           stageOptions={stageOptions}
           scoreMap={scoreMapObj}
+          role={role}
         />
       )}
     </div>

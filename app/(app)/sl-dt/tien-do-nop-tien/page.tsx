@@ -1,5 +1,6 @@
 import { getPaymentPlans, getMilestoneScores } from "@/lib/sl-dt/report-service";
 import { PaymentPlanClient } from "./payment-plan-client";
+import { serializeDecimals } from "@/lib/serialize";
 
 export default async function TienDoNopTienPage() {
   const [rows, scores] = await Promise.all([
@@ -16,7 +17,7 @@ export default async function TienDoNopTienPage() {
         <p className="text-sm text-muted-foreground">Kế hoạch nộp tiền 4 đợt theo lô — click Sửa để chỉnh sửa</p>
       </div>
 
-      <PaymentPlanClient rows={rows} milestoneOptions={milestoneOptions} />
+      <PaymentPlanClient rows={serializeDecimals(rows)} milestoneOptions={milestoneOptions} />
     </div>
   );
 }

@@ -1,16 +1,17 @@
 import { getDoanhThuReport, getAvailableMonths } from "@/lib/sl-dt/report-service";
 import { fmtNum, fmtPct } from "@/lib/sl-dt/format";
 import type { DoanhThuRow } from "@/lib/sl-dt/rollup";
+import { MonthYearPicker } from "@/components/ui/month-year-picker";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>;
 }
 
 function rowClass(kind: DoanhThuRow["kind"]) {
-  if (kind === "grand") return "border-b bg-muted font-bold text-sm";
-  if (kind === "phase") return "border-b bg-muted/70 font-semibold text-sm";
-  if (kind === "group") return "border-b bg-muted/30 font-medium text-sm";
-  return "border-b hover:bg-muted/10 text-sm";
+  if (kind === "grand") return "border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold text-sm [&>td]:!bg-transparent [&>td]:!border-x-0 [&>td]:py-2.5";
+  if (kind === "phase") return "border-t-2 border-slate-400 dark:border-slate-500 bg-slate-100 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 font-semibold text-sm [&>td]:!bg-transparent [&>td]:!border-x-0 [&>td]:py-2";
+  if (kind === "group") return "border-t border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 font-medium text-sm [&>td]:!bg-transparent [&>td]:!border-x-0";
+  return "border-b hover:bg-muted/10 text-sm transition-colors";
 }
 
 export default async function BaoCaoDtPage({ searchParams }: Props) {
@@ -24,7 +25,6 @@ export default async function BaoCaoDtPage({ searchParams }: Props) {
     getAvailableMonths(),
   ]);
 
-  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
   const yearOptions = [...new Set([year - 1, year, year + 1, ...availableMonths.map((m) => m.year)])].sort();
 
   let stt = 0;
@@ -36,20 +36,10 @@ export default async function BaoCaoDtPage({ searchParams }: Props) {
         <p className="text-sm text-muted-foreground">Tháng {month}/{year} — DT nghiệm thu CĐT theo lô</p>
       </div>
 
-      <form className="flex gap-3 items-end flex-wrap">
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Năm</label>
-          <select name="year" defaultValue={year} className="border rounded px-2 py-1.5 text-sm">
-            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-muted-foreground block mb-1">Tháng</label>
-          <select name="month" defaultValue={month} className="border rounded px-2 py-1.5 text-sm">
-            {monthOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
-          </select>
-        </div>
-        <button type="submit" className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded">Xem</button>
+      <form className="flex gap-2 items-center flex-wrap">
+        <label className="text-sm text-muted-foreground">Kỳ:</label>
+        <MonthYearPicker year={year} month={month} yearOptions={yearOptions} />
+        <button type="submit" className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Xem</button>
       </form>
 
       <div className="overflow-x-auto">
@@ -60,24 +50,24 @@ export default async function BaoCaoDtPage({ searchParams }: Props) {
               <th rowSpan={2} className="p-2 text-left min-w-[200px] align-middle border-r">Danh mục / Lô</th>
               <th rowSpan={2} className="p-2 text-right min-w-[120px] align-middle border-r">Giá trị HĐ/<br/>xuất HĐ (D)</th>
               <th rowSpan={2} className="p-2 text-right min-w-[110px] align-middle border-r">Doanh thu<br/>dự kiến (E)</th>
-              <th colSpan={2} className="p-1.5 text-center border-x bg-amber-50 dark:bg-amber-950/30">Doanh thu (Thô)</th>
+              <th colSpan={2} className="p-1.5 text-center border-x-2 border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 font-semibold uppercase tracking-wide text-xs">Doanh thu (Thô)</th>
               <th rowSpan={2} className="p-2 text-right min-w-[110px] align-middle border-r">CN phải thu<br/>(Thô) (H)</th>
               <th rowSpan={2} className="p-2 text-right min-w-[110px] align-middle border-r">QT (Trát)<br/>chưa VAT (I)</th>
-              <th colSpan={2} className="p-1.5 text-center border-x bg-emerald-50 dark:bg-emerald-950/30">Doanh thu (Trát)</th>
+              <th colSpan={2} className="p-1.5 text-center border-x-2 border-emerald-300 dark:border-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-900 dark:text-emerald-100 font-semibold uppercase tracking-wide text-xs">Doanh thu (Trát)</th>
               <th rowSpan={2} className="p-2 text-right min-w-[110px] align-middle border-r">CN phải thu<br/>(Trát) (L)</th>
-              <th colSpan={2} className="p-1.5 text-center border-x bg-sky-50 dark:bg-sky-950/30">Doanh thu (Thô+Trát)</th>
+              <th colSpan={2} className="p-1.5 text-center border-x-2 border-sky-300 dark:border-sky-700 bg-sky-100 dark:bg-sky-900/50 text-sky-900 dark:text-sky-100 font-semibold uppercase tracking-wide text-xs">Doanh thu (Thô+Trát)</th>
               <th rowSpan={2} className="p-2 text-right min-w-[110px] align-middle border-r">CN phải thu<br/>(Thô+Trát) (O)</th>
-              <th colSpan={2} className="p-1.5 text-center border-x bg-violet-50 dark:bg-violet-950/30">Tỷ lệ hoàn thành (%)</th>
+              <th colSpan={2} className="p-1.5 text-center border-x-2 border-violet-300 dark:border-violet-700 bg-violet-100 dark:bg-violet-900/50 text-violet-900 dark:text-violet-100 font-semibold uppercase tracking-wide text-xs">Tỷ lệ hoàn thành (%)</th>
             </tr>
             <tr className="bg-muted border-b">
-              <th className="p-1.5 text-right min-w-[110px] border-l bg-amber-50 dark:bg-amber-950/30">Kỳ này (F)</th>
-              <th className="p-1.5 text-right min-w-[110px] border-r bg-amber-50 dark:bg-amber-950/30">Lũy kế (G)</th>
-              <th className="p-1.5 text-right min-w-[110px] border-l bg-emerald-50 dark:bg-emerald-950/30">Kỳ này (J)</th>
-              <th className="p-1.5 text-right min-w-[110px] border-r bg-emerald-50 dark:bg-emerald-950/30">Lũy kế (K)</th>
-              <th className="p-1.5 text-right min-w-[110px] border-l bg-sky-50 dark:bg-sky-950/30">Kỳ này (M)</th>
-              <th className="p-1.5 text-right min-w-[110px] border-r bg-sky-50 dark:bg-sky-950/30">Lũy kế (N)</th>
-              <th className="p-1.5 text-right min-w-[80px] border-l bg-violet-50 dark:bg-violet-950/30">Kế hoạch (P)</th>
-              <th className="p-1.5 text-right min-w-[80px] border-r bg-violet-50 dark:bg-violet-950/30">Lũy kế (Q)</th>
+              <th className="p-1.5 text-right min-w-[110px] border-l-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100">Kỳ này (F)</th>
+              <th className="p-1.5 text-right min-w-[110px] border-r-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-100">Lũy kế (G)</th>
+              <th className="p-1.5 text-right min-w-[110px] border-l-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100">Kỳ này (J)</th>
+              <th className="p-1.5 text-right min-w-[110px] border-r-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100">Lũy kế (K)</th>
+              <th className="p-1.5 text-right min-w-[110px] border-l-2 border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-100">Kỳ này (M)</th>
+              <th className="p-1.5 text-right min-w-[110px] border-r-2 border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 text-sky-900 dark:text-sky-100">Lũy kế (N)</th>
+              <th className="p-1.5 text-right min-w-[80px] border-l-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 text-violet-900 dark:text-violet-100">Kế hoạch (P)</th>
+              <th className="p-1.5 text-right min-w-[80px] border-r-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 text-violet-900 dark:text-violet-100">Lũy kế (Q)</th>
             </tr>
           </thead>
           <tbody>
@@ -89,18 +79,18 @@ export default async function BaoCaoDtPage({ searchParams }: Props) {
                   <td className={`p-2 ${r.kind !== "lot" ? "pl-2" : "pl-4"}`}>{r.lotName}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.contractValue)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.dtKeHoachKy)}</td>
-                  <td className="p-2 text-right tabular-nums bg-amber-50/50 dark:bg-amber-950/20">{fmtNum(r.dtThoKy)}</td>
-                  <td className="p-2 text-right tabular-nums bg-amber-50/50 dark:bg-amber-950/20">{fmtNum(r.dtThoLuyKe)}</td>
+                  <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.dtThoKy)}</td>
+                  <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.dtThoLuyKe)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.cnTho)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.qtTratChua)}</td>
-                  <td className="p-2 text-right tabular-nums bg-emerald-50/50 dark:bg-emerald-950/20">{fmtNum(r.dtTratKy)}</td>
-                  <td className="p-2 text-right tabular-nums bg-emerald-50/50 dark:bg-emerald-950/20">{fmtNum(r.dtTratLuyKe)}</td>
+                  <td className="p-2 text-right tabular-nums bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-200/60 dark:border-emerald-800/40">{fmtNum(r.dtTratKy)}</td>
+                  <td className="p-2 text-right tabular-nums bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-200/60 dark:border-emerald-800/40">{fmtNum(r.dtTratLuyKe)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.cnTrat)}</td>
-                  <td className="p-2 text-right tabular-nums bg-sky-50/50 dark:bg-sky-950/20">{fmtNum(r.dtKy)}</td>
-                  <td className="p-2 text-right tabular-nums bg-sky-50/50 dark:bg-sky-950/20">{fmtNum(r.dtLuyKe)}</td>
+                  <td className="p-2 text-right tabular-nums bg-sky-50 dark:bg-sky-950/30 border-x border-sky-200/60 dark:border-sky-800/40">{fmtNum(r.dtKy)}</td>
+                  <td className="p-2 text-right tabular-nums bg-sky-50 dark:bg-sky-950/30 border-x border-sky-200/60 dark:border-sky-800/40">{fmtNum(r.dtLuyKe)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.cnTong)}</td>
-                  <td className="p-2 text-right tabular-nums bg-violet-50/50 dark:bg-violet-950/20">{fmtPct(r.pctKeHoach)}</td>
-                  <td className="p-2 text-right tabular-nums bg-violet-50/50 dark:bg-violet-950/20">{fmtPct(r.pctLuyKe)}</td>
+                  <td className="p-2 text-right tabular-nums bg-violet-50 dark:bg-violet-950/30 border-x border-violet-200/60 dark:border-violet-800/40">{fmtPct(r.pctKeHoach)}</td>
+                  <td className="p-2 text-right tabular-nums bg-violet-50 dark:bg-violet-950/30 border-x border-violet-200/60 dark:border-violet-800/40">{fmtPct(r.pctLuyKe)}</td>
                 </tr>
               );
             })}

@@ -1,112 +1,114 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import type { ReactElement } from "react";
+import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { patchMonthlyInputCell, patchProgressStatusCell } from "./actions";
 import type { RowState } from "./nhap-thang-moi-client";
-import { TextCell, LotCell, fmt } from "./tab-shared";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+  role?: string;
+}) => ReactElement;
 
 const SETTLEMENT_OPTIONS = ["Đã quyết toán", "Tạm dừng", "Đã ký HĐ", "Đã ký phụ lục"];
+const PROGRESS_KEYS = new Set([
+  "milestoneText", "targetMilestone", "settlementStatus", "ghiChu",
+]);
+
+interface CtRow extends RowWithId {
+  lotName: string;
+  phaseCode: string;
+  estimateValue: number;
+  prevSlLuyKeTho: number;
+  prevDtThoLuyKe: number;
+  slKeHoachKy: number;
+  slThucKyTho: number;
+  dtKeHoachKy: number;
+  dtThoKy: number;
+  slTrat: number;
+  dtTratKy: number;
+  dtCanThucHien: number;
+  targetMilestone: string | null;
+  milestoneText: string | null;
+  tinhTrang: string;
+  settlementStatus: string | null;
+  ghiChu: string | null;
+}
 
 export function TabChiTieu({
-  rows,
-  onUpdate,
-  milestoneOptions,
+  year, month, rows: initial, onUpdate, milestoneOptions, role,
 }: {
+  year: number;
+  month: number;
   rows: RowState[];
   onUpdate: (lotId: number, patch: Partial<RowState>) => void;
   milestoneOptions: string[];
+  role?: string;
 }) {
-  return (
-    <div className="overflow-x-auto border rounded">
-      <table className="text-xs border-collapse">
-        <thead className="bg-muted/40 sticky top-0">
-          <tr>
-            <th rowSpan={2} className="px-2 py-1 text-center sticky left-0 bg-muted/40 border-r w-10">STT</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[140px]">Danh mục</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">Dự toán phần thô</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">SL lũy kế đầu kỳ</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">DT lũy kế đầu kỳ</th>
-            <th colSpan={2} className="px-2 py-1 text-center border-r">Sản lượng kỳ này</th>
-            <th colSpan={2} className="px-2 py-1 text-center border-r">Doanh thu kỳ này</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[100px]">SL trát</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[100px]">DT trát</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[120px] bg-blue-50">DT cần thực hiện theo tiến độ</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[140px]">Công việc cần hoàn thành theo DT lũy kế</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[140px]">Tiến độ thực tế</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[120px] bg-blue-50">Tình trạng thực hiện DT</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[120px]">Tình trạng (settlement)</th>
-            <th rowSpan={2} className="px-2 py-1 text-left min-w-[140px]">Ghi chú</th>
-          </tr>
-          <tr>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Chỉ tiêu</th>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Thực hiện</th>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Chỉ tiêu</th>
-            <th className="px-2 py-1 text-right border-r min-w-[100px]">Thực hiện</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={r.lotId} className="border-t hover:bg-muted/20">
-              <td className="px-2 py-1 text-center text-muted-foreground">{i + 1}</td>
-              <LotCell row={r} />
-              <td className="px-2 py-1 text-right border-r">{fmt(r.estimateValue)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.prevSlLuyKeTho)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.prevDtThoLuyKe)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.slKeHoachKy)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.slThucKyTho)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.dtKeHoachKy)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.dtThoKy)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.slTrat)}</td>
-              <td className="px-2 py-1 text-right border-r">{fmt(r.dtTratKy)}</td>
-              <td className="px-2 py-1 text-right border-r bg-blue-50/50 text-blue-900 font-medium">{fmt(r.dtCanThucHien)}</td>
-              <td className="px-1 py-0.5 border-r">
-                <div className="flex items-center gap-1">
-                  <div className="flex-1">
-                    <TextCell
-                      value={r.targetMilestone}
-                      onChange={(v) => onUpdate(r.lotId, { targetMilestone: v })}
-                      options={milestoneOptions}
-                      placeholder={r.suggestedTarget ?? "target"}
-                    />
-                  </div>
-                  {r.suggestedTarget && r.suggestedTarget !== r.targetMilestone && (
-                    <button
-                      type="button"
-                      title={`Áp dụng gợi ý: ${r.suggestedTarget}`}
-                      onClick={() => onUpdate(r.lotId, { targetMilestone: r.suggestedTarget })}
-                      className="px-1.5 py-0.5 text-[10px] rounded bg-blue-100 hover:bg-blue-200 text-blue-700 whitespace-nowrap"
-                    >
-                      ↳ {r.suggestedTarget}
-                    </button>
-                  )}
-                </div>
-              </td>
-              <td className="px-1 py-0.5 border-r">
-                <TextCell
-                  value={r.milestoneText}
-                  onChange={(v) => onUpdate(r.lotId, { milestoneText: v })}
-                  options={milestoneOptions}
-                  placeholder="milestone"
-                />
-              </td>
-              <td className="px-2 py-1 border-r bg-blue-50/50 text-blue-900 text-[11px]">{r.tinhTrang}</td>
-              <td className="px-1 py-0.5 border-r">
-                <TextCell
-                  value={r.settlementStatus}
-                  onChange={(v) => onUpdate(r.lotId, { settlementStatus: v })}
-                  options={SETTLEMENT_OPTIONS}
-                  placeholder="settlement"
-                />
-              </td>
-              <td className="px-1 py-0.5">
-                <TextCell
-                  value={r.ghiChu}
-                  onChange={(v) => onUpdate(r.lotId, { ghiChu: v })}
-                  placeholder="ghi chú"
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  const router = useRouter();
+  const milestoneSelect: SelectOption[] = milestoneOptions.map((m) => ({ id: m, name: m }));
+  const settlementSelect: SelectOption[] = SETTLEMENT_OPTIONS.map((s) => ({ id: s, name: s }));
+
+  const columns: DataGridColumn<CtRow>[] = [
+    { id: "lotName", title: "Lô", kind: "text", width: 180, readonly: true },
+    { id: "phaseCode", title: "G.đoạn", kind: "text", width: 80, readonly: true },
+    { id: "estimateValue", title: "Dự toán thô", kind: "currency", width: 120 },
+    { id: "prevSlLuyKeTho", title: "SL LK đầu kỳ", kind: "currency", width: 120, readonly: true },
+    { id: "prevDtThoLuyKe", title: "DT LK đầu kỳ", kind: "currency", width: 120, readonly: true },
+    { id: "slKeHoachKy", title: "SL chỉ tiêu", kind: "currency", width: 110 },
+    { id: "slThucKyTho", title: "SL thực hiện", kind: "currency", width: 110 },
+    { id: "dtKeHoachKy", title: "DT chỉ tiêu", kind: "currency", width: 110 },
+    { id: "dtThoKy", title: "DT thực hiện", kind: "currency", width: 110 },
+    { id: "slTrat", title: "SL trát", kind: "currency", width: 110 },
+    { id: "dtTratKy", title: "DT trát", kind: "currency", width: 110 },
+    { id: "dtCanThucHien", title: "DT cần thực hiện", kind: "currency", width: 130, readonly: true },
+    { id: "targetMilestone", title: "Mốc cần đạt", kind: "select", width: 160, options: milestoneSelect },
+    { id: "milestoneText", title: "Tiến độ thực tế", kind: "select", width: 160, options: milestoneSelect },
+    { id: "tinhTrang", title: "Tình trạng DT", kind: "text", width: 130, readonly: true },
+    { id: "settlementStatus", title: "Tình trạng QT", kind: "select", width: 140, options: settlementSelect },
+    { id: "ghiChu", title: "Ghi chú", kind: "text", width: 180 },
+  ];
+
+  const rows: CtRow[] = initial.map((r) => ({
+    id: r.lotId,
+    lotName: r.lotName,
+    phaseCode: r.phaseCode,
+    estimateValue: r.estimateValue,
+    prevSlLuyKeTho: r.prevSlLuyKeTho,
+    prevDtThoLuyKe: r.prevDtThoLuyKe,
+    slKeHoachKy: r.slKeHoachKy,
+    slThucKyTho: r.slThucKyTho,
+    dtKeHoachKy: r.dtKeHoachKy,
+    dtThoKy: r.dtThoKy,
+    slTrat: r.slTrat,
+    dtTratKy: r.dtTratKy,
+    dtCanThucHien: r.dtCanThucHien,
+    targetMilestone: r.targetMilestone,
+    milestoneText: r.milestoneText,
+    tinhTrang: r.tinhTrang,
+    settlementStatus: r.settlementStatus,
+    ghiChu: r.ghiChu,
+  }));
+
+  const handlers: DataGridHandlers<CtRow> = {
+    onCellEdit: async (lotId, col, value) => {
+      onUpdate(lotId, { [col]: value } as Partial<RowState>);
+      if (PROGRESS_KEYS.has(col as string)) {
+        await patchProgressStatusCell(year, month, lotId, { [col]: value });
+      } else {
+        await patchMonthlyInputCell(year, month, lotId, { [col]: value });
+      }
+      router.refresh();
+    },
+  };
+
+  return <DataGrid<CtRow> columns={columns} rows={rows} handlers={handlers} height={560} role={role} />;
 }

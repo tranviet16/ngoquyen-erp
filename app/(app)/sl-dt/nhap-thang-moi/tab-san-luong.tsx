@@ -1,65 +1,85 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
+import type { ReactElement } from "react";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
+import { patchMonthlyInputCell, adminPatchMonthlyInputCell } from "./actions";
 import type { RowState } from "./nhap-thang-moi-client";
-import { NumCell, LotCell, fmt, pct } from "./tab-shared";
+import { adminEditable } from "@/lib/utils/admin-editable";
 
-const groupCls = {
-  tho: "bg-amber-50 dark:bg-amber-950/30",
-  ratio: "bg-violet-50 dark:bg-violet-950/30",
-};
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+  role?: string;
+}) => ReactElement;
+
+interface SlRow extends RowWithId {
+  lotName: string;
+  phaseCode: string;
+  estimateValue: number;
+  slKeHoachKy: number;
+  slThucKyTho: number;
+  slLuyKeTho: number;
+  slTrat: number;
+  tongThoTrat: number;
+  conPhaiTH: number;
+}
+
+const ADMIN_RAW_COLS = new Set<keyof SlRow>(["slLuyKeTho"]);
+
+const columns: DataGridColumn<SlRow>[] = [
+  { id: "lotName", title: "Lô", kind: "text", width: 180, readonly: true },
+  { id: "phaseCode", title: "G.đoạn", kind: "text", width: 80, readonly: true },
+  { id: "estimateValue", title: "Dự toán thô (C)", kind: "currency", width: 130 },
+  { id: "slKeHoachKy", title: "SL kế hoạch (D)", kind: "currency", width: 130 },
+  { id: "slThucKyTho", title: "Kỳ này (E)", kind: "currency", width: 120 },
+  { id: "slLuyKeTho", title: "Lũy kế (F)", kind: "currency", width: 130, readonly: adminEditable<SlRow>(true) },
+  { id: "slTrat", title: "SL trát (G)", kind: "currency", width: 120 },
+  { id: "tongThoTrat", title: "Tổng thô+trát (H)", kind: "currency", width: 140, readonly: true },
+  { id: "conPhaiTH", title: "Còn phải TH (I)", kind: "currency", width: 130, readonly: true },
+];
 
 export function TabSanLuong({
-  rows,
-  onUpdate,
+  year, month, rows: initial, onUpdate, role,
 }: {
+  year: number;
+  month: number;
   rows: RowState[];
   onUpdate: (lotId: number, patch: Partial<RowState>) => void;
+  role?: string;
 }) {
-  return (
-    <div className="overflow-x-auto border rounded">
-      <table className="w-full text-xs border-collapse">
-        <thead className="bg-muted/40 sticky top-0 z-10">
-          <tr>
-            <th rowSpan={2} className="px-2 py-1.5 text-left sticky left-0 bg-muted/40 border-r border-b align-middle">Lô</th>
-            <th rowSpan={2} className="px-2 py-1.5 text-right border-b align-middle">Giá trị dự toán<br/>thô (C)</th>
-            <th rowSpan={2} className="px-2 py-1.5 text-right border-b align-middle">Sản lượng<br/>kế hoạch (D)</th>
-            <th colSpan={2} className={`px-2 py-1 text-center border-b border-x ${groupCls.tho}`}>Sản lượng thực hiện (xây thô)</th>
-            <th rowSpan={2} className="px-2 py-1.5 text-right border-b align-middle">Sản lượng<br/>trát (G)</th>
-            <th rowSpan={2} className="px-2 py-1.5 text-right border-b align-middle">Tổng<br/>thô+trát (H)</th>
-            <th rowSpan={2} className="px-2 py-1.5 text-right border-b align-middle">Còn phải<br/>thực hiện (I)</th>
-            <th colSpan={2} className={`px-2 py-1 text-center border-b border-x ${groupCls.ratio}`}>Tỷ lệ hoàn thành (%)</th>
-          </tr>
-          <tr>
-            <th className={`px-2 py-1 text-right border-b border-l ${groupCls.tho}`}>Kỳ này (E)</th>
-            <th className={`px-2 py-1 text-right border-b border-r ${groupCls.tho}`}>Lũy kế (F)</th>
-            <th className={`px-2 py-1 text-right border-b border-l ${groupCls.ratio}`}>Kế hoạch kỳ (J)</th>
-            <th className={`px-2 py-1 text-right border-b border-r ${groupCls.ratio}`}>Tổng lũy kế (K)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const tongThoTrat = r.slLuyKeTho + r.slTrat;
-            const conPhaiTH = r.estimateValue - r.slLuyKeTho;
-            const pctKy = r.slKeHoachKy === 0 ? 0 : r.slThucKyTho / r.slKeHoachKy;
-            const pctLk = r.estimateValue === 0 ? 0 : r.slLuyKeTho / r.estimateValue;
-            const ro = "px-2 py-1 text-right tabular-nums text-muted-foreground";
-            return (
-              <tr key={r.lotId} className="border-t hover:bg-muted/20">
-                <LotCell row={r} />
-                <td className="px-1 py-0.5"><NumCell value={r.estimateValue} onChange={(n) => onUpdate(r.lotId, { estimateValue: n })} /></td>
-                <td className="px-1 py-0.5"><NumCell value={r.slKeHoachKy} onChange={(n) => onUpdate(r.lotId, { slKeHoachKy: n })} /></td>
-                <td className={`px-1 py-0.5 ${groupCls.tho}`}><NumCell value={r.slThucKyTho} onChange={(n) => onUpdate(r.lotId, { slThucKyTho: n })} /></td>
-                <td className={`${ro} ${groupCls.tho}`}>{fmt(r.slLuyKeTho)}</td>
-                <td className="px-1 py-0.5"><NumCell value={r.slTrat} onChange={(n) => onUpdate(r.lotId, { slTrat: n })} /></td>
-                <td className={ro}>{fmt(tongThoTrat)}</td>
-                <td className={ro}>{fmt(conPhaiTH)}</td>
-                <td className={`${ro} ${groupCls.ratio}`}>{pct(pctKy)}</td>
-                <td className={`${ro} ${groupCls.ratio}`}>{pct(pctLk)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  const router = useRouter();
+  const isAdmin = role === "admin";
+  const rows: SlRow[] = initial.map((r) => ({
+    id: r.lotId,
+    lotName: r.lotName,
+    phaseCode: r.phaseCode,
+    estimateValue: r.estimateValue,
+    slKeHoachKy: r.slKeHoachKy,
+    slThucKyTho: r.slThucKyTho,
+    slLuyKeTho: r.slLuyKeTho,
+    slTrat: r.slTrat,
+    tongThoTrat: r.slLuyKeTho + r.slTrat,
+    conPhaiTH: r.estimateValue - r.slLuyKeTho,
+  }));
+
+  const handlers: DataGridHandlers<SlRow> = {
+    onCellEdit: async (lotId, col, value) => {
+      onUpdate(lotId, { [col]: Number(value ?? 0) } as Partial<RowState>);
+      if (isAdmin && ADMIN_RAW_COLS.has(col as keyof SlRow)) {
+        await adminPatchMonthlyInputCell(year, month, lotId, { [col]: value });
+      } else {
+        await patchMonthlyInputCell(year, month, lotId, { [col]: value });
+      }
+      router.refresh();
+    },
+  };
+
+  return <DataGrid<SlRow> columns={columns} rows={rows} handlers={handlers} height={560} role={role} />;
 }
