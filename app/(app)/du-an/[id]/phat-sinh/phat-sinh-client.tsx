@@ -1,18 +1,34 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
-import { AgGridBase, VND_COL_DEF } from "@/components/ag-grid-base";
+import { toast } from "sonner";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
+import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { changeOrderSchema, type ChangeOrderInput } from "@/lib/du-an/schemas";
-import { createChangeOrder, updateChangeOrder, softDeleteChangeOrder } from "@/lib/du-an/change-order-service";
+import { createChangeOrder, updateChangeOrder, softDeleteChangeOrder, adminPatchChangeOrder } from "@/lib/du-an/change-order-service";
 import { formatDate } from "@/lib/utils/format";
+import { adminEditable } from "@/lib/utils/admin-editable";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  role?: string;
+  height?: number | string;
+  onSelectionChange?: (ids: number[]) => void;
+}) => ReactElement;
 
 type CoRow = {
   id: number; projectId: number; date: Date; coCode: string; description: string;
@@ -23,7 +39,18 @@ type CoRow = {
 type CategoryOption = { id: number; code: string; name: string };
 const STATUS_LABELS: Record<string, string> = { pending: "Chờ duyệt", approved: "Đã duyệt", rejected: "Từ chối" };
 
-interface Props { projectId: number; initialData: CoRow[]; categories: CategoryOption[]; }
+interface CoGridRow extends RowWithId {
+  date: string;
+  coCode: string;
+  description: string;
+  category: string;
+  costImpactVnd: number;
+  scheduleImpactDays: number;
+  approvedBy: string;
+  status: string;
+}
+
+interface Props { projectId: number; initialData: CoRow[]; categories: CategoryOption[]; role?: string; }
 
 function CoForm({ projectId, categories, defaultValues, onSubmit }: {
   projectId: number; categories: CategoryOption[];
@@ -38,7 +65,7 @@ function CoForm({ projectId, categories, defaultValues, onSubmit }: {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="date" render={({ field }) => (
-            <FormItem><FormLabel>Ngày</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Ngày</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="coCode" render={({ field }) => (
             <FormItem><FormLabel>Mã CO</FormLabel><FormControl><Input {...field} placeholder="CO-001" /></FormControl><FormMessage /></FormItem>
@@ -64,7 +91,6 @@ function CoForm({ projectId, categories, defaultValues, onSubmit }: {
             <FormItem><FormLabel>Mã hạng mục (tùy chọn)</FormLabel><FormControl><Input {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
-        {/* For new item - only show if categoryId is null */}
         <FormField control={form.control} name="newItemName" render={({ field }) => (
           <FormItem><FormLabel>Tên hạng mục mới (nếu PS mới)</FormLabel><FormControl><Input {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
         )} />
@@ -98,35 +124,66 @@ function CoForm({ projectId, categories, defaultValues, onSubmit }: {
   );
 }
 
-export function PhatSinhClient({ projectId, initialData, categories }: Props) {
+export function PhatSinhClient({ projectId, initialData, categories, role }: Props) {
+  const isAdmin = role === "admin";
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CoRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [, startTransition] = useTransition();
 
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, `${c.code} - ${c.name}`]));
+  const rowsById = new Map(initialData.map((r) => [r.id, r]));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const colDefs: ColDef<any>[] = [
-    { field: "date", headerName: "Ngày", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 100 },
-    { field: "coCode", headerName: "Mã CO", width: 100 },
-    { field: "description", headerName: "Mô tả", flex: 2, minWidth: 180 },
-    { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => p.value ? (categoryMap[p.value as number] ?? "") : "PS mới", width: 130 },
-    { field: "costImpactVnd", headerName: "Tác động chi phí", ...VND_COL_DEF, width: 150 },
-    { field: "scheduleImpactDays", headerName: "TĐ tiến độ (ngày)", width: 130, type: "numericColumn" },
-    { field: "approvedBy", headerName: "Người duyệt", width: 120 },
-    { field: "status", headerName: "TT", valueFormatter: (p) => STATUS_LABELS[p.value as string] ?? "", width: 100 },
-    {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
-        <div className="flex gap-1 items-center h-full">
-          <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
-          <DeleteConfirmDialog itemName={p.data.coCode} onConfirm={async () => { await softDeleteChangeOrder(p.data.id, projectId); startTransition(() => router.refresh()); }}
-            trigger={<Button variant="outline" size="sm" className="text-destructive">Xóa</Button>} />
-        </div>
-      ),
-    },
+  const rows: CoGridRow[] = initialData.map((r) => ({
+    id: r.id,
+    date: formatDate(r.date, ""),
+    coCode: r.coCode,
+    description: r.description,
+    category: r.categoryId ? (categoryMap[r.categoryId] ?? "") : "PS mới",
+    costImpactVnd: Number(r.costImpactVnd),
+    scheduleImpactDays: r.scheduleImpactDays,
+    approvedBy: r.approvedBy ?? "",
+    status: STATUS_LABELS[r.status] ?? r.status,
+  }));
+
+  const columns: DataGridColumn<CoGridRow>[] = [
+    { id: "date", title: "Ngày", kind: "text", width: 100, readonly: true },
+    { id: "coCode", title: "Mã CO", kind: "text", width: 100, readonly: true },
+    { id: "description", title: "Mô tả", kind: "text", width: 280, readonly: adminEditable<CoGridRow>(true) },
+    { id: "category", title: "Hạng mục", kind: "text", width: 140, readonly: true },
+    { id: "costImpactVnd", title: "Tác động chi phí", kind: "currency", width: 150, readonly: adminEditable<CoGridRow>(true) },
+    { id: "scheduleImpactDays", title: "TĐ tiến độ (ngày)", kind: "number", width: 130, readonly: adminEditable<CoGridRow>(true) },
+    { id: "approvedBy", title: "Người duyệt", kind: "text", width: 130, readonly: adminEditable<CoGridRow>(true) },
+    { id: "status", title: "TT", kind: "text", width: 110, readonly: true },
   ];
+
+  const ADMIN_RAW_COLS = new Set<keyof CoGridRow>(["description", "costImpactVnd", "scheduleImpactDays", "approvedBy"]);
+
+  const handlers: DataGridHandlers<CoGridRow> = {
+    onCellEdit: async (id, col, value) => {
+      if (!isAdmin || !ADMIN_RAW_COLS.has(col as keyof CoGridRow)) return;
+      try {
+        await adminPatchChangeOrder(id, { [col]: value } as never, projectId);
+        startTransition(() => router.refresh());
+      } catch (err) {
+        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+        startTransition(() => router.refresh());
+      }
+    },
+    onDeleteRows: async (ids) => {
+      for (const id of ids) {
+        await softDeleteChangeOrder(id, projectId);
+      }
+      startTransition(() => router.refresh());
+    },
+  };
+
+  const editSelected = () => {
+    if (selectedIds.length !== 1) return;
+    const target = rowsById.get(selectedIds[0]);
+    if (target) setEditTarget(target);
+  };
 
   async function handleCreate(data: ChangeOrderInput) {
     await createChangeOrder(data);
@@ -150,16 +207,43 @@ export function PhatSinhClient({ projectId, initialData, categories }: Props) {
             Theo dõi tác động chi phí và tiến độ của các phát sinh.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm CO</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+            Sửa
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>Thêm CO</Button>
+        </div>
       </div>
-      <AgGridBase rowData={initialData} columnDefs={colDefs} height={500} />
+
+      <DataGrid<CoGridRow>
+        columns={columns}
+        rows={rows}
+        handlers={handlers}
+        role={role}
+        height={500}
+        onSelectionChange={setSelectedIds}
+      />
+
       <CrudDialog title="Thêm phát sinh" open={createOpen} onOpenChange={setCreateOpen}>
         <CoForm projectId={projectId} categories={categories} onSubmit={handleCreate} />
       </CrudDialog>
       <CrudDialog title="Sửa phát sinh" open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         {editTarget && (
           <CoForm projectId={projectId} categories={categories}
-            defaultValues={{ projectId, date: new Date(editTarget.date).toISOString().split("T")[0], coCode: editTarget.coCode, description: editTarget.description, reason: editTarget.reason ?? "", categoryId: editTarget.categoryId ?? undefined, itemCode: editTarget.itemCode ?? "", costImpactVnd: Number(editTarget.costImpactVnd), scheduleImpactDays: editTarget.scheduleImpactDays, approvedBy: editTarget.approvedBy ?? "", status: editTarget.status as ChangeOrderInput["status"], newItemName: editTarget.newItemName ?? "" }}
+            defaultValues={{
+              projectId,
+              date: new Date(editTarget.date).toISOString().split("T")[0],
+              coCode: editTarget.coCode,
+              description: editTarget.description,
+              reason: editTarget.reason ?? "",
+              categoryId: editTarget.categoryId ?? undefined,
+              itemCode: editTarget.itemCode ?? "",
+              costImpactVnd: Number(editTarget.costImpactVnd),
+              scheduleImpactDays: editTarget.scheduleImpactDays,
+              approvedBy: editTarget.approvedBy ?? "",
+              status: editTarget.status as ChangeOrderInput["status"],
+              newItemName: editTarget.newItemName ?? "",
+            }}
             onSubmit={handleEdit} />
         )}
       </CrudDialog>

@@ -89,6 +89,25 @@ export async function updateTransaction(id: number, input: TransactionInput) {
   return record;
 }
 
+/**
+ * Admin-only raw patch — admin override on computed amount columns.
+ */
+export async function adminPatchTransaction(
+  id: number,
+  patch: Partial<{ amountHd: number; amountTt: number }>,
+  projectId: number,
+) {
+  const role = await getSessionRole();
+  requireRole(role, "admin");
+  const data: Record<string, unknown> = {};
+  if (patch.amountHd !== undefined) data.amountHd = new Prisma.Decimal(patch.amountHd);
+  if (patch.amountTt !== undefined) data.amountTt = new Prisma.Decimal(patch.amountTt);
+  const record = await prisma.projectTransaction.update({ where: { id }, data });
+  revalidatePath(`/du-an/${projectId}/giao-dich`);
+  revalidatePath(`/du-an/${projectId}/dinh-muc`);
+  return record;
+}
+
 export async function softDeleteTransaction(id: number, projectId: number) {
   const role = await getSessionRole();
   requireRole(role, "admin");

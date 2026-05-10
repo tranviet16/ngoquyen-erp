@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { listNorm } from "@/lib/du-an/norm-service";
 import { getSettings } from "@/lib/du-an/settings-service";
 import { DinhMucClient } from "./dinh-muc-client";
+import { serializeDecimals } from "@/lib/serialize";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -19,5 +20,5 @@ export default async function DinhMucPage({ params }: Props) {
     normRedThreshold: Number(settings?.normRedThreshold ?? 0.95),
   });
 
-  return <DinhMucClient rows={rows} />;
+  return <DinhMucClient rows={serializeDecimals(rows)} />;
 }

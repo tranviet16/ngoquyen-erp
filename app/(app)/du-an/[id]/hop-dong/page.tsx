@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { listContracts } from "@/lib/du-an/contract-service";
 import { getSettings } from "@/lib/du-an/settings-service";
+import { serializeDecimals } from "@/lib/serialize";
 import { HopDongClient } from "./hop-dong-client";
 
 interface Props {
@@ -22,7 +23,7 @@ export default async function HopDongPage({ params }: Props) {
 
   return (
     <Suspense>
-      <HopDongClient projectId={projectId} initialData={contracts} warningDays={warningDays} />
+      <HopDongClient projectId={projectId} initialData={serializeDecimals(contracts)} warningDays={warningDays} />
     </Suspense>
   );
 }

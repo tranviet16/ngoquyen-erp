@@ -68,6 +68,30 @@ export async function updateSchedule(id: number, input: ScheduleInput) {
   return record;
 }
 
+/**
+ * Admin-only raw patch — bypasses validation. Admin accepts invariant risk.
+ * Skip categoryId (FK) and status (enum) — those need full edit dialog.
+ */
+export async function adminPatchSchedule(
+  id: number,
+  patch: Partial<{ taskName: string; planStart: string; planEnd: string; actualStart: string | null; actualEnd: string | null; pctComplete: number; note: string }>,
+  projectId: number,
+) {
+  const role = await getSessionRole();
+  requireRole(role, "admin");
+  const data: Record<string, unknown> = {};
+  if (patch.taskName !== undefined) data.taskName = patch.taskName;
+  if (patch.planStart !== undefined) data.planStart = new Date(patch.planStart);
+  if (patch.planEnd !== undefined) data.planEnd = new Date(patch.planEnd);
+  if (patch.actualStart !== undefined) data.actualStart = patch.actualStart ? new Date(patch.actualStart) : null;
+  if (patch.actualEnd !== undefined) data.actualEnd = patch.actualEnd ? new Date(patch.actualEnd) : null;
+  if (patch.pctComplete !== undefined) data.pctComplete = patch.pctComplete;
+  if (patch.note !== undefined) data.note = patch.note;
+  const record = await prisma.projectSchedule.update({ where: { id }, data });
+  revalidatePath(`/du-an/${projectId}/tien-do`);
+  return record;
+}
+
 export async function softDeleteSchedule(id: number, projectId: number) {
   const role = await getSessionRole();
   requireRole(role, "admin");

@@ -82,6 +82,23 @@ export async function updateChangeOrder(id: number, input: ChangeOrderInput) {
   return record;
 }
 
+/**
+ * Admin-only raw patch — bypasses validation/business rules. Skip schema-key/FK
+ * fields (coCode, categoryId, itemCode, status enum); admin must use "Sửa" form.
+ */
+export async function adminPatchChangeOrder(
+  id: number,
+  patch: Partial<{ description: string; reason: string; costImpactVnd: number; scheduleImpactDays: number; approvedBy: string; note: string }>,
+  projectId: number,
+) {
+  const role = await getSessionRole();
+  requireRole(role, "admin");
+  const record = await prisma.projectChangeOrder.update({ where: { id }, data: patch });
+  revalidatePath(`/du-an/${projectId}/phat-sinh`);
+  revalidatePath(`/du-an/${projectId}/du-toan-dieu-chinh`);
+  return record;
+}
+
 export async function softDeleteChangeOrder(id: number, projectId: number) {
   const role = await getSessionRole();
   requireRole(role, "admin");

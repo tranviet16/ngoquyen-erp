@@ -17,12 +17,12 @@ export default async function AdminImportPage() {
 
   function statusBadge(status: string) {
     const colors: Record<string, string> = {
-      pending: "bg-yellow-100 text-yellow-800",
-      preview: "bg-blue-100 text-blue-800",
-      committed: "bg-green-100 text-green-800",
-      failed: "bg-red-100 text-red-800",
+      pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300",
+      preview: "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300",
+      committed: "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300",
+      failed: "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300",
     };
-    return colors[status] ?? "bg-gray-100 text-gray-800";
+    return colors[status] ?? "bg-gray-100 text-gray-800 dark:bg-gray-500/15 dark:text-gray-300";
   }
 
   return (

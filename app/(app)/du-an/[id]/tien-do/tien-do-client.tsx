@@ -1,19 +1,34 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
-import { AgGridBase } from "@/components/ag-grid-base";
+import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
+import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { scheduleSchema, type ScheduleInput } from "@/lib/du-an/schemas";
-import { createSchedule, updateSchedule, softDeleteSchedule } from "@/lib/du-an/schedule-service";
+import { createSchedule, updateSchedule, softDeleteSchedule, adminPatchSchedule } from "@/lib/du-an/schedule-service";
 import { formatDate } from "@/lib/utils/format";
+import { adminEditable } from "@/lib/utils/admin-editable";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  role?: string;
+  height?: number | string;
+  onSelectionChange?: (ids: number[]) => void;
+}) => ReactElement;
 
 type ScheduleRow = {
   id: number;
@@ -38,14 +53,23 @@ const STATUS_LABELS: Record<string, string> = {
   delayed: "Trễ hạn",
 };
 
-function fmt(d: Date | null) {
-  return formatDate(d, "");
+interface ScheduleGridRow extends RowWithId {
+  taskName: string;
+  categoryLabel: string;
+  planStart: string;
+  planEnd: string;
+  actualStart: string;
+  actualEnd: string;
+  pctComplete: number;
+  status: string;
+  note: string;
 }
 
 interface Props {
   projectId: number;
   initialData: ScheduleRow[];
   categories: CategoryOption[];
+  role?: string;
 }
 
 function ScheduleForm({ projectId, categories, defaultValues, onSubmit }: {
@@ -74,18 +98,18 @@ function ScheduleForm({ projectId, categories, defaultValues, onSubmit }: {
         )} />
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="planStart" render={({ field }) => (
-            <FormItem><FormLabel>BĐ kế hoạch</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>BĐ kế hoạch</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="planEnd" render={({ field }) => (
-            <FormItem><FormLabel>KT kế hoạch</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>KT kế hoạch</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="actualStart" render={({ field }) => (
-            <FormItem><FormLabel>BĐ thực tế</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>BĐ thực tế</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="actualEnd" render={({ field }) => (
-            <FormItem><FormLabel>KT thực tế</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>KT thực tế</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -109,81 +133,100 @@ function ScheduleForm({ projectId, categories, defaultValues, onSubmit }: {
   );
 }
 
-export function TienDoClient({ projectId, initialData, categories }: Props) {
+export function TienDoClient({ projectId, initialData, categories, role }: Props) {
+  const isAdmin = role === "admin";
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ScheduleRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [, startTransition] = useTransition();
 
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, `${c.code} - ${c.name}`]));
+  const rowsById = new Map(initialData.map((r) => [r.id, r]));
 
-  /**
-   * Inline cell edit handler — called by AG Grid when user commits a cell edit.
-   * Editable columns: taskName, pctComplete, status, note.
-   * Date columns (planStart, planEnd, actualStart, actualEnd) are read-only inline
-   * because AG Grid date editor requires agDateStringCellEditor which returns ISO string
-   * but our rows hold Date objects — editing via dialog is safer for dates.
-   */
-  async function handleCellValueChanged(event: CellValueChangedEvent<ScheduleRow>) {
-    const row = event.data;
-    try {
-      const input: ScheduleInput = {
-        projectId,
-        categoryId: row.categoryId,
-        taskName: row.taskName,
-        planStart: new Date(row.planStart).toISOString().split("T")[0],
-        planEnd: new Date(row.planEnd).toISOString().split("T")[0],
-        actualStart: row.actualStart ? new Date(row.actualStart).toISOString().split("T")[0] : undefined,
-        actualEnd: row.actualEnd ? new Date(row.actualEnd).toISOString().split("T")[0] : undefined,
-        pctComplete: Number(row.pctComplete),
-        status: row.status as ScheduleInput["status"],
-        note: row.note ?? undefined,
-      };
-      await updateSchedule(row.id, input);
-      toast.success("Đã lưu");
-      startTransition(() => router.refresh());
-    } catch (err) {
-      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
-      startTransition(() => router.refresh());
-    }
-  }
+  const rows: ScheduleGridRow[] = initialData.map((r) => ({
+    id: r.id,
+    taskName: r.taskName,
+    categoryLabel: categoryMap[r.categoryId] ?? "",
+    planStart: formatDate(r.planStart, ""),
+    planEnd: formatDate(r.planEnd, ""),
+    actualStart: formatDate(r.actualStart, ""),
+    actualEnd: formatDate(r.actualEnd, ""),
+    pctComplete: Number(r.pctComplete),
+    status: r.status,
+    note: r.note ?? "",
+  }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const colDefs: ColDef<any>[] = [
-    { field: "taskName", headerName: "Công việc", flex: 2, minWidth: 200, editable: true },
-    { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? String(p.value), width: 150 },
-    { field: "planStart", headerName: "BĐ KH", valueFormatter: (p) => fmt(p.value as Date), width: 110 },
-    { field: "planEnd", headerName: "KT KH", valueFormatter: (p) => fmt(p.value as Date), width: 110 },
-    { field: "actualStart", headerName: "BĐ TT", valueFormatter: (p) => fmt(p.value as Date | null), width: 110 },
-    { field: "actualEnd", headerName: "KT TT", valueFormatter: (p) => fmt(p.value as Date | null), width: 110 },
+  const statusOptions: SelectOption[] = Object.entries(STATUS_LABELS).map(([v, l]) => ({ id: v, name: l }));
+
+  const patchSchedule = async (id: number, patch: Partial<ScheduleGridRow>) => {
+    const current = rowsById.get(id);
+    if (!current) throw new Error(`#${id} không tồn tại`);
+    let pct = typeof patch.pctComplete === "number" ? patch.pctComplete : Number(current.pctComplete);
+    pct = Math.min(1, Math.max(0, pct));
+    const input: ScheduleInput = {
+      projectId,
+      categoryId: current.categoryId,
+      taskName: typeof patch.taskName === "string" ? patch.taskName : current.taskName,
+      planStart: new Date(current.planStart).toISOString().split("T")[0],
+      planEnd: new Date(current.planEnd).toISOString().split("T")[0],
+      actualStart: current.actualStart ? new Date(current.actualStart).toISOString().split("T")[0] : undefined,
+      actualEnd: current.actualEnd ? new Date(current.actualEnd).toISOString().split("T")[0] : undefined,
+      pctComplete: pct,
+      status: (typeof patch.status === "string" ? patch.status : current.status) as ScheduleInput["status"],
+      note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
+    };
+    await updateSchedule(id, input);
+  };
+
+  const columns: DataGridColumn<ScheduleGridRow>[] = [
+    { id: "taskName", title: "Công việc", kind: "text", width: 240 },
+    { id: "categoryLabel", title: "Hạng mục", kind: "text", width: 150, readonly: true },
+    { id: "planStart", title: "BĐ KH", kind: "text", width: 110, readonly: adminEditable<ScheduleGridRow>(true) },
+    { id: "planEnd", title: "KT KH", kind: "text", width: 110, readonly: adminEditable<ScheduleGridRow>(true) },
+    { id: "actualStart", title: "BĐ TT", kind: "text", width: 110, readonly: adminEditable<ScheduleGridRow>(true) },
+    { id: "actualEnd", title: "KT TT", kind: "text", width: 110, readonly: adminEditable<ScheduleGridRow>(true) },
     {
-      field: "pctComplete", headerName: "% HT",
-      valueFormatter: (p) => `${(Number(p.value) * 100).toFixed(0)}%`,
-      valueParser: (p) => Math.min(1, Math.max(0, parseFloat(p.newValue) || 0)),
-      editable: true, width: 80,
+      id: "pctComplete", title: "% HT", kind: "number", width: 80,
+      format: (v) => `${(Number(v) * 100).toFixed(0)}%`,
     },
     {
-      field: "status", headerName: "Trạng thái",
-      valueFormatter: (p) => STATUS_LABELS[p.value as string] ?? String(p.value),
-      cellEditor: "agSelectCellEditor",
-      cellEditorParams: { values: Object.keys(STATUS_LABELS) },
-      editable: true, width: 140,
+      id: "status", title: "Trạng thái", kind: "select", width: 140, options: statusOptions,
+      format: (v) => STATUS_LABELS[String(v)] ?? String(v ?? ""),
     },
-    { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 120, editable: true },
-    {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
-        <div className="flex gap-1 items-center h-full">
-          <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
-          <DeleteConfirmDialog
-            itemName={p.data.taskName}
-            onConfirm={async () => { await softDeleteSchedule(p.data.id, projectId); startTransition(() => router.refresh()); }}
-            trigger={<Button variant="outline" size="sm" className="text-destructive">Xóa</Button>}
-          />
-        </div>
-      ),
-    },
+    { id: "note", title: "Ghi chú", kind: "text", width: 200 },
   ];
+
+  const ADMIN_RAW_COLS = new Set<keyof ScheduleGridRow>(["planStart", "planEnd", "actualStart", "actualEnd"]);
+
+  const handlers: DataGridHandlers<ScheduleGridRow> = {
+    onCellEdit: async (id, col, value) => {
+      try {
+        if (isAdmin && ADMIN_RAW_COLS.has(col as keyof ScheduleGridRow)) {
+          await adminPatchSchedule(id, { [col]: value === "" ? null : value } as never, projectId);
+        } else {
+          await patchSchedule(id, { [col]: value } as Partial<ScheduleGridRow>);
+        }
+        toast.success("Đã lưu");
+        startTransition(() => router.refresh());
+      } catch (err) {
+        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+        startTransition(() => router.refresh());
+      }
+    },
+    onDeleteRows: async (ids) => {
+      for (const id of ids) {
+        await softDeleteSchedule(id, projectId);
+      }
+      startTransition(() => router.refresh());
+    },
+  };
+
+  const editSelected = () => {
+    if (selectedIds.length !== 1) return;
+    const target = rowsById.get(selectedIds[0]);
+    if (target) setEditTarget(target);
+  };
 
   async function handleCreate(data: ScheduleInput) {
     await createSchedule(data);
@@ -207,15 +250,21 @@ export function TienDoClient({ projectId, initialData, categories }: Props) {
             Theo dõi kế hoạch, thực tế và % hoàn thành theo từng công việc.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm công việc</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+            Sửa đầy đủ
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>Thêm công việc</Button>
+        </div>
       </div>
 
-      {/* Editable columns: taskName, pctComplete, status, note. Dates via dialog only. */}
-      <AgGridBase
-        rowData={initialData}
-        columnDefs={colDefs}
+      <DataGrid<ScheduleGridRow>
+        columns={columns}
+        rows={rows}
+        handlers={handlers}
+        role={role}
         height={500}
-        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+        onSelectionChange={setSelectedIds}
       />
 
       <CrudDialog title="Thêm công việc" open={createOpen} onOpenChange={setCreateOpen}>

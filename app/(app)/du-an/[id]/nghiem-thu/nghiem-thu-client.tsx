@@ -1,20 +1,35 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { type ColDef, type CellValueChangedEvent } from "ag-grid-community";
-import { AgGridBase, VND_COL_DEF } from "@/components/ag-grid-base";
+import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
 import { formatVND, formatDate } from "@/lib/utils/format";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
+import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { acceptanceSchema, type AcceptanceInput } from "@/lib/du-an/schemas";
-import { createAcceptance, updateAcceptance, softDeleteAcceptance } from "@/lib/du-an/acceptance-service";
+import { createAcceptance, updateAcceptance, softDeleteAcceptance, adminPatchAcceptance } from "@/lib/du-an/acceptance-service";
+import { adminEditable } from "@/lib/utils/admin-editable";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  role?: string;
+  height?: number | string;
+  onSelectionChange?: (ids: number[]) => void;
+}) => ReactElement;
 
 type AcceptanceRow = {
   id: number; projectId: number; categoryId: number; checkItem: string;
@@ -26,10 +41,25 @@ type CategoryOption = { id: number; code: string; name: string };
 
 const RESULT_LABELS: Record<string, string> = { pass: "Đạt", fail: "Không đạt", partial: "Đạt một phần" };
 
+interface AcceptanceGridRow extends RowWithId {
+  checkItem: string;
+  categoryLabel: string;
+  acceptanceBatch: string;
+  planEnd: string;
+  actualEnd: string;
+  inspector: string;
+  result: string;
+  defectCount: number;
+  amountCdtVnd: number;
+  amountInternalVnd: number;
+  note: string;
+}
+
 interface Props {
   projectId: number;
   initialData: AcceptanceRow[];
   categories: CategoryOption[];
+  role?: string;
 }
 
 function AcceptanceForm({ projectId, categories, defaultValues, onSubmit }: {
@@ -56,10 +86,10 @@ function AcceptanceForm({ projectId, categories, defaultValues, onSubmit }: {
         )} />
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="planEnd" render={({ field }) => (
-            <FormItem><FormLabel>Ngày KH</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Ngày KH</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="actualEnd" render={({ field }) => (
-            <FormItem><FormLabel>Ngày thực tế</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Ngày thực tế</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -96,82 +126,106 @@ function AcceptanceForm({ projectId, categories, defaultValues, onSubmit }: {
   );
 }
 
-export function NghiemThuClient({ projectId, initialData, categories }: Props) {
+export function NghiemThuClient({ projectId, initialData, categories, role }: Props) {
+  const isAdmin = role === "admin";
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AcceptanceRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [, startTransition] = useTransition();
 
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, `${c.code} - ${c.name}`]));
   const totalCdt = initialData.reduce((s, r) => s + Number(r.amountCdtVnd), 0);
   const totalInternal = initialData.reduce((s, r) => s + Number(r.amountInternalVnd), 0);
+  const rowsById = new Map(initialData.map((r) => [r.id, r]));
 
-  /**
-   * Inline cell edit handler — called by AG Grid when user commits a cell edit.
-   * Editable: checkItem, inspector, result, defectCount, amountCdtVnd, amountInternalVnd, acceptanceBatch, note.
-   * Date columns (planEnd, actualEnd) are read-only inline — edit via dialog.
-   */
-  async function handleCellValueChanged(event: CellValueChangedEvent<AcceptanceRow>) {
-    const row = event.data;
-    try {
-      const input: AcceptanceInput = {
-        projectId,
-        categoryId: row.categoryId,
-        checkItem: row.checkItem,
-        planEnd: row.planEnd ? new Date(row.planEnd).toISOString().split("T")[0] : undefined,
-        actualEnd: row.actualEnd ? new Date(row.actualEnd).toISOString().split("T")[0] : undefined,
-        inspector: row.inspector ?? undefined,
-        result: (row.result || undefined) as AcceptanceInput["result"],
-        defectCount: Number(row.defectCount) || 0,
-        amountCdtVnd: Number(row.amountCdtVnd) || 0,
-        amountInternalVnd: Number(row.amountInternalVnd) || 0,
-        acceptanceBatch: row.acceptanceBatch ?? undefined,
-        note: row.note ?? undefined,
-      };
-      await updateAcceptance(row.id, input);
-      toast.success("Đã lưu");
-      startTransition(() => router.refresh());
-    } catch (err) {
-      toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
-      startTransition(() => router.refresh());
-    }
-  }
+  const rows: AcceptanceGridRow[] = initialData.map((r) => ({
+    id: r.id,
+    checkItem: r.checkItem,
+    categoryLabel: categoryMap[r.categoryId] ?? "",
+    acceptanceBatch: r.acceptanceBatch ?? "",
+    planEnd: formatDate(r.planEnd, ""),
+    actualEnd: formatDate(r.actualEnd, ""),
+    inspector: r.inspector ?? "",
+    result: r.result ?? "",
+    defectCount: r.defectCount,
+    amountCdtVnd: Number(r.amountCdtVnd),
+    amountInternalVnd: Number(r.amountInternalVnd),
+    note: r.note ?? "",
+  }));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const colDefs: ColDef<any>[] = [
-    { field: "checkItem", headerName: "Hạng mục kiểm tra", flex: 2, minWidth: 180, editable: true },
-    { field: "categoryId", headerName: "Hạng mục", valueFormatter: (p) => categoryMap[p.value as number] ?? "", width: 140 },
-    { field: "acceptanceBatch", headerName: "Đợt NT", width: 90, editable: true },
-    { field: "planEnd", headerName: "Ngày KH", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 110 },
-    { field: "actualEnd", headerName: "Ngày TT", valueFormatter: (p) => formatDate(p.value as Date | null, ""), width: 110 },
-    { field: "inspector", headerName: "Người KT", width: 120, editable: true },
-    {
-      field: "result", headerName: "Kết quả",
-      valueFormatter: (p) => RESULT_LABELS[p.value as string] ?? (p.value ?? ""),
-      cellEditor: "agSelectCellEditor",
-      cellEditorParams: { values: ["", ...Object.keys(RESULT_LABELS)] },
-      editable: true, width: 110,
-    },
-    {
-      field: "defectCount", headerName: "Lỗi",
-      type: "numericColumn", cellStyle: { textAlign: "right" },
-      editable: true, width: 70,
-      valueParser: (p) => parseInt(p.newValue, 10) || 0,
-    },
-    { field: "amountCdtVnd", headerName: "SL NT CĐT", ...VND_COL_DEF, width: 130, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
-    { field: "amountInternalVnd", headerName: "SL NT nội bộ", ...VND_COL_DEF, width: 130, editable: true, valueParser: (p) => parseFloat(p.newValue) || 0 },
-    { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 100, editable: true },
-    {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      headerName: "Thao tác", width: 120, cellRenderer: (p: { data: any }) => (
-        <div className="flex gap-1 items-center h-full">
-          <Button variant="outline" size="sm" onClick={() => setEditTarget(p.data)}>Sửa</Button>
-          <DeleteConfirmDialog itemName={p.data.checkItem} onConfirm={async () => { await softDeleteAcceptance(p.data.id, projectId); startTransition(() => router.refresh()); }}
-            trigger={<Button variant="outline" size="sm" className="text-destructive">Xóa</Button>} />
-        </div>
-      ),
-    },
+  const resultOptions: SelectOption[] = [
+    { id: "", name: "—" },
+    ...Object.entries(RESULT_LABELS).map(([v, l]) => ({ id: v, name: l })),
   ];
+
+  const patchAcceptance = async (id: number, patch: Partial<AcceptanceGridRow>) => {
+    const current = rowsById.get(id);
+    if (!current) throw new Error(`#${id} không tồn tại`);
+    const input: AcceptanceInput = {
+      projectId,
+      categoryId: current.categoryId,
+      checkItem: typeof patch.checkItem === "string" ? patch.checkItem : current.checkItem,
+      planEnd: current.planEnd ? new Date(current.planEnd).toISOString().split("T")[0] : undefined,
+      actualEnd: current.actualEnd ? new Date(current.actualEnd).toISOString().split("T")[0] : undefined,
+      inspector: typeof patch.inspector === "string" ? (patch.inspector || undefined) : (current.inspector ?? undefined),
+      result: (typeof patch.result === "string" ? (patch.result || undefined) : (current.result || undefined)) as AcceptanceInput["result"],
+      defectCount: typeof patch.defectCount === "number" ? patch.defectCount : current.defectCount,
+      amountCdtVnd: typeof patch.amountCdtVnd === "number" ? patch.amountCdtVnd : Number(current.amountCdtVnd),
+      amountInternalVnd: typeof patch.amountInternalVnd === "number" ? patch.amountInternalVnd : Number(current.amountInternalVnd),
+      acceptanceBatch: typeof patch.acceptanceBatch === "string" ? (patch.acceptanceBatch || undefined) : (current.acceptanceBatch ?? undefined),
+      note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
+    };
+    await updateAcceptance(id, input);
+  };
+
+  const columns: DataGridColumn<AcceptanceGridRow>[] = [
+    { id: "checkItem", title: "Hạng mục kiểm tra", kind: "text", width: 220 },
+    { id: "categoryLabel", title: "Hạng mục", kind: "text", width: 140, readonly: true },
+    { id: "acceptanceBatch", title: "Đợt NT", kind: "text", width: 90 },
+    { id: "planEnd", title: "Ngày KH", kind: "text", width: 110, readonly: adminEditable<AcceptanceGridRow>(true) },
+    { id: "actualEnd", title: "Ngày TT", kind: "text", width: 110, readonly: adminEditable<AcceptanceGridRow>(true) },
+    { id: "inspector", title: "Người KT", kind: "text", width: 120 },
+    {
+      id: "result", title: "Kết quả", kind: "select", width: 110, options: resultOptions,
+      format: (v) => RESULT_LABELS[String(v)] ?? "",
+    },
+    { id: "defectCount", title: "Lỗi", kind: "number", width: 70 },
+    { id: "amountCdtVnd", title: "SL NT CĐT", kind: "currency", width: 130 },
+    { id: "amountInternalVnd", title: "SL NT nội bộ", kind: "currency", width: 130 },
+    { id: "note", title: "Ghi chú", kind: "text", width: 200 },
+  ];
+
+  const ADMIN_RAW_COLS = new Set<keyof AcceptanceGridRow>(["planEnd", "actualEnd"]);
+
+  const handlers: DataGridHandlers<AcceptanceGridRow> = {
+    onCellEdit: async (id, col, value) => {
+      try {
+        if (isAdmin && ADMIN_RAW_COLS.has(col as keyof AcceptanceGridRow)) {
+          await adminPatchAcceptance(id, { [col]: value === "" ? null : value } as never, projectId);
+        } else {
+          await patchAcceptance(id, { [col]: value } as Partial<AcceptanceGridRow>);
+        }
+        toast.success("Đã lưu");
+        startTransition(() => router.refresh());
+      } catch (err) {
+        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+        startTransition(() => router.refresh());
+      }
+    },
+    onDeleteRows: async (ids) => {
+      for (const id of ids) {
+        await softDeleteAcceptance(id, projectId);
+      }
+      startTransition(() => router.refresh());
+    },
+  };
+
+  const editSelected = () => {
+    if (selectedIds.length !== 1) return;
+    const target = rowsById.get(selectedIds[0]);
+    if (target) setEditTarget(target);
+  };
 
   return (
     <div className="space-y-4">
@@ -183,19 +237,24 @@ export function NghiemThuClient({ projectId, initialData, categories }: Props) {
             <strong className="tabular-nums">{formatVND(totalInternal)}</strong>
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" aria-hidden="true" />
-          Thêm nghiệm thu
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+            Sửa đầy đủ
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            Thêm nghiệm thu
+          </Button>
+        </div>
       </div>
 
-      {/* Editable: checkItem, inspector, result, defectCount, amountCdtVnd, amountInternalVnd, acceptanceBatch, note.
-          planEnd/actualEnd are read-only inline — edit via dialog. */}
-      <AgGridBase
-        rowData={initialData}
-        columnDefs={colDefs}
+      <DataGrid<AcceptanceGridRow>
+        columns={columns}
+        rows={rows}
+        handlers={handlers}
+        role={role}
         height={500}
-        gridOptions={{ onCellValueChanged: handleCellValueChanged }}
+        onSelectionChange={setSelectedIds}
       />
 
       <CrudDialog title="Thêm nghiệm thu" open={createOpen} onOpenChange={setCreateOpen}>

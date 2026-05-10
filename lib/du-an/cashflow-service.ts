@@ -93,6 +93,22 @@ export async function updateCashflow(id: number, input: CashflowInput) {
   return record;
 }
 
+/**
+ * Admin-only raw patch — bypasses validation. Skip flowDirection & category (enums)
+ * — those need full edit dialog. Date stored as ISO string from grid.
+ */
+export async function adminPatchCashflow(
+  id: number,
+  patch: Partial<{ payerName: string; payeeName: string; amountVnd: number; batch: string; refDoc: string; note: string }>,
+  projectId: number,
+) {
+  const role = await getSessionRole();
+  requireRole(role, "admin");
+  const record = await prisma.project3WayCashflow.update({ where: { id }, data: patch });
+  revalidatePath(`/du-an/${projectId}/dong-tien-3-ben`);
+  return record;
+}
+
 export async function softDeleteCashflow(id: number, projectId: number) {
   const role = await getSessionRole();
   requireRole(role, "admin");

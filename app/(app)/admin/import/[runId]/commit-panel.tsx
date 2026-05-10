@@ -34,9 +34,9 @@ export function CommitPanel({ runId }: Props) {
   }
 
   return (
-    <div className="border rounded-lg p-4 bg-blue-50 space-y-3">
-      <h2 className="font-semibold text-blue-900">Sẵn sàng để commit</h2>
-      <p className="text-sm text-blue-700">
+    <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/30 space-y-3">
+      <h2 className="font-semibold text-blue-900 dark:text-blue-200">Sẵn sàng để commit</h2>
+      <p className="text-sm text-blue-700 dark:text-blue-300">
         Upload lại file gốc để xác nhận và ghi dữ liệu vào cơ sở dữ liệu.
         Thao tác này không thể hoàn tác.
       </p>

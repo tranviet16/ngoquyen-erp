@@ -5,6 +5,7 @@ import {
   listProjectSupplierNames,
 } from "@/lib/du-an/supplier-debt-service";
 import { CongNoClient } from "./cong-no-client";
+import { serializeDecimals } from "@/lib/serialize";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -29,8 +30,8 @@ export default async function CongNoPage({ params, searchParams }: Props) {
 
   return (
     <CongNoClient
-      rows={rows}
-      summary={summary}
+      rows={serializeDecimals(rows)}
+      summary={serializeDecimals(summary)}
       supplierNames={supplierNames}
       initialSuppliers={suppliers ?? []}
     />

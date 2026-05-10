@@ -76,6 +76,24 @@ export async function updateAcceptance(id: number, input: AcceptanceInput) {
   return record;
 }
 
+/**
+ * Admin-only raw patch — admin override on date columns.
+ */
+export async function adminPatchAcceptance(
+  id: number,
+  patch: Partial<{ planEnd: string | null; actualEnd: string | null }>,
+  projectId: number,
+) {
+  const role = await getSessionRole();
+  requireRole(role, "admin");
+  const data: Record<string, unknown> = {};
+  if (patch.planEnd !== undefined) data.planEnd = patch.planEnd ? new Date(patch.planEnd) : null;
+  if (patch.actualEnd !== undefined) data.actualEnd = patch.actualEnd ? new Date(patch.actualEnd) : null;
+  const record = await prisma.projectAcceptance.update({ where: { id }, data });
+  revalidatePath(`/du-an/${projectId}/nghiem-thu`);
+  return record;
+}
+
 export async function softDeleteAcceptance(id: number, projectId: number) {
   const role = await getSessionRole();
   requireRole(role, "admin");

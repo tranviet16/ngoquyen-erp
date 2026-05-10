@@ -174,12 +174,12 @@ function UserRow({
         <td className="px-3 py-2">{user.departmentName ?? "-"}</td>
         <td className="px-3 py-2 space-x-1">
           {user.isLeader && (
-            <span className="inline-flex rounded bg-blue-100 text-blue-700 px-2 py-0.5 text-xs">
+            <span className="inline-flex rounded bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 px-2 py-0.5 text-xs">
               Leader
             </span>
           )}
           {user.isDirector && (
-            <span className="inline-flex rounded bg-purple-100 text-purple-700 px-2 py-0.5 text-xs">
+            <span className="inline-flex rounded bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300 px-2 py-0.5 text-xs">
               Director
             </span>
           )}

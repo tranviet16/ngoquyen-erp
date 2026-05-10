@@ -73,6 +73,33 @@ export async function updateEstimate(id: number, input: EstimateInput) {
   return record;
 }
 
+/**
+ * Admin-only raw patch. Writes the given fields directly with no recalculation
+ * — admin accepts the invariant risk (e.g. totalVnd ≠ qty × unitPrice).
+ * Schema-key columns (itemCode, categoryId) are excluded — those break relational
+ * integrity and must go through "Sửa đầy đủ".
+ */
+export async function adminPatchEstimate(
+  id: number,
+  patch: Partial<{ itemName: string; unit: string; qty: number; unitPrice: number; totalVnd: number; note: string }>,
+  projectId: number,
+) {
+  const role = await getSessionRole();
+  requireRole(role, "admin");
+  const data: Prisma.ProjectEstimateUpdateInput = {};
+  if (patch.itemName !== undefined) data.itemName = patch.itemName;
+  if (patch.unit !== undefined) data.unit = patch.unit;
+  if (patch.qty !== undefined) data.qty = new Prisma.Decimal(patch.qty);
+  if (patch.unitPrice !== undefined) data.unitPrice = new Prisma.Decimal(patch.unitPrice);
+  if (patch.totalVnd !== undefined) data.totalVnd = new Prisma.Decimal(patch.totalVnd);
+  if (patch.note !== undefined) data.note = patch.note;
+  const record = await prisma.projectEstimate.update({ where: { id }, data });
+  revalidatePath(`/du-an/${projectId}/du-toan`);
+  revalidatePath(`/du-an/${projectId}/dinh-muc`);
+  revalidatePath(`/du-an/${projectId}/du-toan-dieu-chinh`);
+  return record;
+}
+
 export async function softDeleteEstimate(id: number, projectId: number) {
   const role = await getSessionRole();
   requireRole(role, "admin");

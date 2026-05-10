@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -50,10 +51,10 @@ export function ContractForm({ defaultValues, onSubmit }: Props) {
         )} />
         <div className="grid grid-cols-2 gap-3">
           <FormField control={form.control} name="signedDate" render={({ field }) => (
-            <FormItem><FormLabel>Ngày ký</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Ngày ký</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="expiryDate" render={({ field }) => (
-            <FormItem><FormLabel>Ngày hết hạn</FormLabel><FormControl><Input type="date" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Ngày hết hạn</FormLabel><FormControl><DateInput value={field.value ?? ""} onChange={field.onChange} onBlur={field.onBlur} name={field.name} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
         <FormField control={form.control} name="storage" render={({ field }) => (

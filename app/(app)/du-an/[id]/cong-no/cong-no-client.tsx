@@ -1,19 +1,41 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useTransition } from "react";
+import type { ReactElement } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type ColDef } from "ag-grid-community";
-import {
-  AgGridBase,
-  vndFormatter,
-  numberFormatter,
-} from "@/components/ag-grid-base";
+import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { SupplierMultiSelect } from "./supplier-multi-select";
+import { vndFormatter, numberFormatter } from "@/lib/format";
 import type {
   SupplierDebtRow,
   SupplierDebtSummary,
 } from "@/lib/du-an/supplier-debt-service";
+
+const DataGrid = dynamic(
+  () => import("@/components/data-grid").then((m) => m.DataGrid),
+  { ssr: false },
+) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+}) => ReactElement;
+
+interface DebtGridRow extends RowWithId {
+  supplierName: string;
+  itemName: string;
+  qty: number;
+  unit: string;
+  amountTaken: number;
+  amountTakenHd: number;
+  amountPaid: number;
+  amountPaidHd: number;
+  balance: number;
+  balanceHd: number;
+  note: string;
+}
 
 interface Props {
   rows: SupplierDebtRow[];
@@ -23,7 +45,7 @@ interface Props {
 }
 
 export function CongNoClient({
-  rows,
+  rows: source,
   summary,
   supplierNames,
   initialSuppliers,
@@ -31,7 +53,7 @@ export function CongNoClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  // URL is source of truth — derive selected from searchParams every render.
+
   const selected = useMemo<string[]>(() => {
     const sp = searchParams?.get("suppliers");
     if (sp) return sp.split(",").map((s) => s.trim()).filter(Boolean);
@@ -51,76 +73,41 @@ export function CongNoClient({
     });
   };
 
-  const colDefs = useMemo<ColDef<SupplierDebtRow>[]>(
-    () => [
-      {
-        field: "supplierName",
-        headerName: "Nhà cung cấp",
-        minWidth: 220,
-        flex: 2,
-        pinned: "left",
-      },
-      { field: "itemName", headerName: "Vật tư", minWidth: 160, flex: 1 },
-      {
-        field: "qty",
-        headerName: "SL",
-        width: 100,
-        valueFormatter: (p) => numberFormatter(p.value as number, 2),
-        type: "numericColumn",
-      },
-      { field: "unit", headerName: "ĐVT", width: 80 },
-      {
-        field: "amountTaken",
-        headerName: "Lấy hàng TT",
-        width: 140,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      {
-        field: "amountTakenHd",
-        headerName: "Lấy hàng HĐ",
-        width: 140,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      {
-        field: "amountPaid",
-        headerName: "Đã trả TT",
-        width: 140,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      {
-        field: "amountPaidHd",
-        headerName: "Đã trả HĐ",
-        width: 140,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      {
-        field: "balance",
-        headerName: "Còn nợ TT",
-        width: 140,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      {
-        field: "balanceHd",
-        headerName: "Còn nợ HĐ",
-        width: 140,
-        valueFormatter: (p) => vndFormatter(p.value as number),
-        type: "numericColumn",
-        cellStyle: { textAlign: "right" },
-      },
-      { field: "note", headerName: "Ghi chú", flex: 1, minWidth: 140 },
-    ],
-    [],
-  );
+  const rows: DebtGridRow[] = source.map((r) => ({
+    id: r.id,
+    supplierName: r.supplierName,
+    itemName: r.itemName ?? "",
+    qty: r.qty ?? 0,
+    unit: r.unit ?? "",
+    amountTaken: r.amountTaken ?? 0,
+    amountTakenHd: r.amountTakenHd ?? 0,
+    amountPaid: r.amountPaid ?? 0,
+    amountPaidHd: r.amountPaidHd ?? 0,
+    balance: r.balance ?? 0,
+    balanceHd: r.balanceHd ?? 0,
+    note: r.note ?? "",
+  }));
+
+  const columns: DataGridColumn<DebtGridRow>[] = [
+    { id: "supplierName", title: "Nhà cung cấp", kind: "text", width: 240, readonly: true },
+    { id: "itemName", title: "Vật tư", kind: "text", width: 200, readonly: true },
+    {
+      id: "qty",
+      title: "SL",
+      kind: "number",
+      width: 100,
+      readonly: true,
+      format: (v) => numberFormatter(Number(v ?? 0), 2),
+    },
+    { id: "unit", title: "ĐVT", kind: "text", width: 80, readonly: true },
+    { id: "amountTaken", title: "Lấy hàng TT", kind: "currency", width: 140, readonly: true },
+    { id: "amountTakenHd", title: "Lấy hàng HĐ", kind: "currency", width: 140, readonly: true },
+    { id: "amountPaid", title: "Đã trả TT", kind: "currency", width: 140, readonly: true },
+    { id: "amountPaidHd", title: "Đã trả HĐ", kind: "currency", width: 140, readonly: true },
+    { id: "balance", title: "Còn nợ TT", kind: "currency", width: 140, readonly: true },
+    { id: "balanceHd", title: "Còn nợ HĐ", kind: "currency", width: 140, readonly: true },
+    { id: "note", title: "Ghi chú", kind: "text", width: 200, readonly: true },
+  ];
 
   return (
     <div className="space-y-3">
@@ -139,18 +126,9 @@ export function CongNoClient({
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card p-3">
         <span className="text-sm font-medium">Lọc NCC:</span>
-        <SupplierMultiSelect
-          options={supplierNames}
-          value={selected}
-          onChange={pushFilter}
-        />
+        <SupplierMultiSelect options={supplierNames} value={selected} onChange={pushFilter} />
         {selected.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => pushFilter([])}
-            disabled={pending}
-          >
+          <Button variant="outline" size="sm" onClick={() => pushFilter([])} disabled={pending}>
             Tất cả NCC
           </Button>
         )}
@@ -159,28 +137,16 @@ export function CongNoClient({
         </span>
       </div>
 
-      <AgGridBase rowData={rows} columnDefs={colDefs} />
+      <DataGrid<DebtGridRow> columns={columns} rows={rows} handlers={{}} height={520} />
     </div>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
+function SummaryCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div
-        className={
-          "mt-1 text-base font-semibold " + (highlight ? "text-destructive" : "")
-        }
-      >
+      <div className={"mt-1 text-base font-semibold " + (highlight ? "text-destructive" : "")}>
         {value || "—"}
       </div>
     </div>
