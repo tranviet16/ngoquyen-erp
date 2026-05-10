@@ -50,7 +50,7 @@ export function CreateFormClient({ departments, currentDeptId }: Props) {
           deadline: deadline || null,
         });
         toast.success(`Đã tạo nháp ${form.code}`);
-        router.push(`/phieu-phoi-hop/${form.id}`);
+        router.push(`/van-hanh/phieu-phoi-hop/${form.id}`);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));
       }
@@ -60,7 +60,7 @@ export function CreateFormClient({ departments, currentDeptId }: Props) {
   return (
     <div className="max-w-2xl space-y-4">
       <div>
-        <Link href="/phieu-phoi-hop" className="text-sm text-muted-foreground hover:underline">
+        <Link href="/van-hanh/phieu-phoi-hop" className="text-sm text-muted-foreground hover:underline">
           ← Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold mt-2">Tạo phiếu phối hợp mới</h1>
@@ -155,7 +155,7 @@ export function CreateFormClient({ departments, currentDeptId }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t">
-          <Link href="/phieu-phoi-hop">
+          <Link href="/van-hanh/phieu-phoi-hop">
             <Button type="button" variant="outline" disabled={pending}>
               Hủy
             </Button>

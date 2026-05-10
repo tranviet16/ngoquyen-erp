@@ -15,7 +15,7 @@ export async function listCommentsAction(taskId: number): Promise<CommentRow[]> 
 
 export async function createCommentAction(taskId: number, body: string): Promise<CommentRow> {
   const row = await createComment(taskId, body);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
   return row;
 }
 
@@ -25,5 +25,5 @@ export async function editCommentAction(commentId: number, body: string): Promis
 
 export async function deleteCommentAction(commentId: number): Promise<void> {
   await deleteComment(commentId);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }

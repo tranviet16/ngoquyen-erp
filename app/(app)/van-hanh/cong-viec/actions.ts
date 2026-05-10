@@ -13,26 +13,26 @@ import type { TaskStatus } from "@/lib/task/state-machine";
 
 export async function createTaskAction(input: CreateTaskInput) {
   const t = await createTaskManual(input);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
   return { id: t.id };
 }
 
 export async function updateTaskAction(id: number, input: UpdateTaskInput) {
   await updateTask(id, input);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }
 
 export async function assignTaskAction(id: number, assigneeId: string | null) {
   await assignTask(id, assigneeId);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }
 
 export async function moveTaskAction(id: number, toStatus: TaskStatus, toOrder?: number) {
   await moveTask(id, toStatus, toOrder);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }
 
 export async function deleteTaskAction(id: number) {
   await deleteTask(id);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }

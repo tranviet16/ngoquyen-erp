@@ -7,7 +7,7 @@ import {
   deleteAttachmentAction,
   listAttachmentsAction,
   uploadAttachmentAction,
-} from "@/app/(app)/cong-viec/attachments-actions";
+} from "@/app/(app)/van-hanh/cong-viec/attachments-actions";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const ALLOWED = new Set([
@@ -162,7 +162,7 @@ export function AttachmentSection({ taskId }: Props) {
       )}
 
       <div
-        className={`rounded border-2 border-dashed p-3 text-center text-xs ${dragOver ? "border-blue-500 bg-blue-50" : "border-slate-300"}`}
+        className={`rounded border-2 border-dashed p-3 text-center text-xs ${dragOver ? "border-blue-500 bg-blue-50 dark:bg-blue-500/15" : "border-border"}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);

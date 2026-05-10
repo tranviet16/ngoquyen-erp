@@ -59,7 +59,7 @@ export function ListClient({ data, departments, filter }: Props) {
     if (opts.scope === "mine") sp.set("scope", "mine");
     if (opts.status) sp.set("status", opts.status);
     sp.set("page", "1");
-    router.replace(`/phieu-phoi-hop?${sp.toString()}`);
+    router.replace(`/van-hanh/phieu-phoi-hop?${sp.toString()}`);
   }
 
   function setPage(p: number) {
@@ -67,7 +67,7 @@ export function ListClient({ data, departments, filter }: Props) {
     if (filter.scope === "mine") sp.set("scope", "mine");
     if (filter.status) sp.set("status", filter.status);
     sp.set("page", String(p));
-    router.replace(`/phieu-phoi-hop?${sp.toString()}`);
+    router.replace(`/van-hanh/phieu-phoi-hop?${sp.toString()}`);
   }
 
   const activeKey =
@@ -82,7 +82,7 @@ export function ListClient({ data, departments, filter }: Props) {
             Quản lý phiếu phối hợp giữa các phòng ban — trưởng phòng duyệt và phân công.
           </p>
         </div>
-        <Link href="/phieu-phoi-hop/tao-moi">
+        <Link href="/van-hanh/phieu-phoi-hop/tao-moi">
           <Button>
             <Plus className="size-4" aria-hidden="true" />
             Tạo phiếu mới
@@ -151,7 +151,7 @@ export function ListClient({ data, departments, filter }: Props) {
                   </td>
                   <td className="px-3 py-2 text-right">
                     <Link
-                      href={`/phieu-phoi-hop/${f.id}`}
+                      href={`/van-hanh/phieu-phoi-hop/${f.id}`}
                       className="text-xs font-medium text-primary hover:underline"
                     >
                       Xem

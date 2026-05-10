@@ -131,7 +131,7 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
           type: "comment_mention",
           title: `${authorLabel} đã nhắc bạn trong "${task.title}"`,
           body: shorten(body),
-          link: `/cong-viec?taskId=${taskId}`,
+          link: `/van-hanh/cong-viec?taskId=${taskId}`,
         },
         tx,
       );
@@ -159,7 +159,7 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
               type: "task_status_changed",
               title: `${authorLabel} đã bình luận trong "${task.title}"`,
               body: shorten(body),
-              link: `/cong-viec?taskId=${taskId}`,
+              link: `/van-hanh/cong-viec?taskId=${taskId}`,
             },
             tx,
           );

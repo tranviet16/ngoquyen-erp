@@ -20,21 +20,21 @@ export async function createSubtaskAction(
   input: { title: string; assigneeId?: string | null; priority?: string },
 ): Promise<SubtaskRow> {
   const row = await createSubtask(parentId, input);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
   return row;
 }
 
 export async function moveSubtaskAction(id: number, toStatus: TaskStatus): Promise<void> {
   await moveTask(id, toStatus);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }
 
 export async function deleteSubtaskAction(id: number): Promise<void> {
   await deleteSubtask(id);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }
 
 export async function reorderSubtasksAction(parentId: number, orderedIds: number[]): Promise<void> {
   await reorderSubtasks(parentId, orderedIds);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }

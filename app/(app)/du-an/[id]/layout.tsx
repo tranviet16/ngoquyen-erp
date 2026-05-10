@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProjectById } from "@/lib/master-data/project-service";
+import { requireModuleAccess } from "@/lib/acl/guards";
 
 const TABS = [
   { href: "", label: "Dashboard" },
@@ -30,6 +31,11 @@ export default async function ProjectLayout({ params, children }: Props) {
 
   const project = await getProjectById(projectId);
   if (!project) notFound();
+
+  await requireModuleAccess("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
 
   const basePath = `/du-an/${projectId}`;
 

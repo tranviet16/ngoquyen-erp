@@ -238,7 +238,7 @@ async function notifyCreator(
       type,
       title,
       body,
-      link: `/phieu-phoi-hop/${form.id}`,
+      link: `/van-hanh/phieu-phoi-hop/${form.id}`,
     },
   });
 }
@@ -266,7 +266,7 @@ export async function submitForm(id: number): Promise<CoordinationForm> {
           type: "form_submitted",
           title: `Phiếu mới chờ duyệt: ${updated.code}`,
           body: updated.content.slice(0, 200),
-          link: `/phieu-phoi-hop/${updated.id}`,
+          link: `/van-hanh/phieu-phoi-hop/${updated.id}`,
         },
       });
     }
@@ -354,7 +354,7 @@ export async function leaderApprove(
             type: "task_assigned",
             title: `Bạn được giao công việc mới từ phiếu ${updated.code}`,
             body: updated.content.slice(0, 200),
-            link: `/cong-viec`,
+            link: `/van-hanh/cong-viec`,
           },
         });
       }

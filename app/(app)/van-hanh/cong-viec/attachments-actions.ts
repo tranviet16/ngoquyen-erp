@@ -19,11 +19,11 @@ export async function uploadAttachmentAction(formData: FormData): Promise<Attach
   if (!Number.isInteger(taskId)) throw new Error("taskId không hợp lệ");
   if (!(file instanceof File)) throw new Error("Không có file");
   const row = await uploadAttachment(taskId, file);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
   return row;
 }
 
 export async function deleteAttachmentAction(id: number): Promise<void> {
   await deleteAttachment(id);
-  revalidatePath("/cong-viec");
+  revalidatePath("/van-hanh/cong-viec");
 }

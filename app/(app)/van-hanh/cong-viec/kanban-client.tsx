@@ -159,7 +159,7 @@ export function KanbanClient({
     };
     merged[key] = value;
     for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v);
-    router.push(`/cong-viec${params.toString() ? `?${params.toString()}` : ""}`);
+    router.push(`/van-hanh/cong-viec${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
   const canCreate = currentRole === "admin" || currentIsDirector || currentIsLeader || currentDeptId !== null;
@@ -388,7 +388,7 @@ function TaskCard({
         )}
         {task.sourceForm && (
           <Link
-            href={`/phieu-phoi-hop/${task.sourceForm.id}`}
+            href={`/van-hanh/phieu-phoi-hop/${task.sourceForm.id}`}
             onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-1 text-primary hover:underline"
           >
@@ -581,7 +581,7 @@ function EditTaskDialog({
         <div>
           <h2 className="text-lg font-bold">Chi tiết task</h2>
           {task.sourceForm && (
-            <Link href={`/phieu-phoi-hop/${task.sourceForm.id}`} className="text-xs text-primary hover:underline">
+            <Link href={`/van-hanh/phieu-phoi-hop/${task.sourceForm.id}`} className="text-xs text-primary hover:underline">
               Từ phiếu {task.sourceForm.code}
             </Link>
           )}

@@ -187,7 +187,7 @@ export function DetailClient({ form, availableActions, departments }: Props) {
     <div className="max-w-3xl space-y-4">
       <div>
         <Link
-          href="/phieu-phoi-hop"
+          href="/van-hanh/phieu-phoi-hop"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="size-4" aria-hidden="true" />

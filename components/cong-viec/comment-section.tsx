@@ -10,7 +10,7 @@ import {
   deleteCommentAction,
   editCommentAction,
   listCommentsAction,
-} from "@/app/(app)/cong-viec/comments-actions";
+} from "@/app/(app)/van-hanh/cong-viec/comments-actions";
 
 const EDIT_WINDOW_MS = 5 * 60 * 1000;
 
@@ -296,7 +296,7 @@ export function CommentSection({ taskId, currentUserId, members = [] }: Props) {
                 {isEditing ? (
                   <div className="space-y-2">
                     <textarea
-                      className="w-full min-h-16 rounded border border-input bg-white px-2 py-1 text-sm"
+                      className="w-full min-h-16 rounded border border-input bg-background px-2 py-1 text-sm"
                       value={editDraft}
                       onChange={(e) => setEditDraft(e.target.value)}
                       maxLength={4000}
@@ -361,7 +361,7 @@ export function CommentSection({ taskId, currentUserId, members = [] }: Props) {
             disabled={posting}
           />
           {mention.active && mentionMatches.length > 0 && (
-            <ul className="absolute left-2 bottom-full mb-1 z-50 w-64 max-h-56 overflow-y-auto rounded-md border bg-white shadow-md text-sm">
+            <ul className="absolute left-2 bottom-full mb-1 z-50 w-64 max-h-56 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md text-sm">
               {mentionMatches.map((m, idx) => (
                 <li
                   key={m.id}
@@ -371,7 +371,7 @@ export function CommentSection({ taskId, currentUserId, members = [] }: Props) {
                   }}
                   onMouseEnter={() => setMention((s) => ({ ...s, highlight: idx }))}
                   className={`px-2 py-1 cursor-pointer ${
-                    idx === mention.highlight ? "bg-blue-50" : "hover:bg-slate-50"
+                    idx === mention.highlight ? "bg-blue-50 dark:bg-blue-500/15" : "hover:bg-muted"
                   }`}
                 >
                   <div className="font-medium text-xs">{m.name}</div>

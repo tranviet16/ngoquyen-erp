@@ -206,7 +206,7 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
           type: "task_assigned",
           title: "Bạn có task mới",
           body: task.title,
-          link: `/cong-viec?taskId=${task.id}`,
+          link: `/van-hanh/cong-viec?taskId=${task.id}`,
         },
         tx,
       );
@@ -268,7 +268,7 @@ export async function assignTask(id: number, assigneeId: string | null): Promise
           type: "task_assigned",
           title: "Bạn được giao task",
           body: updated.title,
-          link: `/cong-viec?taskId=${updated.id}`,
+          link: `/van-hanh/cong-viec?taskId=${updated.id}`,
         },
         tx,
       );
@@ -279,7 +279,7 @@ export async function assignTask(id: number, assigneeId: string | null): Promise
           type: "task_unassigned",
           title: "Bạn được gỡ khỏi task",
           body: updated.title,
-          link: `/cong-viec?taskId=${updated.id}`,
+          link: `/van-hanh/cong-viec?taskId=${updated.id}`,
         },
         tx,
       );
@@ -323,7 +323,7 @@ export async function moveTask(id: number, toStatus: TaskStatus, toOrder?: numbe
           type: "task_status_changed",
           title: `Task đã được chuyển sang "${toStatus}"`,
           body: updated.title,
-          link: `/cong-viec?taskId=${updated.id}`,
+          link: `/van-hanh/cong-viec?taskId=${updated.id}`,
         },
         tx,
       );
@@ -366,7 +366,7 @@ export async function maybeBumpParentToReview(
         type: "task_status_changed",
         title: 'Task chuyển sang "Chờ duyệt" (mọi việc nhỏ đã hoàn thành)',
         body: parent.title,
-        link: `/cong-viec?taskId=${parent.id}`,
+        link: `/van-hanh/cong-viec?taskId=${parent.id}`,
       },
       tx,
     );
