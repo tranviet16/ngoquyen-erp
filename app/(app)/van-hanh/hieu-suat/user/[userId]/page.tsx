@@ -51,7 +51,7 @@ export default async function Page({
       }),
     ]);
   } catch {
-    redirect("/forbidden");
+    redirect("/forbidden?m=van-hanh.hieu-suat&need=read");
   }
 
   if (!target) redirect("/van-hanh/hieu-suat");

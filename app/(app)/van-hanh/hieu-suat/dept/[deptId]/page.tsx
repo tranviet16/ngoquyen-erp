@@ -45,7 +45,7 @@ export default async function Page({
       getMetricsForDept(session.user.id, deptId, prevRange, { includePerUser: true }),
     ]);
   } catch {
-    redirect("/forbidden");
+    redirect("/forbidden?m=van-hanh.hieu-suat&need=read");
   }
 
   return (

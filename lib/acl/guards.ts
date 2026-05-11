@@ -45,7 +45,8 @@ export async function requireModuleAccess(
 
   const allowed = await canAccess(userId, moduleKey, aclOpts);
   if (!allowed) {
-    redirect("/forbidden");
+    const params = new URLSearchParams({ m: moduleKey, need: minLevel });
+    redirect(`/forbidden?${params.toString()}`);
   }
 
   return { userId, role: role ?? "viewer" };

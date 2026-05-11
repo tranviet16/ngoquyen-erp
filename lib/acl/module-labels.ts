@@ -1,4 +1,4 @@
-import type { ModuleKey } from "./modules";
+import type { AccessLevel, ModuleKey } from "./modules";
 
 /**
  * Vietnamese display labels for all module keys.
@@ -21,4 +21,11 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   "admin.phong-ban": "Quản trị – Phòng ban",
   "admin.nguoi-dung": "Quản trị – Người dùng",
   "admin.permissions": "Quản trị – Phân quyền",
+};
+
+export const LEVEL_LABELS: Record<AccessLevel, string> = {
+  read: "Xem",
+  comment: "Bình luận",
+  edit: "Chỉnh sửa",
+  admin: "Quản trị",
 };
