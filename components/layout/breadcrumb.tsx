@@ -6,22 +6,73 @@ import { ChevronRight, Home } from "lucide-react";
 
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard: "Bảng điều khiển",
+  // Top-level modules
   "master-data": "Dữ liệu nền tảng",
-  projects: "Dự án",
   "du-an": "Dự án xây dựng",
   "vat-tu-ncc": "Vật tư – NCC",
   "cong-no-vt": "Công nợ vật tư",
   "cong-no-nc": "Công nợ nhân công",
   "sl-dt": "Sản lượng – Doanh thu",
   "tai-chinh": "Tài chính NQ",
-  "phieu-phoi-hop": "Phiếu phối hợp",
-  "cong-viec": "Bảng công việc",
+  "van-hanh": "Vận hành",
   "thong-bao": "Thông báo",
   admin: "Quản trị",
+  // Master data
+  projects: "Dự án",
+  entities: "Chủ thể",
+  suppliers: "Nhà cung cấp",
+  contractors: "Nhà thầu",
+  items: "Vật tư",
+  // Du an sub
+  "hop-dong": "Hợp đồng",
+  "dinh-muc": "Định mức",
+  "du-toan": "Dự toán",
+  "du-toan-dieu-chinh": "Dự toán điều chỉnh",
+  "cai-dat": "Cài đặt",
+  "phat-sinh": "Phát sinh",
+  "tien-do": "Tiến độ",
+  "dong-tien-3-ben": "Dòng tiền 3 bên",
+  "nghiem-thu": "Nghiệm thu",
+  "giao-dich": "Giao dịch",
+  "cong-no": "Công nợ",
+  // Vat tu NCC sub
+  thang: "Theo tháng",
+  ngay: "Theo ngày",
+  "doi-chieu": "Đối chiếu",
+  // SL-DT sub
+  "tien-do-nop-tien": "Tiến độ nộp tiền",
+  "tien-do-xd": "Tiến độ xây dựng",
+  "cau-hinh": "Cấu hình",
+  "bao-cao-sl": "Báo cáo sản lượng",
+  "bao-cao-dt": "Báo cáo doanh thu",
+  "nhap-thang-moi": "Nhập tháng mới",
+  "chi-tieu": "Chỉ tiêu",
+  // Cong no sub
+  "chi-tiet": "Chi tiết",
+  "bao-cao-thang": "Báo cáo tháng",
+  "so-du-ban-dau": "Số dư ban đầu",
+  "nhap-lieu": "Nhập liệu",
+  // Tai chinh sub
+  "nguon-tien": "Nguồn tiền",
+  "phan-loai-chi-phi": "Phân loại chi phí",
+  "phan-loai-giao-dich": "Phân loại giao dịch",
+  "nhat-ky": "Nhật ký",
+  "phai-thu-tra": "Phải thu – Phải trả",
+  "bao-cao-thanh-khoan": "Báo cáo thanh khoản",
+  vay: "Khoản vay",
+  // Van hanh sub
+  "phieu-phoi-hop": "Phiếu phối hợp",
+  "cong-viec": "Bảng công việc",
+  "hieu-suat": "Hiệu suất",
+  "tao-moi": "Tạo mới",
+  dept: "Phòng ban",
+  user: "Nhân viên",
+  // Admin sub
   import: "Nhập dữ liệu",
   "phong-ban": "Phòng ban",
-  "cong-no": "Công nợ",
-  "chi-tiet": "Chi tiết",
+  "nguoi-dung": "Người dùng",
+  permissions: "Phân quyền",
+  modules: "Phân hệ",
 };
 
 function labelFor(segment: string): string {
