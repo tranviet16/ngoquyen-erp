@@ -22,6 +22,7 @@ const DataGrid = dynamic(
 }) => ReactElement;
 
 interface CategoryOption { id: number; name: string; code: string }
+interface CashAccountOption { id: number; name: string }
 
 interface SourceRow {
   id: number;
@@ -30,6 +31,8 @@ interface SourceRow {
   amountVnd: string;
   fromAccount: string | null;
   toAccount: string | null;
+  fromAccountId: number | null;
+  toAccountId: number | null;
   description: string;
   note: string | null;
   expenseCategory: CategoryOption | null;
@@ -40,8 +43,8 @@ interface JournalRow extends RowWithId {
   entryType: string;
   description: string;
   amountVnd: number;
-  fromAccount: string | null;
-  toAccount: string | null;
+  fromAccountId: number | null;
+  toAccountId: number | null;
   expenseCategoryId: number | null;
   note: string | null;
 }
@@ -49,6 +52,7 @@ interface JournalRow extends RowWithId {
 interface Props {
   rows: SourceRow[];
   categories: CategoryOption[];
+  cashAccounts: CashAccountOption[];
 }
 
 const ENTRY_TYPES: SelectOption[] = [
@@ -57,12 +61,13 @@ const ENTRY_TYPES: SelectOption[] = [
   { id: "chuyen_khoan", name: "Chuyển khoản" },
 ];
 
-export function JournalGridClient({ rows: initial, categories }: Props) {
+export function JournalGridClient({ rows: initial, categories, cashAccounts }: Props) {
   const router = useRouter();
   const categoryOptions: SelectOption[] = categories.map((c) => ({
     id: c.id,
     name: `${c.code} - ${c.name}`,
   }));
+  const accountOptions: SelectOption[] = cashAccounts.map((a) => ({ id: a.id, name: a.name }));
 
   const rows: JournalRow[] = initial.map((r) => ({
     id: r.id,
@@ -70,8 +75,8 @@ export function JournalGridClient({ rows: initial, categories }: Props) {
     entryType: r.entryType,
     description: r.description,
     amountVnd: Number(r.amountVnd),
-    fromAccount: r.fromAccount,
-    toAccount: r.toAccount,
+    fromAccountId: r.fromAccountId,
+    toAccountId: r.toAccountId,
     expenseCategoryId: r.expenseCategory?.id ?? null,
     note: r.note,
   }));
@@ -81,8 +86,8 @@ export function JournalGridClient({ rows: initial, categories }: Props) {
     { id: "entryType", title: "Loại", kind: "select", width: 130, options: ENTRY_TYPES },
     { id: "description", title: "Nội dung", kind: "text", width: 280 },
     { id: "amountVnd", title: "Số tiền (VND)", kind: "currency", width: 140 },
-    { id: "fromAccount", title: "TK chi", kind: "text", width: 130 },
-    { id: "toAccount", title: "TK thu", kind: "text", width: 130 },
+    { id: "fromAccountId", title: "Nguồn chi", kind: "select", width: 150, options: accountOptions },
+    { id: "toAccountId", title: "Nguồn thu", kind: "select", width: 150, options: accountOptions },
     { id: "expenseCategoryId", title: "Phân loại", kind: "select", width: 180, options: categoryOptions },
     { id: "note", title: "Ghi chú", kind: "text", width: 180 },
   ];

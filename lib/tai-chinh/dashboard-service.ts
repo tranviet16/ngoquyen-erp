@@ -12,9 +12,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { getTotalCashPosition } from "./liquidity-service";
 
 export interface KpiData {
-  cashPositionVnd: Prisma.Decimal;        // SUM(JournalEntry) thu - chi, current month
+  cashPositionVnd: Prisma.Decimal;        // Σ closing balance across all cash accounts
   materialDebtVnd: Prisma.Decimal;        // Total outstanding material ledger balance
   laborDebtVnd: Prisma.Decimal;           // Total outstanding labor ledger balance
   totalLoanPrincipalVnd: Prisma.Decimal;  // Active loans principal remaining
@@ -70,6 +71,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     receivableRows,
     payableRows,
     loansDue,
+    cashPositionVnd,
   ] = await Promise.all([
     // Cash flow by month (last 6 months) from JournalEntry
     prisma.$queryRaw<RawCashRow[]>`
@@ -146,13 +148,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       orderBy: { dueDate: "asc" },
       take: 10,
     }),
-  ]);
 
-  // Build cash position (current month net)
-  const currentMonth = cashflowRows.find(r => Number(r.month) === now.getMonth() + 1 && Number(r.year) === now.getFullYear());
-  const cashPositionVnd = currentMonth
-    ? new Prisma.Decimal(currentMonth.thu).minus(new Prisma.Decimal(currentMonth.chi))
-    : new Prisma.Decimal(0);
+    // Total cash position = Σ closing per account
+    getTotalCashPosition(),
+  ]);
 
   // Build 6-month trend
   const cashflowTrend: CashflowMonthPoint[] = cashflowRows.map(r => ({

@@ -23,12 +23,20 @@ export interface JournalEntryInput {
   amountVnd: string;
   fromAccount?: string | null;
   toAccount?: string | null;
+  fromAccountId?: number | null;
+  toAccountId?: number | null;
   expenseCategoryId?: number | null;
   refModule?: string | null;
   refId?: number | null;
   description: string;
   attachmentUrl?: string | null;
   note?: string | null;
+}
+
+async function resolveAccountName(id: number | null | undefined): Promise<string | null> {
+  if (id == null) return null;
+  const acc = await prisma.cashAccount.findUnique({ where: { id }, select: { name: true } });
+  return acc?.name ?? null;
 }
 
 export interface JournalFilter {
@@ -58,7 +66,11 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
-      include: { expenseCategory: { select: { id: true, name: true, code: true } } },
+      include: {
+        expenseCategory: { select: { id: true, name: true, code: true } },
+        fromAccountRef: { select: { id: true, name: true } },
+        toAccountRef: { select: { id: true, name: true } },
+      },
     }),
     prisma.journalEntry.count({ where }),
   ]);
@@ -70,13 +82,24 @@ export async function createJournalEntry(input: JournalEntryInput) {
   const role = await getRole();
   requireRole(role, "ketoan");
 
+  const fromAccountId = input.fromAccountId ?? null;
+  const toAccountId = input.toAccountId ?? null;
+  const fromAccount = fromAccountId != null
+    ? await resolveAccountName(fromAccountId)
+    : (input.fromAccount ?? null);
+  const toAccount = toAccountId != null
+    ? await resolveAccountName(toAccountId)
+    : (input.toAccount ?? null);
+
   const record = await prisma.journalEntry.create({
     data: {
       date: new Date(input.date),
       entryType: input.entryType,
       amountVnd: new Prisma.Decimal(input.amountVnd),
-      fromAccount: input.fromAccount ?? null,
-      toAccount: input.toAccount ?? null,
+      fromAccount,
+      toAccount,
+      fromAccountId,
+      toAccountId,
       expenseCategoryId: input.expenseCategoryId ?? null,
       refModule: input.refModule ?? null,
       refId: input.refId ?? null,
@@ -95,14 +118,25 @@ export async function updateJournalEntry(id: number, input: JournalEntryInput) {
   const role = await getRole();
   requireRole(role, "ketoan");
 
+  const fromAccountId = input.fromAccountId ?? null;
+  const toAccountId = input.toAccountId ?? null;
+  const fromAccount = fromAccountId != null
+    ? await resolveAccountName(fromAccountId)
+    : (input.fromAccount ?? null);
+  const toAccount = toAccountId != null
+    ? await resolveAccountName(toAccountId)
+    : (input.toAccount ?? null);
+
   const record = await prisma.journalEntry.update({
     where: { id },
     data: {
       date: new Date(input.date),
       entryType: input.entryType,
       amountVnd: new Prisma.Decimal(input.amountVnd),
-      fromAccount: input.fromAccount ?? null,
-      toAccount: input.toAccount ?? null,
+      fromAccount,
+      toAccount,
+      fromAccountId,
+      toAccountId,
       expenseCategoryId: input.expenseCategoryId ?? null,
       refModule: input.refModule ?? null,
       refId: input.refId ?? null,
@@ -149,6 +183,12 @@ export async function patchJournalEntry(id: number, patch: Record<string, unknow
     amountVnd: "amountVnd" in patch ? String(patch.amountVnd ?? "0") : current.amountVnd.toString(),
     fromAccount: "fromAccount" in patch ? (patch.fromAccount as string | null) : current.fromAccount,
     toAccount: "toAccount" in patch ? (patch.toAccount as string | null) : current.toAccount,
+    fromAccountId: "fromAccountId" in patch
+      ? (patch.fromAccountId == null || patch.fromAccountId === "" ? null : Number(patch.fromAccountId))
+      : current.fromAccountId,
+    toAccountId: "toAccountId" in patch
+      ? (patch.toAccountId == null || patch.toAccountId === "" ? null : Number(patch.toAccountId))
+      : current.toAccountId,
     expenseCategoryId: "expenseCategoryId" in patch
       ? (patch.expenseCategoryId == null || patch.expenseCategoryId === "" ? null : Number(patch.expenseCategoryId))
       : current.expenseCategoryId,
@@ -178,6 +218,10 @@ export async function bulkUpsertJournalEntries(
         amountVnd: String(rest.amountVnd ?? "0"),
         fromAccount: (rest.fromAccount as string | null) ?? null,
         toAccount: (rest.toAccount as string | null) ?? null,
+        fromAccountId: rest.fromAccountId == null || rest.fromAccountId === ""
+          ? null : Number(rest.fromAccountId),
+        toAccountId: rest.toAccountId == null || rest.toAccountId === ""
+          ? null : Number(rest.toAccountId),
         expenseCategoryId: rest.expenseCategoryId == null || rest.expenseCategoryId === ""
           ? null : Number(rest.expenseCategoryId),
         description: String(rest.description ?? ""),

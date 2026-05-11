@@ -14,6 +14,7 @@ export default async function TaiChinhDashboardPage() {
 
   const navItems = [
     { href: "/tai-chinh/vay", label: "Hợp đồng vay" },
+    { href: "/tai-chinh/nguon-tien", label: "Nguồn tiền" },
     { href: "/tai-chinh/nhat-ky", label: "Nhật ký giao dịch" },
     { href: "/tai-chinh/phan-loai-chi-phi", label: "Phân loại chi phí" },
     { href: "/tai-chinh/phan-loai-giao-dich", label: "Phân loại giao dịch" },
@@ -46,10 +47,10 @@ export default async function TaiChinhDashboardPage() {
       {/* 6 KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <DashboardCard
-          title="Vị thế tiền mặt (tháng này)"
+          title="Vị thế tiền mặt"
           value={formatVND(Number(kpi.cashPositionVnd))}
           trend={kpi.cashPositionVnd.gte(0) ? "up" : "down"}
-          subtitle="Thu - Chi từ sổ nhật ký"
+          subtitle="Tổng số dư hiện tại các nguồn tiền"
         />
         <DashboardCard
           title="Nợ vật tư (TT)"

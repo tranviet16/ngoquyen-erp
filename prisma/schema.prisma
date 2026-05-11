@@ -687,6 +687,8 @@ model JournalEntry {
   amountVnd         Decimal   @db.Decimal(18, 2)
   fromAccount       String?
   toAccount         String?
+  fromAccountId     Int?
+  toAccountId       Int?
   expenseCategoryId Int?
   refModule         String? // "loan" | "material" | "labor" | null
   refId             Int?
@@ -698,6 +700,8 @@ model JournalEntry {
   updatedAt         DateTime  @default(now())
 
   expenseCategory ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id])
+  fromAccountRef  CashAccount?     @relation("JeFromAccount", fields: [fromAccountId], references: [id])
+  toAccountRef    CashAccount?     @relation("JeToAccount", fields: [toAccountId], references: [id])
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
@@ -705,7 +709,24 @@ model JournalEntry {
   @@index([date, entryType])
   @@index([expenseCategoryId])
   @@index([importRunId])
+  @@index([fromAccountId])
+  @@index([toAccountId])
   @@map("journal_entries")
+}
+
+model CashAccount {
+  id                Int       @id @default(autoincrement())
+  name              String    @unique
+  openingBalanceVnd Decimal   @default(0) @db.Decimal(18, 2)
+  displayOrder      Int       @default(0)
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now())
+
+  jeFrom JournalEntry[] @relation("JeFromAccount")
+  jeTo   JournalEntry[] @relation("JeToAccount")
+
+  @@map("cash_accounts")
 }
 
 model ExpenseCategory {
