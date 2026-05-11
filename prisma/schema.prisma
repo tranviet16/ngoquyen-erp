@@ -684,6 +684,7 @@ model JournalEntry {
   id                Int       @id @default(autoincrement())
   date              DateTime
   entryType         String // "thu" | "chi" | "chuyen_khoan"
+  costBehavior      String    @default("variable") // "fixed" | "variable" | "transfer"
   amountVnd         Decimal   @db.Decimal(18, 2)
   fromAccount       String?
   toAccount         String?
@@ -707,6 +708,7 @@ model JournalEntry {
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
   @@index([date, entryType])
+  @@index([costBehavior, date])
   @@index([expenseCategoryId])
   @@index([importRunId])
   @@index([fromAccountId])

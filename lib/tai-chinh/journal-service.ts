@@ -17,9 +17,12 @@ async function getRole(): Promise<string | null> {
   }
 }
 
+export type CostBehavior = "fixed" | "variable" | "transfer";
+
 export interface JournalEntryInput {
   date: string;
   entryType: "thu" | "chi" | "chuyen_khoan";
+  costBehavior?: CostBehavior;
   amountVnd: string;
   fromAccount?: string | null;
   toAccount?: string | null;
@@ -43,15 +46,27 @@ export interface JournalFilter {
   dateFrom?: string;
   dateTo?: string;
   entryType?: string;
+  costBehavior?: CostBehavior;
+  expenseCategoryId?: number;
+  q?: string;
   page?: number;
   pageSize?: number;
 }
 
+export interface JournalAggregate {
+  totalAmountVnd: Prisma.Decimal;
+  rowCount: number;
+  avgAmountVnd: Prisma.Decimal;
+}
+
 export async function listJournalEntries(filter: JournalFilter = {}) {
-  const { dateFrom, dateTo, entryType, page = 1, pageSize = 50 } = filter;
+  const { dateFrom, dateTo, entryType, costBehavior, expenseCategoryId, q, page = 1, pageSize = 50 } = filter;
   const where: Prisma.JournalEntryWhereInput = {
     deletedAt: null,
     ...(entryType ? { entryType } : {}),
+    ...(costBehavior ? { costBehavior } : {}),
+    ...(expenseCategoryId ? { expenseCategoryId } : {}),
+    ...(q ? { description: { contains: q, mode: "insensitive" } } : {}),
     ...(dateFrom || dateTo ? {
       date: {
         ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
@@ -60,7 +75,7 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
     } : {}),
   };
 
-  const [items, total] = await Promise.all([
+  const [items, total, agg] = await Promise.all([
     prisma.journalEntry.findMany({
       where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
@@ -73,9 +88,20 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
       },
     }),
     prisma.journalEntry.count({ where }),
+    prisma.journalEntry.aggregate({
+      where,
+      _sum: { amountVnd: true },
+      _avg: { amountVnd: true },
+    }),
   ]);
 
-  return { items, total, page, pageSize };
+  const aggregate: JournalAggregate = {
+    totalAmountVnd: agg._sum.amountVnd ?? new Prisma.Decimal(0),
+    rowCount: total,
+    avgAmountVnd: agg._avg.amountVnd ?? new Prisma.Decimal(0),
+  };
+
+  return { items, total, page, pageSize, aggregate };
 }
 
 export async function createJournalEntry(input: JournalEntryInput) {
@@ -91,10 +117,15 @@ export async function createJournalEntry(input: JournalEntryInput) {
     ? await resolveAccountName(toAccountId)
     : (input.toAccount ?? null);
 
+  const costBehavior: CostBehavior = input.entryType === "chuyen_khoan"
+    ? "transfer"
+    : (input.costBehavior === "fixed" ? "fixed" : "variable");
+
   const record = await prisma.journalEntry.create({
     data: {
       date: new Date(input.date),
       entryType: input.entryType,
+      costBehavior,
       amountVnd: new Prisma.Decimal(input.amountVnd),
       fromAccount,
       toAccount,
@@ -127,11 +158,16 @@ export async function updateJournalEntry(id: number, input: JournalEntryInput) {
     ? await resolveAccountName(toAccountId)
     : (input.toAccount ?? null);
 
+  const costBehavior: CostBehavior = input.entryType === "chuyen_khoan"
+    ? "transfer"
+    : (input.costBehavior === "fixed" ? "fixed" : "variable");
+
   const record = await prisma.journalEntry.update({
     where: { id },
     data: {
       date: new Date(input.date),
       entryType: input.entryType,
+      costBehavior,
       amountVnd: new Prisma.Decimal(input.amountVnd),
       fromAccount,
       toAccount,
@@ -180,6 +216,9 @@ export async function patchJournalEntry(id: number, patch: Record<string, unknow
   const merged: JournalEntryInput = {
     date: (patch.date as string | undefined) ?? current.date.toISOString(),
     entryType: (patch.entryType as JournalEntryInput["entryType"]) ?? (current.entryType as JournalEntryInput["entryType"]),
+    costBehavior: "costBehavior" in patch
+      ? (patch.costBehavior as CostBehavior)
+      : (current.costBehavior as CostBehavior),
     amountVnd: "amountVnd" in patch ? String(patch.amountVnd ?? "0") : current.amountVnd.toString(),
     fromAccount: "fromAccount" in patch ? (patch.fromAccount as string | null) : current.fromAccount,
     toAccount: "toAccount" in patch ? (patch.toAccount as string | null) : current.toAccount,
@@ -215,6 +254,7 @@ export async function bulkUpsertJournalEntries(
       const input: JournalEntryInput = {
         date: (rest.date as string | undefined) ?? new Date().toISOString().slice(0, 10),
         entryType: (rest.entryType as JournalEntryInput["entryType"]) ?? "chi",
+        costBehavior: (rest.costBehavior as CostBehavior | undefined) ?? "variable",
         amountVnd: String(rest.amountVnd ?? "0"),
         fromAccount: (rest.fromAccount as string | null) ?? null,
         toAccount: (rest.toAccount as string | null) ?? null,

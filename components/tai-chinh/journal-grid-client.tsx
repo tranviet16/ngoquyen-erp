@@ -28,6 +28,7 @@ interface SourceRow {
   id: number;
   date: Date;
   entryType: string;
+  costBehavior: string;
   amountVnd: string;
   fromAccount: string | null;
   toAccount: string | null;
@@ -41,6 +42,7 @@ interface SourceRow {
 interface JournalRow extends RowWithId {
   date: string;
   entryType: string;
+  costBehavior: string;
   description: string;
   amountVnd: number;
   fromAccountId: number | null;
@@ -61,6 +63,12 @@ const ENTRY_TYPES: SelectOption[] = [
   { id: "chuyen_khoan", name: "Chuyển khoản" },
 ];
 
+const COST_BEHAVIORS: SelectOption[] = [
+  { id: "fixed", name: "Cố định" },
+  { id: "variable", name: "Biến đổi" },
+  { id: "transfer", name: "Chuyển khoản" },
+];
+
 export function JournalGridClient({ rows: initial, categories, cashAccounts }: Props) {
   const router = useRouter();
   const categoryOptions: SelectOption[] = categories.map((c) => ({
@@ -73,6 +81,7 @@ export function JournalGridClient({ rows: initial, categories, cashAccounts }: P
     id: r.id,
     date: new Date(r.date).toISOString().slice(0, 10),
     entryType: r.entryType,
+    costBehavior: r.costBehavior,
     description: r.description,
     amountVnd: Number(r.amountVnd),
     fromAccountId: r.fromAccountId,
@@ -84,6 +93,7 @@ export function JournalGridClient({ rows: initial, categories, cashAccounts }: P
   const columns: DataGridColumn<JournalRow>[] = [
     { id: "date", title: "Ngày", kind: "date", width: 120 },
     { id: "entryType", title: "Loại", kind: "select", width: 130, options: ENTRY_TYPES },
+    { id: "costBehavior", title: "Tính chất", kind: "select", width: 120, options: COST_BEHAVIORS },
     { id: "description", title: "Nội dung", kind: "text", width: 280 },
     { id: "amountVnd", title: "Số tiền (VND)", kind: "currency", width: 140 },
     { id: "fromAccountId", title: "Nguồn chi", kind: "select", width: 150, options: accountOptions },
@@ -130,7 +140,7 @@ export function JournalGridClient({ rows: initial, categories, cashAccounts }: P
         rows={rows}
         handlers={handlers}
         height={600}
-        newRowTemplate={{ entryType: "chi", amountVnd: 0, description: "" } as Partial<JournalRow>}
+        newRowTemplate={{ entryType: "chi", costBehavior: "variable", amountVnd: 0, description: "" } as Partial<JournalRow>}
       />
     </div>
   );
