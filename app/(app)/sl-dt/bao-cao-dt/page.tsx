@@ -2,6 +2,7 @@ import { getDoanhThuReport, getAvailableMonths } from "@/lib/sl-dt/report-servic
 import { fmtNum, fmtPct } from "@/lib/sl-dt/format";
 import type { DoanhThuRow } from "@/lib/sl-dt/rollup";
 import { MonthYearPicker } from "@/components/ui/month-year-picker";
+import { EditableNumberCell } from "@/components/sl-dt/editable-cell";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>;
@@ -73,17 +74,41 @@ export default async function BaoCaoDtPage({ searchParams }: Props) {
           <tbody>
             {rows.map((r, idx) => {
               if (r.kind === "lot") stt++;
+              const editable = r.kind === "lot" && r.lotId != null;
               return (
                 <tr key={`${r.kind}-${idx}`} className={rowClass(r.kind)}>
                   <td className="p-2 text-center">{r.kind === "lot" ? stt : ""}</td>
                   <td className={`p-2 ${r.kind !== "lot" ? "pl-2" : "pl-4"}`}>{r.lotName}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.contractValue)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.dtKeHoachKy)}</td>
-                  <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.dtThoKy)}</td>
+                  {editable ? (
+                    <EditableNumberCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="dtThoKy" value={r.dtThoKy}
+                      className="bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40"
+                    />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.dtThoKy)}</td>
+                  )}
                   <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.dtThoLuyKe)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.cnTho)}</td>
-                  <td className="p-2 text-right tabular-nums">{fmtNum(r.qtTratChua)}</td>
-                  <td className="p-2 text-right tabular-nums bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-200/60 dark:border-emerald-800/40">{fmtNum(r.dtTratKy)}</td>
+                  {editable ? (
+                    <EditableNumberCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="qtTratChua" value={r.qtTratChua}
+                    />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums">{fmtNum(r.qtTratChua)}</td>
+                  )}
+                  {editable ? (
+                    <EditableNumberCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="dtTratKy" value={r.dtTratKy}
+                      className="bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-200/60 dark:border-emerald-800/40"
+                    />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-200/60 dark:border-emerald-800/40">{fmtNum(r.dtTratKy)}</td>
+                  )}
                   <td className="p-2 text-right tabular-nums bg-emerald-50 dark:bg-emerald-950/30 border-x border-emerald-200/60 dark:border-emerald-800/40">{fmtNum(r.dtTratLuyKe)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.cnTrat)}</td>
                   <td className="p-2 text-right tabular-nums bg-sky-50 dark:bg-sky-950/30 border-x border-sky-200/60 dark:border-sky-800/40">{fmtNum(r.dtKy)}</td>

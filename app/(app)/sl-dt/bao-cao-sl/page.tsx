@@ -2,6 +2,7 @@ import { getSanLuongReport, getAvailableMonths } from "@/lib/sl-dt/report-servic
 import { fmtNum, fmtPct } from "@/lib/sl-dt/format";
 import type { SanLuongRow } from "@/lib/sl-dt/rollup";
 import { MonthYearPicker } from "@/components/ui/month-year-picker";
+import { EditableNumberCell, EditableTextCell } from "@/components/sl-dt/editable-cell";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>;
@@ -67,20 +68,43 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
           <tbody>
             {rows.map((r, idx) => {
               if (r.kind === "lot") stt++;
+              const editable = r.kind === "lot" && r.lotId != null;
               return (
                 <tr key={`${r.kind}-${idx}`} className={rowClass(r.kind)}>
                   <td className="p-2 text-center">{r.kind === "lot" ? stt : ""}</td>
                   <td className={`p-2 ${r.kind !== "lot" ? "pl-2" : "pl-4"}`}>{r.lotName}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.estimateValue)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.slKeHoachKy)}</td>
-                  <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.slThucKyTho)}</td>
+                  {editable ? (
+                    <EditableNumberCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="slThucKyTho" value={r.slThucKyTho}
+                      className="bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40"
+                    />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.slThucKyTho)}</td>
+                  )}
                   <td className="p-2 text-right tabular-nums bg-amber-50 dark:bg-amber-950/30 border-x border-amber-200/60 dark:border-amber-800/40">{fmtNum(r.slLuyKeTho)}</td>
-                  <td className="p-2 text-right tabular-nums">{fmtNum(r.slTrat)}</td>
+                  {editable ? (
+                    <EditableNumberCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="slTrat" value={r.slTrat}
+                    />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums">{fmtNum(r.slTrat)}</td>
+                  )}
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.tongThoTrat)}</td>
                   <td className="p-2 text-right tabular-nums">{fmtNum(r.conPhaiTH)}</td>
                   <td className="p-2 text-right tabular-nums bg-violet-50 dark:bg-violet-950/30 border-x border-violet-200/60 dark:border-violet-800/40">{fmtPct(r.pctKy)}</td>
                   <td className="p-2 text-right tabular-nums bg-violet-50 dark:bg-violet-950/30 border-x border-violet-200/60 dark:border-violet-800/40">{fmtPct(r.pctLuyKe)}</td>
-                  <td className="p-2">{r.kind === "lot" ? (r.ghiChu ?? "") : ""}</td>
+                  {editable ? (
+                    <EditableTextCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="ghiChu" value={r.ghiChu ?? null}
+                    />
+                  ) : (
+                    <td className="p-2">{r.kind === "lot" ? (r.ghiChu ?? "") : ""}</td>
+                  )}
                 </tr>
               );
             })}
