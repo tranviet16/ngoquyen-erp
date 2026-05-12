@@ -3,7 +3,7 @@ title: "CashAccount + opening balance (Tai chinh NQ)"
 description: >-
   Thêm master data CashAccount + opening balance, FK trên JournalEntry,
   seed 7 nguồn tiền từ SOP, backfill JE cũ, báo cáo thanh khoản chuẩn.
-status: pending
+status: completed
 priority: P2
 created: 2026-05-11
 ---

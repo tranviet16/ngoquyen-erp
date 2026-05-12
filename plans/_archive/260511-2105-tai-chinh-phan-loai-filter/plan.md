@@ -3,7 +3,7 @@ title: "Rewrite Phan loai chi phi (filter view) + costBehavior"
 description: >-
   Rewrite `/tai-chinh/phan-loai-chi-phi` từ CRUD master hierarchy thành filter view
   trên journal_entries (4 nhóm composed key). Thêm `costBehavior` enum cho JE.
-status: pending
+status: completed
 priority: P2
 created: 2026-05-11
 ---
