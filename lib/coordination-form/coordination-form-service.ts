@@ -12,6 +12,9 @@ import { nextFormCode, isUniqueViolation } from "./code-generator";
 import type { CreateDraftInput, UpdateDraftInput } from "./schemas";
 import type { CoordinationForm, CoordinationFormApproval, Department, User } from "@prisma/client";
 import { getDeptLeaders } from "@/lib/department-rbac";
+import { isOverdue } from "./sla";
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 const PAGE_SIZE = 20;
 
@@ -20,7 +23,7 @@ export type FormWithRelations = CoordinationForm & {
   creatorDept: Pick<Department, "id" | "code" | "name">;
   executorDept: Pick<Department, "id" | "code" | "name">;
   approvals: (CoordinationFormApproval & {
-    approver: Pick<User, "id" | "name">;
+    approver: Pick<User, "id" | "name"> | null;
   })[];
 };
 
@@ -79,18 +82,20 @@ export async function listForms(opts: {
     where.OR = orClauses;
   }
 
-  const [items, total] = await Promise.all([
+  const include = {
+    creator: { select: { id: true, name: true, email: true } },
+    creatorDept: { select: { id: true, code: true, name: true } },
+    executorDept: { select: { id: true, code: true, name: true } },
+    approvals: {
+      include: { approver: { select: { id: true, name: true } } },
+      orderBy: { signedAt: "asc" as const },
+    },
+  };
+
+  let [items, total] = await Promise.all([
     prisma.coordinationForm.findMany({
       where,
-      include: {
-        creator: { select: { id: true, name: true, email: true } },
-        creatorDept: { select: { id: true, code: true, name: true } },
-        executorDept: { select: { id: true, code: true, name: true } },
-        approvals: {
-          include: { approver: { select: { id: true, name: true } } },
-          orderBy: { signedAt: "asc" },
-        },
-      },
+      include,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
@@ -98,11 +103,22 @@ export async function listForms(opts: {
     prisma.coordinationForm.count({ where }),
   ]);
 
+  const overdueIds = items.filter((f) => isOverdue(f)).map((f) => f.id);
+  if (overdueIds.length > 0) {
+    await batchEscalate(overdueIds);
+    items = await prisma.coordinationForm.findMany({
+      where: { id: { in: items.map((f) => f.id) } },
+      include,
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
   return { items: items as FormWithRelations[], total, page, pageSize: PAGE_SIZE };
 }
 
 export async function getFormById(id: number): Promise<FormWithRelations | null> {
   const { ctx, accessMap } = await requireContext();
+  await tryEscalate(id);
   const form = await prisma.coordinationForm.findUnique({
     where: { id },
     include: {
@@ -288,17 +304,92 @@ export async function cancelForm(id: number): Promise<CoordinationForm> {
   });
 }
 
-async function requireLeaderForExecutor(formId: number): Promise<{
+async function requireLeaderOrDirectorForExecutor(formId: number): Promise<{
   ctx: UserContext;
   form: CoordinationForm;
 }> {
   const { ctx } = await requireContext();
   const form = await prisma.coordinationForm.findUnique({ where: { id: formId } });
   if (!form) throw new Error("Không tìm thấy phiếu");
+
+  if (form.escalatedAt) {
+    if (!ctx.isDirector) {
+      throw new Error("Phiếu đã quá hạn — chỉ Giám đốc duyệt");
+    }
+    return { ctx, form };
+  }
+
   if (!ctx.isLeader || ctx.departmentId !== form.executorDeptId) {
     throw new Error("Chỉ lãnh đạo phòng thực hiện được duyệt");
   }
   return { ctx, form };
+}
+
+// ─── SLA escalation ─────────────────────────────────────────────────────────
+
+async function notifyDirectorsOfEscalation(tx: Tx, form: CoordinationForm): Promise<void> {
+  const directors = await tx.user.findMany({
+    where: { isDirector: true },
+    select: { id: true },
+  });
+  if (directors.length === 0) {
+    console.warn(`[escalate] No isDirector users found for form ${form.code}`);
+    return;
+  }
+  await tx.notification.createMany({
+    data: directors.map((d) => ({
+      userId: d.id,
+      type: "coordination_form_escalated",
+      title: `Phiếu quá hạn: ${form.code}`,
+      body: `TBP không duyệt trong 24h, chuyển Giám đốc duyệt`,
+      link: `/van-hanh/phieu-phoi-hop/${form.id}`,
+    })),
+  });
+}
+
+async function escalateIfOverdueTx(tx: Tx, formId: number): Promise<CoordinationForm | null> {
+  const rows = await tx.$queryRaw<CoordinationForm[]>`
+    SELECT * FROM coordination_forms WHERE id = ${formId} FOR UPDATE
+  `;
+  const form = rows[0];
+  if (!form) return null;
+  if (!isOverdue(form)) return null;
+
+  const leaders = await getDeptLeaders(form.executorDeptId);
+  const fromUserId = leaders[0] ?? null;
+
+  const updated = await tx.coordinationForm.update({
+    where: { id: formId },
+    data: { escalatedAt: new Date(), escalatedFromUserId: fromUserId },
+  });
+
+  await tx.coordinationFormApproval.create({
+    data: {
+      formId,
+      step: "auto_escalated",
+      approverId: null,
+      action: "escalated",
+      comment: "Quá hạn 24h, chuyển Giám đốc",
+    },
+  });
+
+  await notifyDirectorsOfEscalation(tx, updated);
+  return updated;
+}
+
+export async function tryEscalate(formId: number): Promise<CoordinationForm | null> {
+  try {
+    return await prisma.$transaction((tx) => escalateIfOverdueTx(tx, formId));
+  } catch (e) {
+    console.error(`[escalate] Failed for form ${formId}:`, e);
+    return null;
+  }
+}
+
+async function batchEscalate(formIds: number[]): Promise<void> {
+  for (const id of formIds) {
+    await tryEscalate(id);
+  }
 }
 
 export async function leaderApprove(
@@ -306,7 +397,7 @@ export async function leaderApprove(
   assigneeId: string,
   comment?: string,
 ): Promise<CoordinationForm> {
-  const { ctx, form } = await requireLeaderForExecutor(id);
+  const { ctx, form } = await requireLeaderOrDirectorForExecutor(id);
   if (!assigneeId) throw new Error("Cần chọn nhân viên phụ trách trước khi duyệt");
 
   const assignee = await prisma.user.findUnique({
@@ -364,7 +455,7 @@ export async function leaderApprove(
 
 export async function leaderRejectRevise(id: number, comment: string): Promise<CoordinationForm> {
   if (!comment || comment.trim().length < 5) throw new Error("Lý do tối thiểu 5 ký tự");
-  const { ctx } = await requireLeaderForExecutor(id);
+  const { ctx } = await requireLeaderOrDirectorForExecutor(id);
   return applyTransition(id, "pending_leader", "leader_reject_revise", "leader", ctx.userId, comment, {}, async (tx, u) => {
     await notifyCreator(tx, u, "form_revising", `Phiếu ${u.code} cần sửa lại`, comment);
   });
@@ -372,7 +463,7 @@ export async function leaderRejectRevise(id: number, comment: string): Promise<C
 
 export async function leaderRejectClose(id: number, comment: string): Promise<CoordinationForm> {
   if (!comment || comment.trim().length < 5) throw new Error("Lý do tối thiểu 5 ký tự");
-  const { ctx } = await requireLeaderForExecutor(id);
+  const { ctx } = await requireLeaderOrDirectorForExecutor(id);
   return applyTransition(id, "pending_leader", "leader_reject_close", "leader", ctx.userId, comment, {
     closedAt: new Date(),
   }, async (tx, u) => {
@@ -399,22 +490,27 @@ export function resolveAvailableActions(
   const out: AvailableAction[] = [];
   const isCreator = form.creatorId === ctx.userId;
   const isExecutorLeader = ctx.isLeader && ctx.departmentId === form.executorDeptId;
+  const isEscalated = form.escalatedAt != null;
 
   if (form.status === "draft" && isCreator) out.push("edit", "submit", "cancel");
   if (form.status === "revising" && isCreator) out.push("edit", "resubmit", "cancel");
   if (form.status === "draft" && role === "admin" && !isCreator) out.push("cancel");
   if (form.status === "revising" && role === "admin" && !isCreator) out.push("cancel");
-  if (form.status === "pending_leader" && isExecutorLeader) {
-    out.push("leader_approve", "leader_reject_revise", "leader_reject_close");
+  if (form.status === "pending_leader") {
+    if (isEscalated) {
+      if (ctx.isDirector) out.push("leader_approve", "leader_reject_revise", "leader_reject_close");
+    } else if (isExecutorLeader) {
+      out.push("leader_approve", "leader_reject_revise", "leader_reject_close");
+    }
   }
   return out;
 }
 
 // Helper for assignee picker UI: list users in executor dept.
 export async function listAssigneeCandidates(formId: number): Promise<Array<{ id: string; name: string; email: string }>> {
-  const { ctx } = await requireLeaderForExecutor(formId);
+  const { form } = await requireLeaderOrDirectorForExecutor(formId);
   const users = await prisma.user.findMany({
-    where: { departmentId: ctx.departmentId! },
+    where: { departmentId: form.executorDeptId },
     select: { id: true, name: true, email: true },
     orderBy: { name: "asc" },
   });

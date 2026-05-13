@@ -59,6 +59,11 @@ const ACTION_LABEL: Record<string, string> = {
   leader_reject_revise: "Trưởng phòng yêu cầu sửa",
   leader_reject_close: "Trưởng phòng từ chối",
   cancel: "Hủy phiếu",
+  escalated: "Quá hạn 24h — chuyển Giám đốc",
+};
+
+const STEP_LABEL: Record<string, string> = {
+  auto_escalated: "Tự động chuyển Giám đốc",
 };
 
 type RejectKind = { type: "revise" | "close" };
@@ -211,6 +216,13 @@ export function DetailClient({ form, availableActions, departments }: Props) {
         </div>
       </div>
 
+      {form.escalatedAt && (
+        <div className="rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 p-3 text-sm">
+          <strong>⏰ Phiếu đã quá hạn 24h</strong> — TBP không duyệt trong thời hạn, đã chuyển Giám đốc duyệt vào{" "}
+          <span className="tabular-nums">{formatDateTime(form.escalatedAt)}</span>.
+        </div>
+      )}
+
       <div className="rounded-lg border bg-card shadow-sm divide-y">
         <div className="grid grid-cols-2 gap-2 p-3 text-sm">
           <div className="text-muted-foreground">Phòng tạo:</div>
@@ -309,9 +321,9 @@ export function DetailClient({ form, availableActions, departments }: Props) {
               <li key={a.id} className="p-3 text-sm">
                 <div className="flex items-baseline justify-between">
                   <span className="font-medium">
-                    {a.approver.name}{" "}
+                    {a.approver?.name ?? "(tự động)"}{" "}
                     <span className="text-xs text-muted-foreground">
-                      ({a.step})
+                      ({STEP_LABEL[a.step] ?? a.step})
                     </span>
                   </span>
                   <span className="text-xs text-muted-foreground tabular-nums">

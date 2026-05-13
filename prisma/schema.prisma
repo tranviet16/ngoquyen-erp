@@ -24,8 +24,9 @@ model User {
   auditLogs  AuditLog[]
   department Department? @relation(fields: [departmentId], references: [id])
 
-  coordinationFormsCreated  CoordinationForm[]         @relation("CFormCreator")
-  coordinationFormsApproved CoordinationFormApproval[] @relation("CFormApprover")
+  coordinationFormsCreated        CoordinationForm[]         @relation("CFormCreator")
+  coordinationFormsApproved       CoordinationFormApproval[] @relation("CFormApprover")
+  coordinationFormsEscalatedFrom  CoordinationForm[]         @relation("CFormEscalatedFrom")
 
   tasksCreated  Task[]         @relation("TaskCreator")
   tasksAssigned Task[]         @relation("TaskAssignee")
@@ -99,16 +100,21 @@ model CoordinationForm {
   updatedAt      DateTime  @updatedAt
   submittedAt    DateTime?
   closedAt       DateTime?
+  escalatedAt          DateTime?
+  escalatedFromUserId  String?
 
-  creator      User                       @relation("CFormCreator", fields: [creatorId], references: [id])
-  creatorDept  Department                 @relation("CFormCreatorDept", fields: [creatorDeptId], references: [id])
-  executorDept Department                 @relation("CFormExecutorDept", fields: [executorDeptId], references: [id])
-  approvals    CoordinationFormApproval[]
-  task         Task?
+  creator           User                       @relation("CFormCreator", fields: [creatorId], references: [id])
+  creatorDept       Department                 @relation("CFormCreatorDept", fields: [creatorDeptId], references: [id])
+  executorDept      Department                 @relation("CFormExecutorDept", fields: [executorDeptId], references: [id])
+  escalatedFromUser User?                      @relation("CFormEscalatedFrom", fields: [escalatedFromUserId], references: [id])
+  approvals         CoordinationFormApproval[]
+  task              Task?
 
   @@index([executorDeptId, status])
   @@index([creatorId])
   @@index([status])
+  @@index([status, submittedAt])
+  @@index([escalatedAt])
   @@map("coordination_forms")
 }
 
@@ -116,13 +122,13 @@ model CoordinationFormApproval {
   id         Int      @id @default(autoincrement())
   formId     Int
   step       String
-  approverId String
+  approverId String?
   action     String
   comment    String?
   signedAt   DateTime @default(now())
 
   form     CoordinationForm @relation(fields: [formId], references: [id], onDelete: Cascade)
-  approver User             @relation("CFormApprover", fields: [approverId], references: [id])
+  approver User?            @relation("CFormApprover", fields: [approverId], references: [id])
 
   @@index([formId])
   @@index([approverId])

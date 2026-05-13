@@ -6,7 +6,24 @@ import { Button } from "@/components/ui/button";
 import { statusLabel, type FormStatus } from "@/lib/coordination-form/state-machine";
 import type { FormWithRelations } from "@/lib/coordination-form/coordination-form-service";
 import { formatDate } from "@/lib/utils/format";
+import { hoursRemaining } from "@/lib/coordination-form/sla";
 import { Plus } from "lucide-react";
+
+function SlaCell({ form }: { form: FormWithRelations }) {
+  if (form.status !== "pending_leader") return <span className="text-muted-foreground">—</span>;
+  if (form.escalatedAt) {
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300">
+        Quá hạn
+      </span>
+    );
+  }
+  const h = hoursRemaining(form);
+  if (h == null) return <span className="text-muted-foreground">—</span>;
+  const remain = Math.max(0, Math.floor(h));
+  const color = h > 12 ? "text-emerald-600 dark:text-emerald-400" : h > 4 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
+  return <span className={`text-xs font-medium ${color}`}>Còn {remain}h</span>;
+}
 
 interface DeptRow {
   id: number;
@@ -116,6 +133,7 @@ export function ListClient({ data, departments, filter }: Props) {
               <th className="text-left px-3 py-2 font-semibold">Nội dung</th>
               <th className="text-left px-3 py-2 font-semibold">Ưu tiên</th>
               <th className="text-left px-3 py-2 font-semibold">Trạng thái</th>
+              <th className="text-left px-3 py-2 font-semibold">SLA</th>
               <th className="text-left px-3 py-2 font-semibold">Ngày tạo</th>
               <th className="text-right px-3 py-2 font-semibold">Hành động</th>
             </tr>
@@ -123,7 +141,7 @@ export function ListClient({ data, departments, filter }: Props) {
           <tbody>
             {data.items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-muted-foreground">
+                <td colSpan={9} className="text-center py-12 text-muted-foreground">
                   Chưa có phiếu nào
                 </td>
               </tr>
@@ -146,6 +164,7 @@ export function ListClient({ data, departments, filter }: Props) {
                       {statusLabel(f.status as FormStatus)}
                     </span>
                   </td>
+                  <td className="px-3 py-2"><SlaCell form={f} /></td>
                   <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">
                     {formatDate(f.createdAt)}
                   </td>

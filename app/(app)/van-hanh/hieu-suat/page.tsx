@@ -12,6 +12,9 @@ import { PeriodFilter } from "@/components/van-hanh/period-filter";
 import { MemberView } from "@/components/van-hanh/member-view";
 import { LeaderView } from "@/components/van-hanh/leader-view";
 import { DirectorView } from "@/components/van-hanh/director-view";
+import { countEscalatedInMonth } from "@/lib/coordination-form/sla-stats";
+import Link from "next/link";
+import { AlertCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +46,13 @@ export default async function Page({
 
   const isDirectorOrAdmin = user.role === "admin" || user.isDirector;
   const isLeader = user.isLeader && !!user.departmentId;
+
+  const now = new Date();
+  const escalatedThisMonth = isDirectorOrAdmin
+    ? await countEscalatedInMonth(now.getFullYear(), now.getMonth() + 1)
+    : 0;
+  const monthFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const monthTo = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 
   let body: React.ReactNode;
   if (isDirectorOrAdmin) {
@@ -80,6 +90,20 @@ export default async function Page({
           quarter={parsed.quarter}
         />
       </header>
+      {isDirectorOrAdmin && (
+        <Link
+          href={`/van-hanh/phieu-phoi-hop/thong-ke-sla?from=${monthFrom}&to=${monthTo}`}
+          className="flex items-center gap-3 rounded-lg border bg-card p-4 shadow-sm hover:bg-muted/40 transition-colors max-w-md"
+        >
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${escalatedThisMonth > 0 ? "bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-300" : "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300"}`}>
+            <AlertCircle className="size-5" aria-hidden="true" />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Phiếu phối hợp quá hạn tháng này</div>
+            <div className="text-2xl font-bold tabular-nums">{escalatedThisMonth}</div>
+          </div>
+        </Link>
+      )}
       {body}
     </div>
   );
