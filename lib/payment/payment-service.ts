@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/rbac";
+import { getOutstandingDebt, getCumulativePaid } from "@/lib/ledger/balance-service";
+import type { LedgerType } from "@/lib/ledger/ledger-types";
 
 export type PaymentCategory = "vat_tu" | "nhan_cong" | "dich_vu" | "khac";
 export type ProjectScope = "cty_ql" | "giao_khoan";
@@ -12,9 +14,21 @@ export type RoundStatus =
   | "rejected"
   | "closed";
 
+const VALID_CATEGORIES: PaymentCategory[] = ["vat_tu", "nhan_cong", "dich_vu", "khac"];
+
+/**
+ * Map PaymentCategory → LedgerType for balance auto-fill.
+ * dich_vu and khac have no ledger backing — SKIP auto-fill (default to 0).
+ */
+const CATEGORY_LEDGER_TYPE: Partial<Record<PaymentCategory, LedgerType>> = {
+  vat_tu: "material",
+  nhan_cong: "labor",
+  // dich_vu: no ledger backing — skip balance auto-fill
+  // khac: no ledger backing — skip balance auto-fill
+};
+
 export interface CreateRoundInput {
   month: string;
-  category: PaymentCategory;
   note?: string;
 }
 
@@ -24,10 +38,15 @@ export interface UpsertItemInput {
   supplierId: number;
   projectScope: ProjectScope;
   projectId: number | null;
-  congNo: number;
-  luyKe: number;
+  category: PaymentCategory;
+  /** Optional on create: null/undefined → auto-fill from balance-service. */
+  congNo?: number | null;
+  /** Optional on create: null/undefined → auto-fill from balance-service. */
+  luyKe?: number | null;
   soDeNghi: number;
   note?: string;
+  /** Admin-only: skip auto-fill and use raw congNo/luyKe values as-is. */
+  override?: boolean;
 }
 
 interface Actor {
@@ -64,7 +83,6 @@ function canApprove(actor: Actor) {
 export async function listRounds(filter: {
   month?: string;
   status?: RoundStatus;
-  category?: PaymentCategory;
 }) {
   await getActor();
   return prisma.paymentRound.findMany({
@@ -72,7 +90,6 @@ export async function listRounds(filter: {
       deletedAt: null,
       month: filter.month,
       status: filter.status,
-      category: filter.category,
     },
     include: {
       _count: { select: { items: true } },
@@ -106,8 +123,9 @@ export async function createRound(input: CreateRoundInput) {
   const actor = await getActor();
   if (!canCreate(actor.role)) throw new Error("Không có quyền lập đợt");
 
+  // Sequence = last sequence in the same month (across ALL categories) + 1
   const last = await prisma.paymentRound.findFirst({
-    where: { month: input.month, category: input.category, deletedAt: null },
+    where: { month: input.month, deletedAt: null },
     orderBy: { sequence: "desc" },
     select: { sequence: true },
   });
@@ -117,12 +135,38 @@ export async function createRound(input: CreateRoundInput) {
     data: {
       month: input.month,
       sequence,
-      category: input.category,
       status: "draft",
       createdById: actor.id,
       note: input.note,
     },
   });
+}
+
+/**
+ * Auto-fill congNo + luyKe from balance-service for categories with ledger backing.
+ * dich_vu and khac have no ledger rows — they default to 0.
+ */
+async function autoFillBalances(
+  category: PaymentCategory,
+  supplierId: number,
+  projectId: number | null
+): Promise<{ congNo: number; luyKe: number }> {
+  const ledgerType = CATEGORY_LEDGER_TYPE[category];
+  if (!ledgerType) {
+    // dich_vu / khac: no ledger backing, default to 0
+    return { congNo: 0, luyKe: 0 };
+  }
+
+  const [outstanding, paid] = await Promise.all([
+    getOutstandingDebt({ ledgerType, partyId: supplierId, projectId }),
+    getCumulativePaid({ ledgerType, partyId: supplierId, projectId }),
+  ]);
+
+  // Convert Prisma.Decimal → number at the DB write boundary
+  return {
+    congNo: outstanding.toNumber(),
+    luyKe: paid.toNumber(),
+  };
 }
 
 export async function upsertItem(input: UpsertItemInput) {
@@ -137,24 +181,146 @@ export async function upsertItem(input: UpsertItemInput) {
   if (round.createdById !== actor.id && !isAdmin(actor.role))
     throw new Error("Chỉ người lập đợt được sửa items");
 
-  const data = {
-    roundId: input.roundId,
-    supplierId: input.supplierId,
-    projectScope: input.projectScope,
-    projectId: input.projectId,
-    congNo: input.congNo,
-    luyKe: input.luyKe,
-    soDeNghi: input.soDeNghi,
-    note: input.note,
-  };
-
+  // ── UPDATE path ───────────────────────────────────────────────────────────
+  // Patch only the fields the caller sent. Do NOT re-pull balances.
   if (input.id) {
+    if (input.override && !isAdmin(actor.role))
+      throw new Error("Chỉ admin được dùng override");
+
+    // Build a sparse update object — only include defined fields.
+    // Category is mutable while the round is in 'draft' (enforced above via status check).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateData: Record<string, any> = {
+      soDeNghi: input.soDeNghi,
+    };
+    if (input.supplierId !== undefined) updateData.supplierId = input.supplierId;
+    if (input.projectScope !== undefined) updateData.projectScope = input.projectScope;
+    if (input.projectId !== undefined) updateData.projectId = input.projectId;
+    if (input.note !== undefined) updateData.note = input.note;
+    if (input.congNo != null) updateData.congNo = input.congNo;
+    if (input.luyKe != null) updateData.luyKe = input.luyKe;
+    if (input.category !== undefined) {
+      if (!VALID_CATEGORIES.includes(input.category)) {
+        throw new Error(
+          `category không hợp lệ: "${input.category}". Phải là một trong: ${VALID_CATEGORIES.join(", ")}`
+        );
+      }
+      updateData.category = input.category;
+    }
+
     return prisma.paymentRoundItem.update({
       where: { id: input.id },
-      data,
+      data: updateData,
     });
   }
-  return prisma.paymentRoundItem.create({ data });
+
+  // ── CREATE path ───────────────────────────────────────────────────────────
+  if (!VALID_CATEGORIES.includes(input.category)) {
+    throw new Error(
+      `category không hợp lệ: "${input.category}". Phải là một trong: ${VALID_CATEGORIES.join(", ")}`
+    );
+  }
+
+  if (input.override) {
+    // Admin override: use raw values without touching balance-service
+    if (!isAdmin(actor.role)) throw new Error("Chỉ admin được dùng override");
+    return prisma.paymentRoundItem.create({
+      data: {
+        roundId: input.roundId,
+        supplierId: input.supplierId,
+        projectScope: input.projectScope,
+        projectId: input.projectId,
+        category: input.category,
+        congNo: input.congNo ?? 0,
+        luyKe: input.luyKe ?? 0,
+        soDeNghi: input.soDeNghi,
+        note: input.note,
+      },
+    });
+  }
+
+  let congNo: number;
+  let luyKe: number;
+  let balancesRefreshedAt: Date | null = null;
+
+  if (input.congNo == null || input.luyKe == null) {
+    // Auto-fill from balance-service (snapshot frozen at creation time)
+    const filled = await autoFillBalances(
+      input.category,
+      input.supplierId,
+      input.projectId
+    );
+    congNo = filled.congNo;
+    luyKe = filled.luyKe;
+    balancesRefreshedAt = new Date();
+  } else {
+    // Caller supplied explicit values — trust them
+    congNo = input.congNo;
+    luyKe = input.luyKe;
+  }
+
+  return prisma.paymentRoundItem.create({
+    data: {
+      roundId: input.roundId,
+      supplierId: input.supplierId,
+      projectScope: input.projectScope,
+      projectId: input.projectId,
+      category: input.category,
+      congNo,
+      luyKe,
+      soDeNghi: input.soDeNghi,
+      note: input.note,
+      balancesRefreshedAt,
+    },
+  });
+}
+
+/**
+ * Re-pull balances from balance-service for a single item.
+ * Only allowed when the parent round is in 'draft' status.
+ * Caller must be the round creator or an admin.
+ */
+export async function refreshItemBalances(itemId: number) {
+  const actor = await getActor();
+
+  const item = await prisma.paymentRoundItem.findUnique({
+    where: { id: itemId },
+    include: {
+      round: { select: { status: true, createdById: true } },
+    },
+  });
+  if (!item) throw new Error("Không tìm thấy dòng");
+
+  if (item.round.status !== "draft") {
+    throw new Error(
+      `Chỉ có thể làm mới số dư khi đợt ở trạng thái nháp (hiện tại: ${item.round.status})`
+    );
+  }
+  if (item.round.createdById !== actor.id && !isAdmin(actor.role)) {
+    throw new Error("Chỉ người lập đợt hoặc admin được làm mới số dư");
+  }
+
+  const category = item.category as PaymentCategory;
+  const filled = await autoFillBalances(category, item.supplierId, item.projectId);
+
+  return prisma.paymentRoundItem.update({
+    where: { id: itemId },
+    data: {
+      congNo: filled.congNo,
+      luyKe: filled.luyKe,
+      balancesRefreshedAt: new Date(),
+    },
+  });
+}
+
+export async function listItemIdsForRound(roundId: number): Promise<number[]> {
+  await getActor();
+  const rows = await prisma.paymentRoundItem.findMany({
+    where: { roundId },
+    select: { id: true },
+    orderBy: { id: "asc" },
+  });
+  return rows.map((r) => r.id);
 }
 
 export async function deleteItem(itemId: number) {
@@ -315,6 +481,7 @@ export async function closeRound(roundId: number) {
 export interface AggregateRow {
   supplierId: number;
   supplierName: string;
+  category: PaymentCategory;
   projectScope: ProjectScope;
   soDeNghi: number;
   soDuyet: number;
@@ -326,6 +493,7 @@ export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
     Array<{
       supplier_id: number;
       supplier_name: string;
+      category: string;
       project_scope: string;
       so_de_nghi: string;
       so_duyet: string;
@@ -334,6 +502,7 @@ export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
     SELECT
       i."supplierId"      AS supplier_id,
       s.name              AS supplier_name,
+      i.category          AS category,
       i."projectScope"    AS project_scope,
       COALESCE(SUM(i."soDeNghi"), 0) AS so_de_nghi,
       COALESCE(SUM(i."soDuyet"), 0)  AS so_duyet
@@ -343,12 +512,13 @@ export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
     WHERE r."month" = ${month}
       AND r.status IN ('approved', 'closed')
       AND r."deletedAt" IS NULL
-    GROUP BY i."supplierId", s.name, i."projectScope"
-    ORDER BY s.name;
+    GROUP BY i."supplierId", s.name, i.category, i."projectScope"
+    ORDER BY s.name, i.category;
   `;
   return rows.map((r) => ({
     supplierId: Number(r.supplier_id),
     supplierName: r.supplier_name,
+    category: r.category as PaymentCategory,
     projectScope: r.project_scope as ProjectScope,
     soDeNghi: Number(r.so_de_nghi),
     soDuyet: Number(r.so_duyet),
