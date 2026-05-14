@@ -60,3 +60,19 @@ export async function closeRoundAction(roundId: number) {
   revalidatePath(`/thanh-toan/ke-hoach/${roundId}`);
   revalidatePath("/thanh-toan/ke-hoach");
 }
+
+export async function refreshItemBalancesAction(
+  itemId: number,
+  roundId: number
+) {
+  await svc.refreshItemBalances(itemId);
+  revalidatePath(`/thanh-toan/ke-hoach/${roundId}`);
+}
+
+export async function refreshAllItemBalancesAction(roundId: number) {
+  const ids = await svc.listItemIdsForRound(roundId);
+  for (const id of ids) {
+    await svc.refreshItemBalances(id);
+  }
+  revalidatePath(`/thanh-toan/ke-hoach/${roundId}`);
+}
