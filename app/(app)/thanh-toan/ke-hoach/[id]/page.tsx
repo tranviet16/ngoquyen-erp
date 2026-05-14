@@ -35,6 +35,8 @@ export default async function Page({
   ]);
   if (!round) notFound();
 
+  const actorRole: string | null = dbUser?.role ?? session.user.role ?? null;
+
   return (
     <RoundDetailClient
       round={round}
@@ -42,7 +44,7 @@ export default async function Page({
       projects={projects}
       currentUser={{
         id: session.user.id,
-        role: dbUser?.role ?? session.user.role ?? null,
+        role: actorRole,
         isDirector: dbUser?.isDirector ?? false,
       }}
     />

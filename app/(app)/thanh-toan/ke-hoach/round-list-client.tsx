@@ -18,7 +18,7 @@ import {
 import { createRoundAction } from "../actions";
 import type { PaymentCategory, RoundStatus } from "@/lib/payment/payment-service";
 
-const CATEGORY_LABEL: Record<PaymentCategory, string> = {
+export const CATEGORY_LABEL: Record<PaymentCategory, string> = {
   vat_tu: "Vật tư",
   nhan_cong: "Nhân công",
   dich_vu: "Dịch vụ",
@@ -29,7 +29,6 @@ interface RoundRow {
   id: number;
   month: string;
   sequence: number;
-  category: string;
   status: string;
   note: string | null;
   createdAt: Date;
@@ -39,21 +38,19 @@ interface RoundRow {
 
 interface Props {
   initialRounds: RoundRow[];
-  initialFilter: { month: string; status?: string; category?: string };
+  initialFilter: { month: string; status?: string };
 }
 
 export function RoundListClient({ initialRounds, initialFilter }: Props) {
   const router = useRouter();
   const [month, setMonth] = useState(initialFilter.month);
   const [status, setStatus] = useState(initialFilter.status ?? "");
-  const [category, setCategory] = useState(initialFilter.category ?? "");
   const [open, setOpen] = useState(false);
 
   function applyFilter() {
     const params = new URLSearchParams();
     if (month) params.set("month", month);
     if (status) params.set("status", status);
-    if (category) params.set("category", category);
     router.push(`/thanh-toan/ke-hoach?${params.toString()}`);
   }
 
@@ -87,20 +84,6 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
             <option value="closed">Đã đóng</option>
           </select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">Loại</label>
-          <select
-            className="block h-9 rounded-md border bg-background px-2 text-sm"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="">Tất cả</option>
-            <option value="vat_tu">Vật tư</option>
-            <option value="nhan_cong">Nhân công</option>
-            <option value="dich_vu">Dịch vụ</option>
-            <option value="khac">Khác</option>
-          </select>
-        </div>
         <Button variant="outline" onClick={applyFilter}>
           Lọc
         </Button>
@@ -113,7 +96,6 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
               <th className="px-3 py-2 text-left">#</th>
               <th className="px-3 py-2 text-left">Tháng</th>
               <th className="px-3 py-2 text-left">Đợt</th>
-              <th className="px-3 py-2 text-left">Loại</th>
               <th className="px-3 py-2 text-left">Trạng thái</th>
               <th className="px-3 py-2 text-left">Người lập</th>
               <th className="px-3 py-2 text-right">Số dòng</th>
@@ -124,7 +106,7 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
           <tbody>
             {initialRounds.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
                   Chưa có đợt thanh toán nào.
                 </td>
               </tr>
@@ -134,7 +116,6 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
                 <td className="px-3 py-2">{i + 1}</td>
                 <td className="px-3 py-2">{r.month}</td>
                 <td className="px-3 py-2">#{r.sequence}</td>
-                <td className="px-3 py-2">{CATEGORY_LABEL[r.category as PaymentCategory] ?? r.category}</td>
                 <td className="px-3 py-2">
                   <StatusBadge status={r.status} label={STATUS_LABEL[r.status as RoundStatus]} />
                 </td>
@@ -177,7 +158,6 @@ function CreateRoundDialog({
 }) {
   const router = useRouter();
   const [month, setMonth] = useState(defaultMonth);
-  const [category, setCategory] = useState<PaymentCategory>("vat_tu");
   const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -188,7 +168,7 @@ function CreateRoundDialog({
     }
     startTransition(async () => {
       try {
-        const r = await createRoundAction({ month, category, note: note || undefined });
+        const r = await createRoundAction({ month, note: note || undefined });
         toast.success("Đã tạo đợt mới");
         onClose();
         router.push(`/thanh-toan/ke-hoach/${r.id}`);
@@ -207,19 +187,6 @@ function CreateRoundDialog({
         <div>
           <label className="text-sm">Tháng</label>
           <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </div>
-        <div>
-          <label className="text-sm">Loại</label>
-          <select
-            className="block h-9 w-full rounded-md border bg-background px-2 text-sm"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as PaymentCategory)}
-          >
-            <option value="vat_tu">Vật tư</option>
-            <option value="nhan_cong">Nhân công</option>
-            <option value="dich_vu">Dịch vụ</option>
-            <option value="khac">Khác</option>
-          </select>
         </div>
         <div>
           <label className="text-sm">Ghi chú</label>
