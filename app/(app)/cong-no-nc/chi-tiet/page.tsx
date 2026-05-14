@@ -1,52 +1,127 @@
-import { getLaborDebtMatrix } from "@/lib/cong-no-nc/labor-ledger-service";
+import { requireModuleAccess } from "@/lib/acl/guards";
 import { prisma } from "@/lib/prisma";
-import { DebtMatrix, type DebtMatrixRow } from "@/components/ledger/debt-matrix";
-import { MultiSelectFilter } from "@/components/ledger/multi-select-filter";
-import { serializeDecimals } from "@/lib/serialize";
+import { getLaborDetailReport } from "@/lib/cong-no-nc/balance-report-service";
+import { DetailReportTable } from "@/components/ledger/detail-report-table";
+import { DetailReportFilter } from "@/components/ledger/detail-report-filter";
+import type { ViewMode } from "@/lib/cong-no-nc/balance-report-service";
 
 interface PageProps {
-  searchParams: Promise<{ entity?: string }>;
+  searchParams: Promise<{
+    year?: string;
+    month?: string;
+    entityIds?: string;
+    projectIds?: string;
+    view?: string;
+    showZero?: string;
+  }>;
 }
 
 export default async function ChiTietNcPage({ searchParams }: PageProps) {
-  const sp = await searchParams;
-  const entityIds = sp.entity
-    ? sp.entity.split(",").map(Number).filter((n) => Number.isFinite(n) && n > 0)
-    : [];
+  await requireModuleAccess("cong-no-nc.chi-tiet", { minLevel: "read", scope: "module" });
 
-  const [matrixRows, allEntities, contractors] = await Promise.all([
-    getLaborDebtMatrix(entityIds.length > 0 ? { entityIds } : undefined),
-    prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.contractor.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  const sp = await searchParams;
+
+  // Parse filters from URL
+  const year = sp.year ? parseInt(sp.year, 10) : undefined;
+  const month = sp.month ? parseInt(sp.month, 10) : undefined;
+
+  const entityIds: number[] =
+    sp.entityIds
+      ?.split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n > 0) ?? [];
+
+  const projectIds: number[] =
+    sp.projectIds
+      ?.split(",")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n > 0) ?? [];
+
+  const validViews: ViewMode[] = ["trong-thang", "luy-ke", "ca-hai"];
+  const view: ViewMode = validViews.includes(sp.view as ViewMode)
+    ? (sp.view as ViewMode)
+    : "ca-hai";
+
+  const showZero = sp.showZero === "1";
+
+  // Load entities + initial cascade projects in parallel
+  const entityIdsParam = entityIds.length > 0 ? entityIds : null;
+  const [allEntities, cascadeProjectIdRows] = await Promise.all([
+    prisma.entity.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.$queryRaw<{ project_id: number | null }[]>`
+      SELECT DISTINCT "projectId" AS project_id
+      FROM ledger_transactions
+      WHERE "ledgerType" = 'labor'
+        AND "deletedAt" IS NULL
+        AND "projectId" IS NOT NULL
+        AND (${entityIdsParam}::int[] IS NULL OR "entityId" = ANY(${entityIdsParam}::int[]))
+
+      UNION
+
+      SELECT DISTINCT "projectId" AS project_id
+      FROM ledger_opening_balances
+      WHERE "ledgerType" = 'labor'
+        AND "projectId" IS NOT NULL
+        AND (${entityIdsParam}::int[] IS NULL OR "entityId" = ANY(${entityIdsParam}::int[]))
+    `,
   ]);
 
-  const visibleEntities = entityIds.length > 0
-    ? allEntities.filter((e) => entityIds.includes(e.id))
-    : allEntities;
+  const cascadeIds = cascadeProjectIdRows
+    .map((r) => r.project_id)
+    .filter((id): id is number => id != null);
 
-  const contractorMap = Object.fromEntries(contractors.map((c) => [c.id, c.name]));
-  const rows: DebtMatrixRow[] = matrixRows.map((r) => ({
-    partyId: r.partyId,
-    partyName: contractorMap[r.partyId] ?? `Đội #${r.partyId}`,
-    cells: r.cells,
-    totals: r.totals,
-  }));
+  const initialProjects = cascadeIds.length > 0
+    ? await prisma.project.findMany({
+        where: { id: { in: cascadeIds }, deletedAt: null },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
+  // Fetch report data
+  const { rows, subtotals } = await getLaborDetailReport({
+    year,
+    month,
+    entityIds: entityIds.length > 0 ? entityIds : undefined,
+    projectIds: projectIds.length > 0 ? projectIds : undefined,
+    view,
+    showZero,
+  });
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Công nợ chi tiết - Nhân công</h1>
+        <h1 className="text-2xl font-bold">Công nợ chi tiết – Nhân công</h1>
         <p className="text-sm text-muted-foreground">
-          Pivot Chủ thể × Đội thi công. Mỗi ô gồm 4 nhóm: Đầu kỳ / Lấy hàng / Trả tiền / Cuối kỳ × (TT, HĐ).
+          Phát sinh / Đã trả / Nợ theo (Chủ thể × Đội thi công × Công trình)
         </p>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-medium">Lọc chủ thể:</span>
-        <MultiSelectFilter options={allEntities} selected={entityIds} paramName="entity" label="chủ thể" />
-      </div>
+      <DetailReportFilter
+        entities={allEntities}
+        initialProjects={initialProjects}
+        ledgerType="labor"
+        partyLabel="Đội thi công"
+        defaultValues={{
+          year,
+          month,
+          entityIds,
+          projectIds,
+          view,
+          showZero,
+        }}
+      />
 
-      <DebtMatrix rows={serializeDecimals(rows)} entities={visibleEntities} partyLabel="Đội thi công" />
+      <DetailReportTable
+        rows={rows}
+        subtotals={subtotals}
+        view={view}
+        partyLabel="Đội thi công"
+      />
     </div>
   );
 }
