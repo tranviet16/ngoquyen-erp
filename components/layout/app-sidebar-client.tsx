@@ -19,6 +19,7 @@ import {
   Shield,
   CircleDollarSign,
   FileSpreadsheet,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -51,6 +52,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Shield,
   CircleDollarSign,
   FileSpreadsheet,
+  FileText,
 };
 
 export type NavItemData = {
