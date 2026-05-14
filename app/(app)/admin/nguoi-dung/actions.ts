@@ -1,7 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { setGrant, removeGrant } from "@/lib/admin/user-grants-service";
+import {
+  setGrant,
+  removeGrant,
+  updateUserAttributes,
+  type UpdateUserAttributesInput,
+} from "@/lib/admin/user-grants-service";
 import type { AccessLevel } from "@/lib/dept-access";
 
 export async function setGrantAction(
@@ -15,5 +20,12 @@ export async function setGrantAction(
 
 export async function removeGrantAction(userId: string, deptId: number) {
   await removeGrant(userId, deptId);
+  revalidatePath("/admin/nguoi-dung");
+}
+
+export async function updateUserAttributesAction(
+  input: UpdateUserAttributesInput,
+) {
+  await updateUserAttributes(input);
   revalidatePath("/admin/nguoi-dung");
 }

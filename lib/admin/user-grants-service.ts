@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
 import { LEVEL_ORDER, type AccessLevel } from "@/lib/dept-access";
+import { ALL_ROLES, type AppRole } from "@/lib/rbac";
 
 async function assertAdmin(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -112,6 +113,51 @@ export async function removeGrant(userId: string, deptId: number): Promise<void>
     action: "delete",
     before: { level: existing.level },
     userId: adminId,
+  });
+}
+
+export interface UpdateUserAttributesInput {
+  userId: string;
+  role: string;
+  isLeader: boolean;
+  isDirector: boolean;
+  departmentId: number | null;
+}
+
+export async function updateUserAttributes(
+  input: UpdateUserAttributesInput,
+): Promise<void> {
+  const adminId = await assertAdmin();
+
+  if (!ALL_ROLES.includes(input.role as AppRole)) {
+    throw new Error(`Role không hợp lệ: ${input.role}`);
+  }
+
+  if (input.userId === adminId && input.role !== "admin") {
+    throw new Error("Không thể tự hạ quyền admin của chính mình");
+  }
+
+  if (input.isLeader && input.departmentId === null) {
+    throw new Error("Trưởng bộ phận phải có phòng");
+  }
+
+  if (input.departmentId !== null) {
+    const exists = await prisma.department.findUnique({
+      where: { id: input.departmentId },
+      select: { id: true },
+    });
+    if (!exists) throw new Error("Phòng không tồn tại");
+  }
+
+  // Audit log written automatically by prisma $extends update interceptor (lib/prisma.ts).
+  await prisma.user.update({
+    where: { id: input.userId },
+    data: {
+      role: input.role,
+      isLeader: input.isLeader,
+      isDirector: input.isDirector,
+      departmentId: input.departmentId,
+    },
   });
 }
 

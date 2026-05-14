@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Plus, X } from "lucide-react";
 import type { UserWithGrants } from "@/lib/admin/user-grants-service";
 import type { AccessLevel } from "@/lib/dept-access";
-import { setGrantAction, removeGrantAction } from "./actions";
+import {
+  setGrantAction,
+  removeGrantAction,
+  updateUserAttributesAction,
+} from "./actions";
+import { ALL_ROLES } from "@/lib/rbac";
+
+const ROLE_LABELS_VI: Record<string, string> = {
+  admin: "Quản trị",
+  ketoan: "Kế toán",
+  chihuy_ct: "Chỉ huy CT",
+  canbo_vt: "Cán bộ VT",
+  viewer: "Xem",
+};
 
 interface DeptOpt {
   id: number;
@@ -56,14 +69,15 @@ export function UserGrantsClient({
 
       <div className="rounded border bg-card overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left">
+          <thead className="bg-muted/50">
             <tr>
-              <th className="px-3 py-2">Tên</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Phòng</th>
-              <th className="px-3 py-2">Cờ</th>
-              <th className="px-3 py-2">Quyền xem phòng khác</th>
+              <th className="px-3 py-2 text-left">Tên</th>
+              <th className="px-3 py-2 text-left">Email</th>
+              <th className="px-3 py-2 text-left">Role</th>
+              <th className="px-3 py-2 text-left">Phòng</th>
+              <th className="px-3 py-2 text-left">Cờ</th>
+              <th className="px-3 py-2 text-left">Quyền xem phòng khác</th>
+              <th className="px-3 py-2 text-left">Hành động</th>
             </tr>
           </thead>
           <tbody>
@@ -80,7 +94,7 @@ export function UserGrantsClient({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
                   Không có user
                 </td>
               </tr>
@@ -108,6 +122,43 @@ function UserRow({
   const [newDeptId, setNewDeptId] = useState<string>("");
   const [newLevel, setNewLevel] = useState<AccessLevel>("read");
 
+  const [role, setRole] = useState<string>(user.role ?? "viewer");
+  const [isLeader, setIsLeader] = useState<boolean>(user.isLeader);
+  const [isDirector, setIsDirector] = useState<boolean>(user.isDirector);
+  const [deptId, setDeptId] = useState<number | null>(user.departmentId ?? null);
+
+  // Remember the last server snapshot used to init local state. Resync only
+  // when current local state still matches it (= no pending edit). Prevents
+  // sibling router.refresh() from clobbering an in-progress edit on this row.
+  const lastServerRef = useRef({
+    role: user.role ?? "viewer",
+    isLeader: user.isLeader,
+    isDirector: user.isDirector,
+    deptId: user.departmentId ?? null,
+  });
+
+  useEffect(() => {
+    const next = {
+      role: user.role ?? "viewer",
+      isLeader: user.isLeader,
+      isDirector: user.isDirector,
+      deptId: user.departmentId ?? null,
+    };
+    const prev = lastServerRef.current;
+    if (role === prev.role) setRole(next.role);
+    if (isLeader === prev.isLeader) setIsLeader(next.isLeader);
+    if (isDirector === prev.isDirector) setIsDirector(next.isDirector);
+    if (deptId === prev.deptId) setDeptId(next.deptId);
+    lastServerRef.current = next;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.role, user.isLeader, user.isDirector, user.departmentId]);
+
+  const dirty =
+    role !== (user.role ?? "viewer") ||
+    isLeader !== user.isLeader ||
+    isDirector !== user.isDirector ||
+    deptId !== (user.departmentId ?? null);
+
   const grantedDeptIds = new Set(user.grants.map((g) => g.deptId));
   const availableDepts = departments.filter(
     (d) => d.id !== user.departmentId && !grantedDeptIds.has(d.id),
@@ -115,6 +166,27 @@ function UserRow({
 
   const isPrivileged =
     user.role === "admin" || user.isDirector;
+
+  function handleSaveAttrs() {
+    startTransition(async () => {
+      try {
+        await updateUserAttributesAction({
+          userId: user.id,
+          role,
+          isLeader,
+          isDirector,
+          departmentId: deptId,
+        });
+        toast.success("Đã lưu");
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Lỗi khi lưu");
+      }
+    });
+  }
+
+  const stop = (e: React.MouseEvent | React.ChangeEvent) =>
+    e.stopPropagation();
 
   function handleAdd() {
     const id = Number(newDeptId);
@@ -166,23 +238,62 @@ function UserRow({
       >
         <td className="px-3 py-2 font-medium">{user.name ?? "-"}</td>
         <td className="px-3 py-2 text-muted-foreground">{user.email}</td>
-        <td className="px-3 py-2">
-          <span className="inline-flex rounded bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">
-            {user.role}
-          </span>
+        <td className="px-3 py-2" onClick={stop}>
+          <select
+            value={role}
+            disabled={pending}
+            onChange={(e) => setRole(e.target.value)}
+            onClick={stop}
+            className="rounded border px-2 py-1 text-xs bg-background"
+          >
+            {ALL_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS_VI[r] ?? r}
+              </option>
+            ))}
+          </select>
         </td>
-        <td className="px-3 py-2">{user.departmentName ?? "-"}</td>
-        <td className="px-3 py-2 space-x-1">
-          {user.isLeader && (
-            <span className="inline-flex rounded bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 px-2 py-0.5 text-xs">
-              Leader
-            </span>
-          )}
-          {user.isDirector && (
-            <span className="inline-flex rounded bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300 px-2 py-0.5 text-xs">
-              Director
-            </span>
-          )}
+        <td className="px-3 py-2" onClick={stop}>
+          <select
+            value={deptId ?? ""}
+            disabled={pending}
+            onChange={(e) =>
+              setDeptId(e.target.value ? Number(e.target.value) : null)
+            }
+            onClick={stop}
+            className="rounded border px-2 py-1 text-xs bg-background min-w-[160px]"
+          >
+            <option value="">— Không —</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td className="px-3 py-2" onClick={stop}>
+          <div className="flex flex-col gap-1 text-xs">
+            <label className="inline-flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isLeader}
+                disabled={pending}
+                onChange={(e) => setIsLeader(e.target.checked)}
+                onClick={stop}
+              />
+              <span>TBP</span>
+            </label>
+            <label className="inline-flex items-center gap-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isDirector}
+                disabled={pending}
+                onChange={(e) => setIsDirector(e.target.checked)}
+                onClick={stop}
+              />
+              <span>Giám đốc</span>
+            </label>
+          </div>
         </td>
         <td className="px-3 py-2">
           {isPrivileged ? (
@@ -195,10 +306,22 @@ function UserRow({
             </span>
           )}
         </td>
+        <td className="px-3 py-2" onClick={stop}>
+          <Button
+            size="sm"
+            disabled={!dirty || pending}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSaveAttrs();
+            }}
+          >
+            Lưu
+          </Button>
+        </td>
       </tr>
       {isOpen && (
         <tr className="border-t bg-muted/20">
-          <td colSpan={6} className="px-3 py-3">
+          <td colSpan={7} className="px-3 py-3">
             {isPrivileged ? (
               <p className="text-sm text-muted-foreground">
                 User này có quyền xem tất cả phòng (admin/director).
