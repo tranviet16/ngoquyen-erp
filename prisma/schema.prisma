@@ -24,9 +24,9 @@ model User {
   auditLogs  AuditLog[]
   department Department? @relation(fields: [departmentId], references: [id])
 
-  coordinationFormsCreated        CoordinationForm[]         @relation("CFormCreator")
-  coordinationFormsApproved       CoordinationFormApproval[] @relation("CFormApprover")
-  coordinationFormsEscalatedFrom  CoordinationForm[]         @relation("CFormEscalatedFrom")
+  coordinationFormsCreated       CoordinationForm[]         @relation("CFormCreator")
+  coordinationFormsApproved      CoordinationFormApproval[] @relation("CFormApprover")
+  coordinationFormsEscalatedFrom CoordinationForm[]         @relation("CFormEscalatedFrom")
 
   tasksCreated  Task[]         @relation("TaskCreator")
   tasksAssigned Task[]         @relation("TaskAssignee")
@@ -44,6 +44,10 @@ model User {
   projectPermissionsGranted ProjectPermission[] @relation("ProjectPermissionGranter")
   projectGrantAll           ProjectGrantAll?    @relation("ProjectGrantAllUser")
   projectGrantAllGranted    ProjectGrantAll[]   @relation("ProjectGrantAllGranter")
+
+  paymentRoundsCreated  PaymentRound[]     @relation("PaymentRoundCreator")
+  paymentRoundsApproved PaymentRound[]     @relation("PaymentRoundApprover")
+  paymentItemsApproved  PaymentRoundItem[] @relation("PaymentItemApprover")
 
   @@index([departmentId])
   @@map("users")
@@ -87,21 +91,21 @@ model UserDeptAccess {
 }
 
 model CoordinationForm {
-  id             Int       @id @default(autoincrement())
-  code           String    @unique
-  creatorId      String
-  creatorDeptId  Int
-  executorDeptId Int
-  content        String
-  priority       String    @default("trung_binh")
-  deadline       DateTime?
-  status         String    @default("draft")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  submittedAt    DateTime?
-  closedAt       DateTime?
-  escalatedAt          DateTime?
-  escalatedFromUserId  String?
+  id                  Int       @id @default(autoincrement())
+  code                String    @unique
+  creatorId           String
+  creatorDeptId       Int
+  executorDeptId      Int
+  content             String
+  priority            String    @default("trung_binh")
+  deadline            DateTime?
+  status              String    @default("draft")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  submittedAt         DateTime?
+  closedAt            DateTime?
+  escalatedAt         DateTime?
+  escalatedFromUserId String?
 
   creator           User                       @relation("CFormCreator", fields: [creatorId], references: [id])
   creatorDept       Department                 @relation("CFormCreatorDept", fields: [creatorDeptId], references: [id])
@@ -224,6 +228,8 @@ model Supplier {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  paymentItems PaymentRoundItem[]
+
   // Partial unique enforced via raw SQL: suppliers_name_active_unique WHERE "deletedAt" IS NULL
   @@index([name])
   @@map("suppliers")
@@ -258,6 +264,7 @@ model Project {
 
   categories      ProjectCategory[]
   userPermissions ProjectPermission[]
+  paymentItems    PaymentRoundItem[]
 
   // Partial unique enforced via raw SQL: projects_code_active_unique WHERE "deletedAt" IS NULL
   @@index([code])
@@ -547,6 +554,58 @@ model SupplierReconciliation {
   @@index([supplierId, periodFrom])
   @@index([importRunId])
   @@map("supplier_reconciliations")
+}
+
+// ─── Payment Module ──────────────────────────────────────────────────────────
+
+model PaymentRound {
+  id           Int       @id @default(autoincrement())
+  month        String // "YYYY-MM"
+  sequence     Int
+  category     String // vat_tu | nhan_cong | dich_vu | khac
+  status       String    @default("draft") // draft|submitted|approved|rejected|closed
+  createdById  String
+  submittedAt  DateTime?
+  approvedById String?
+  approvedAt   DateTime?
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  createdBy  User               @relation("PaymentRoundCreator", fields: [createdById], references: [id])
+  approvedBy User?              @relation("PaymentRoundApprover", fields: [approvedById], references: [id])
+  items      PaymentRoundItem[]
+
+  @@unique([month, sequence, category])
+  @@index([status, month])
+  @@map("payment_rounds")
+}
+
+model PaymentRoundItem {
+  id           Int       @id @default(autoincrement())
+  roundId      Int
+  supplierId   Int
+  projectScope String // cty_ql | giao_khoan
+  projectId    Int?
+  congNo       Decimal   @default(0) @db.Decimal(18, 2)
+  luyKe        Decimal   @default(0) @db.Decimal(18, 2)
+  soDeNghi     Decimal   @default(0) @db.Decimal(18, 2)
+  soDuyet      Decimal?  @db.Decimal(18, 2)
+  approvedAt   DateTime?
+  approvedById String?
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  round      PaymentRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  supplier   Supplier     @relation(fields: [supplierId], references: [id])
+  project    Project?     @relation(fields: [projectId], references: [id])
+  approvedBy User?        @relation("PaymentItemApprover", fields: [approvedById], references: [id])
+
+  @@index([roundId])
+  @@index([supplierId])
+  @@map("payment_round_items")
 }
 
 // ─── Ledger Models (Phase 5 — Công nợ Vật tư / Nhân công) ───────────────────

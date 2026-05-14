@@ -29,6 +29,8 @@ const NAV_GROUPS: NavGroupSpec[] = [
       { label: "Công nợ vật tư", href: "/cong-no-vt", icon: "Receipt", moduleKey: "cong-no-vt" },
       { label: "Công nợ nhân công", href: "/cong-no-nc", icon: "HardHat", moduleKey: "cong-no-nc" },
       { label: "Tài chính NQ", href: "/tai-chinh", icon: "Wallet", moduleKey: "tai-chinh" },
+      { label: "KH thanh toán", href: "/thanh-toan/ke-hoach", icon: "CircleDollarSign", moduleKey: "thanh-toan.ke-hoach" },
+      { label: "Tổng hợp TT tháng", href: "/thanh-toan/tong-hop", icon: "FileSpreadsheet", moduleKey: "thanh-toan.tong-hop" },
     ],
   },
   {

@@ -14,6 +14,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "cong-no-nc": "Công nợ nhân công",
   "sl-dt": "Sản lượng – Doanh thu",
   "tai-chinh": "Tài chính NQ",
+  "thanh-toan": "Thanh toán",
   "van-hanh": "Vận hành",
   "thong-bao": "Thông báo",
   admin: "Quản trị",
@@ -50,6 +51,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   // Cong no sub
   "chi-tiet": "Chi tiết",
   "bao-cao-thang": "Báo cáo tháng",
+  // Thanh toan sub
+  "ke-hoach": "Kế hoạch",
+  "tong-hop": "Tổng hợp",
   "so-du-ban-dau": "Số dư ban đầu",
   "nhap-lieu": "Nhập liệu",
   // Tai chinh sub

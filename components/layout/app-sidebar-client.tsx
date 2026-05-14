@@ -17,6 +17,8 @@ import {
   KanbanSquare,
   Bell,
   Shield,
+  CircleDollarSign,
+  FileSpreadsheet,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -47,6 +49,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   KanbanSquare,
   Bell,
   Shield,
+  CircleDollarSign,
+  FileSpreadsheet,
 };
 
 export type NavItemData = {

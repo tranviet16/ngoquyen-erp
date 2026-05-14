@@ -13,6 +13,8 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   "cong-no-vt": "Công nợ vật tư",
   "cong-no-nc": "Công nợ nhân công",
   "tai-chinh": "Tài chính",
+  "thanh-toan.ke-hoach": "Thanh toán – Kế hoạch",
+  "thanh-toan.tong-hop": "Thanh toán – Tổng hợp",
   "van-hanh.cong-viec": "Vận hành – Công việc",
   "van-hanh.phieu-phoi-hop": "Vận hành – Phiếu phối hợp",
   "van-hanh.hieu-suat": "Vận hành – Hiệu suất",

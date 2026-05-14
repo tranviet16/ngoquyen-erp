@@ -29,6 +29,8 @@ const CANBO_VT_EDIT_MODULES = new Set<ModuleKey>([
   "van-hanh.cong-viec",
   "van-hanh.phieu-phoi-hop",
   "van-hanh.hieu-suat",
+  "thanh-toan.ke-hoach",
+  "thanh-toan.tong-hop",
   "dashboard",
   "thong-bao",
 ]);
