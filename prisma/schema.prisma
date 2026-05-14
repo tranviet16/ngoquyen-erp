@@ -562,7 +562,6 @@ model PaymentRound {
   id           Int       @id @default(autoincrement())
   month        String // "YYYY-MM"
   sequence     Int
-  category     String // vat_tu | nhan_cong | dich_vu | khac
   status       String    @default("draft") // draft|submitted|approved|rejected|closed
   createdById  String
   submittedAt  DateTime?
@@ -577,26 +576,28 @@ model PaymentRound {
   approvedBy User?              @relation("PaymentRoundApprover", fields: [approvedById], references: [id])
   items      PaymentRoundItem[]
 
-  @@unique([month, sequence, category])
+  @@unique([month, sequence])
   @@index([status, month])
   @@map("payment_rounds")
 }
 
 model PaymentRoundItem {
-  id           Int       @id @default(autoincrement())
-  roundId      Int
-  supplierId   Int
-  projectScope String // cty_ql | giao_khoan
-  projectId    Int?
-  congNo       Decimal   @default(0) @db.Decimal(18, 2)
-  luyKe        Decimal   @default(0) @db.Decimal(18, 2)
-  soDeNghi     Decimal   @default(0) @db.Decimal(18, 2)
-  soDuyet      Decimal?  @db.Decimal(18, 2)
-  approvedAt   DateTime?
-  approvedById String?
-  note         String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                  Int       @id @default(autoincrement())
+  roundId             Int
+  supplierId          Int
+  projectScope        String // cty_ql | giao_khoan
+  projectId           Int?
+  category            String // vat_tu | nhan_cong | dich_vu | khac
+  congNo              Decimal   @default(0) @db.Decimal(18, 2)
+  luyKe               Decimal   @default(0) @db.Decimal(18, 2)
+  soDeNghi            Decimal   @default(0) @db.Decimal(18, 2)
+  soDuyet             Decimal?  @db.Decimal(18, 2)
+  approvedAt          DateTime?
+  approvedById        String?
+  balancesRefreshedAt DateTime?
+  note                String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   round      PaymentRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
   supplier   Supplier     @relation(fields: [supplierId], references: [id])
@@ -605,6 +606,7 @@ model PaymentRoundItem {
 
   @@index([roundId])
   @@index([supplierId])
+  @@index([roundId, category])
   @@map("payment_round_items")
 }
 
