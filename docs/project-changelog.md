@@ -5,8 +5,52 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ## [Unreleased]
 
 ### Planned
-- Plan B: Task Swimlane — swimlane view for tasks with role-based column filtering (blocked by Plan A)
-- Plan C: Performance MVP — performance dashboard with role/director-based access (blocked by Plan A)
+- Plan B: Task Swimlane — swimlane view for tasks with role-based column filtering
+- Plan C: Performance MVP — performance dashboard with role/director-based access
+
+---
+
+## [2026-05-15] — Payment Round Refactor: EntityId FK + Cascade UI + 4-Category Pivot
+
+### Added
+
+**Schema Changes**
+- `PaymentRoundItem.entityId: Int FK` — References Entity (chu thể) instead of enum projectScope
+- Foreign key constraint ensures entity validity; indexes on (roundId, entityId) for query performance
+
+**API Cascade Endpoints**
+- `GET /api/thanh-toan/cascade-suppliers` — Query: ledgerType + entityId + optional projectId → returns distinct suppliers from ledger_transactions
+  - Handles all ledger types (material, labor); labor short-circuits to `[]` (uses Contractor, not Supplier)
+  - Falls back to all active suppliers when ledgerType=all
+- Modified `GET /api/cong-no/cascade-projects` — Now widened ACL to accept any of 3 modules: cong-no-vt.chi-tiet, cong-no-nc.chi-tiet, **thanh-toan.ke-hoach**
+  - Filters projects by entityIds (optional, multi-select) + ledgerType
+
+**Cascade UI**
+- Form flow: Select Entity (chu thể) → Projects (filtered by ledgerType + entity) → Suppliers (filtered by ledgerType + entity + project)
+- Payment summary now pivots on 4 categories × N entities (was 4 × 2 projectScope enum)
+
+### Changed
+
+**Service Layer**
+- `lib/payment/payment-service.ts` — `autoFillBalances()` now requires entityId parameter
+  - Threads entityId to balance-service calls: `getOutstandingDebt()` and `getCumulativePaid()`
+  - Prevents cross-entity balance bleed (latent bug fix)
+- Category mapping unchanged: vat_tu/nhan_cong have ledger backing; dich_vu/khac default to 0
+
+**Data Model**
+- `PaymentRoundItem` columns stable; only backing FK changed (projectScope enum → entityId Int)
+- Existing payment rounds unaffected; data migration handles old records
+
+### Fixed
+
+- **Cross-Entity Bleed:** autoFillBalances now explicitly filters by entityId when querying ledger tables
+- **ACL Granularity:** cascade-projects endpoint now respects payment module access independently from debt modules
+
+### Migration
+
+- No breaking schema change to client-facing APIs
+- Existing payment rounds with project-scoped logic continue to work
+- New cascade endpoints support entity-filtered supplier selection
 
 ---
 

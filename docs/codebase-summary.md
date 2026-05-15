@@ -4,7 +4,7 @@
 
 **ngoquyyen-erp** is an enterprise resource planning (ERP) system built with Next.js 14 (App Router), TypeScript, Prisma ORM, and PostgreSQL. The system manages projects (du-án), supplier debt (cộng nợ), tasks (công việc), coordination forms (phiếu phối hợp), and administrative operations through a granular, role-based access control system.
 
-**Latest Major Change:** 2026-05-10 Plan A — Vận hành module restructuring + 2-axis ACL refactor
+**Latest Major Change:** 2026-05-15 Payment round refactor — EntityId FK + cascade UI + 4-category pivot. Previous: 2026-05-10 Plan A — Vận hành module + 2-axis ACL
 
 ---
 
@@ -110,21 +110,25 @@ ngoquyyen-erp/
 
 **ACL Axis:** Project-based (`ProjectPermission` + `ProjectGrantAll`)
 
-### 3. Supplier Debt (cộng-nợ-*)
+### 3. Supplier Debt (cộng-nợ-*) & Payment Planning (kế-hoạch-thanh-toán)
 
-**Models:** SupplierDebt, SupplierDebtDetail (per dept)
+**Models:** SupplierDebt, SupplierDebtDetail (per dept), PaymentRound, PaymentRoundItem (Entity-Supplier-Project-Category matrix)
 
 **Key Features:**
 - Debt matrix by supplier × dept
 - Aging calculation and payment terms
-- Debt filter by entity type
+- Debt filter by entity type (chu thể)
 - Sticky table scroll for large datasets
+- Payment planning with 4-category breakdown (vat_tu, nhan_cong, dich_vu, khac)
+- Payment round approval workflow with entity cascade
 
-**ACL Axis:** Dept-scoped (`UserDeptAccess`)
+**ACL Axis:** Dept-scoped (`UserDeptAccess`) for debt routes; Project-filtered for payment cascade
 
 **Routes:**
 - `/cong-no-vt/` — Supplier debt (Vật Tư Materials dept)
 - `/cong-no-nc/` — Supplier debt (Nhân Công Labor dept)
+- `/api/cong-no/cascade-projects` — Fetch projects by ledgerType + entityIds (widened ACL: accepts 3 modules)
+- `/api/thanh-toan/cascade-suppliers` — Fetch suppliers by ledgerType + entityId + projectId
 
 ### 4. Tasks (van-hanh/cong-viec)
 
@@ -154,7 +158,27 @@ ngoquyyen-erp/
 
 **Route Change:** `/phieu-phoi-hop` → `/van-hanh/phieu-phoi-hop` (2026-05-10; 307 redirect)
 
-### 6. Authentication & Authorization
+### 6. Payment Planning (kế-hoạch-thanh-toán)
+
+**Models:** PaymentRound, PaymentRoundItem
+
+**Key Features:**
+- Payment round creation per month with sequential versioning
+- Item-level approval workflow (draft → submitted → approved/rejected → closed)
+- Entity-Supplier-Project-Category (4×N) matrix for granular balance tracking
+- Auto-fill congNo + luyKe from balance-service per ledgerType (material/labor)
+- Service: `lib/payment/payment-service.ts` with entityId threading to balance-service (prevents cross-entity bleed)
+
+**Schema (PaymentRoundItem):**
+- `entityId: Int FK` — Project entity (chu thể); replaced `projectScope` enum (2026-05-15)
+- `supplierId: Int FK` — Supplier or contractor
+- `projectId: Int? FK` — Optional project scope
+- `category: String` — Payment category (vat_tu | nhan_cong | dich_vu | khac)
+- `congNo, luyKe, soDeNghi, soDuyet` — Balance fields
+
+**Cascade UI:** Entity → Project (filtered by available in ledger_transactions) → Supplier (filtered by ledgerType + entity + project)
+
+### 7. Authentication & Authorization
 
 **Auth Mechanism:** NextAuth.js (session-based)
 
@@ -169,7 +193,7 @@ ngoquyyen-erp/
 - `AppRole` — Maps user to role + optional flags (isLeader, isDirector)
 - `ModulePermission` — NEW: Per-user per-module grants (can override AppRole defaults)
 
-### 7. Import System (lib/import/)
+### 8. Import System (lib/import/)
 
 **Purpose:** Bulk data import from SOP Excel file.
 
@@ -202,6 +226,8 @@ ngoquyyen-erp/
 | Project | Projects | id, name, status, startDate, endDate |
 | Task | Tasks | id, projectId, title, status, assigneeId |
 | CoordinationForm | Approval forms | id, projectId, status, createdBy |
+| PaymentRound | Payment planning rounds | id, month, sequence, status, createdBy, approvedBy |
+| **PaymentRoundItem** | **Payment line items** | id, roundId, entityId, supplierId, projectId, category, congNo, luyKe, soDeNghi, soDuyet, approvedBy |
 | AuditLog | Change tracking | id, action, userId, details, timestamp |
 
 ### Postgres Constraints
@@ -413,5 +439,5 @@ Both can execute in parallel; no code conflicts.
 
 ---
 
-**Last Updated:** 2026-05-10  
-**Next Update Trigger:** Plan B or C completion
+**Last Updated:** 2026-05-15  
+**Next Update Trigger:** Plan B or C completion, or major payment/ledger changes
