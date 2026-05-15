@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { Fragment, useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import {
   upsertItemAction,
   refreshAllItemBalancesAction,
 } from "../../actions";
-import type { PaymentCategory, ProjectScope, RoundStatus } from "@/lib/payment/payment-service";
+import type { PaymentCategory, RoundStatus } from "@/lib/payment/payment-service";
 import { CATEGORY_LABEL } from "../round-list-client";
 
 const STATUS_LABEL: Record<RoundStatus, string> = {
@@ -33,10 +33,10 @@ function fmt(n: unknown) {
   return Number(n as never).toLocaleString("vi-VN");
 }
 
-function isAdminRole(role: string | null) {
-  return role === "admin";
+interface Entity {
+  id: number;
+  name: string;
 }
-
 interface Supplier {
   id: number;
   name: string;
@@ -51,7 +51,8 @@ type Decimalish = string | number | { toString(): string };
 interface Item {
   id: number;
   supplierId: number;
-  projectScope: string;
+  entityId: number;
+  entity: { id: number; name: string };
   projectId: number | null;
   category: string;
   congNo: Decimalish;
@@ -78,21 +79,74 @@ interface Round {
 
 interface Props {
   round: Round;
+  entities: Entity[];
   suppliers: Supplier[];
   projects: Project[];
+  isAdmin: boolean;
   currentUser: { id: string; role: string | null; isDirector: boolean };
 }
 
-export function RoundDetailClient({ round, suppliers, projects, currentUser }: Props) {
+// ── Cascade helpers ──────────────────────────────────────────────────────────
+
+function categoryToLedgerType(c: PaymentCategory): "material" | "labor" | "all" {
+  if (c === "vat_tu") return "material";
+  if (c === "nhan_cong") return "labor";
+  return "all";
+}
+
+async function fetchCascadeProjects(
+  entityId: number,
+  ledgerType: "material" | "labor" | "all",
+  signal: AbortSignal
+): Promise<Project[]> {
+  const lt = ledgerType === "all" ? "material" : ledgerType;
+  const res = await fetch(
+    `/api/cong-no/cascade-projects?entityIds=${entityId}&ledgerType=${lt}`,
+    { signal }
+  );
+  if (!res.ok) return [];
+  const data = await res.json() as { projects?: Project[] };
+  return data.projects ?? [];
+}
+
+async function fetchCascadeSuppliers(
+  entityId: number,
+  projectId: number | null,
+  ledgerType: "material" | "labor" | "all",
+  signal: AbortSignal
+): Promise<Supplier[]> {
+  const params = new URLSearchParams({
+    ledgerType,
+    entityId: String(entityId),
+  });
+  if (projectId !== null) params.set("projectId", String(projectId));
+  const res = await fetch(`/api/thanh-toan/cascade-suppliers?${params}`, { signal });
+  if (!res.ok) return [];
+  const data = await res.json() as { suppliers?: Supplier[] };
+  return data.suppliers ?? [];
+}
+
+// ── Main client component ────────────────────────────────────────────────────
+
+export function RoundDetailClient({
+  round,
+  entities,
+  suppliers,
+  projects,
+  isAdmin,
+  currentUser,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const isAdmin = isAdminRole(currentUser.role);
   const isCreator = round.createdBy?.id === currentUser.id;
   const canEdit = round.status === "draft" && (isCreator || isAdmin);
   const canSubmit = canEdit && round.items.length > 0;
   const canApprove = round.status === "submitted" && (currentUser.isDirector || isAdmin);
   const canClose = round.status === "approved" && isAdmin;
+
+  // Table: Loại | STT | Chủ thể | Công trình | NCC | Công nợ | Luỹ kế | Cập nhật | Số đề nghị | Số duyệt | Ghi chú | Actions
+  const COL_COUNT = 12;
 
   function onSubmitRound() {
     if (!confirm("Gửi đợt này lên duyệt?")) return;
@@ -149,12 +203,7 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
   }
 
   function onRefreshAllBalances() {
-    if (
-      !confirm(
-        "Cập nhật lại congNo/luyKe của tất cả items theo ledger hiện tại?"
-      )
-    )
-      return;
+    if (!confirm("Cập nhật lại congNo/luyKe của tất cả items theo ledger hiện tại?")) return;
     startTransition(async () => {
       try {
         await refreshAllItemBalancesAction(round.id);
@@ -165,10 +214,6 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
       }
     });
   }
-
-  // Table has: Loại | STT | NCC | Phạm vi | Công trình | Công nợ | Luỹ kế | Cập nhật | Số đề nghị | Số duyệt | Ghi chú | Actions
-  // = 12 columns total
-  const COL_COUNT = 12;
 
   return (
     <div className="space-y-4">
@@ -200,14 +245,14 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
           </Button>
         )}
         {canApprove && (
-          <>
+          <Fragment>
             <Button onClick={onBulkApprove} disabled={pending}>
               Duyệt tất cả = đề xuất
             </Button>
             <Button variant="outline" onClick={onRejectRound} disabled={pending}>
               Từ chối đợt
             </Button>
-          </>
+          </Fragment>
         )}
         {canClose && (
           <Button variant="outline" onClick={onClose} disabled={pending}>
@@ -227,9 +272,9 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
             <tr>
               <th className="sticky left-0 bg-muted/50 px-2 py-2 text-left">Loại</th>
               <th className="px-2 py-2 text-left">STT</th>
-              <th className="px-2 py-2 text-left">NCC</th>
-              <th className="px-2 py-2 text-left">Phạm vi</th>
+              <th className="px-2 py-2 text-left">Chủ thể</th>
               <th className="px-2 py-2 text-left">Công trình</th>
+              <th className="px-2 py-2 text-left">NCC</th>
               <th className="px-2 py-2 text-right">Công nợ</th>
               <th className="px-2 py-2 text-right">Luỹ kế</th>
               <th className="px-2 py-2 text-left">Cập nhật SĐ</th>
@@ -247,11 +292,12 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
                 item={item}
                 roundId={round.id}
                 roundStatus={round.status}
+                entities={entities}
                 suppliers={suppliers}
                 projects={projects}
                 canEdit={canEdit}
                 canApprove={canApprove}
-                actorRole={currentUser.role}
+                isAdmin={isAdmin}
               />
             ))}
             {round.items.length === 0 && (
@@ -264,10 +310,11 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
             {canEdit && (
               <NewItemRow
                 roundId={round.id}
+                entities={entities}
                 suppliers={suppliers}
                 projects={projects}
                 nextIdx={round.items.length + 1}
-                actorRole={currentUser.role}
+                isAdmin={isAdmin}
               />
             )}
           </tbody>
@@ -291,49 +338,137 @@ export function RoundDetailClient({ round, suppliers, projects, currentUser }: P
   );
 }
 
+// ── ItemRow ──────────────────────────────────────────────────────────────────
+
 function ItemRow({
   idx,
   item,
   roundId,
   roundStatus,
+  entities,
   suppliers,
   projects,
   canEdit,
   canApprove,
-  actorRole,
+  isAdmin,
 }: {
   idx: number;
   item: Item;
   roundId: number;
   roundStatus: string;
+  entities: Entity[];
   suppliers: Supplier[];
   projects: Project[];
   canEdit: boolean;
   canApprove: boolean;
-  actorRole: string | null;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const isAdmin = isAdminRole(actorRole);
-
-  const [supplierId, setSupplierId] = useState(item.supplierId);
-  const [projectScope, setProjectScope] = useState<ProjectScope>(item.projectScope as ProjectScope);
+  const [entityId, setEntityId] = useState(item.entityId);
   const [projectId, setProjectId] = useState<number | null>(item.projectId);
+  const [supplierId, setSupplierId] = useState(item.supplierId);
   const [category, setCategory] = useState<PaymentCategory>(item.category as PaymentCategory);
   const [congNoInput, setCongNoInput] = useState(Number(item.congNo));
   const [luyKeInput, setLuyKeInput] = useState(Number(item.luyKe));
   const [soDeNghi, setSoDeNghi] = useState(Number(item.soDeNghi));
   const [note, setNote] = useState(item.note ?? "");
   const [override, setOverride] = useState(false);
+  const [bypassCascade, setBypassCascade] = useState(false);
   const [soDuyetInput, setSoDuyetInput] = useState<number>(
     item.soDuyet !== null ? Number(item.soDuyet) : Number(item.soDeNghi)
   );
 
+  // Cascade state
+  const [availableProjects, setAvailableProjects] = useState<Project[]>(
+    item.project ? [item.project] : []
+  );
+  const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([item.supplier]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [suppliersFetched, setSuppliersFetched] = useState(false);
+  const abortProjects = useRef<AbortController | null>(null);
+  const abortSuppliers = useRef<AbortController | null>(null);
+
+  // Cleanup pending fetches on unmount
+  useEffect(() => () => {
+    abortProjects.current?.abort();
+    abortSuppliers.current?.abort();
+  }, []);
+
+  const ledgerType = categoryToLedgerType(category);
+
+  function doFetchProjects(eid: number, lt: "material" | "labor" | "all") {
+    if (lt === "all") {
+      // dich_vu/khac: no cascade — use full projects prop
+      setAvailableProjects(projects);
+      return;
+    }
+    abortProjects.current?.abort();
+    const ctrl = new AbortController();
+    abortProjects.current = ctrl;
+    setLoadingProjects(true);
+    fetchCascadeProjects(eid, lt, ctrl.signal)
+      .then((ps) => { setAvailableProjects(ps); })
+      .catch(() => { /* aborted — ignore */ })
+      .finally(() => { setLoadingProjects(false); });
+  }
+
+  function doFetchSuppliers(eid: number, pid: number | null, lt: "material" | "labor" | "all") {
+    if (bypassCascade || lt === "all") {
+      setAvailableSuppliers(suppliers);
+      setSuppliersFetched(true);
+      return;
+    }
+    abortSuppliers.current?.abort();
+    const ctrl = new AbortController();
+    abortSuppliers.current = ctrl;
+    setLoadingSuppliers(true);
+    setSuppliersFetched(false);
+    fetchCascadeSuppliers(eid, pid, lt, ctrl.signal)
+      .then((ss) => { setAvailableSuppliers(ss); setSuppliersFetched(true); })
+      .catch(() => { /* aborted — ignore */ })
+      .finally(() => { setLoadingSuppliers(false); });
+  }
+
+  function handleEntityChange(eid: number) {
+    setEntityId(eid);
+    setProjectId(null);
+    setSupplierId(0);
+    setSuppliersFetched(false);
+    doFetchProjects(eid, ledgerType);
+  }
+
+  function handleProjectChange(pid: number | null) {
+    setProjectId(pid);
+    setSupplierId(0);
+    doFetchSuppliers(entityId, pid, ledgerType);
+  }
+
+  function handleCategoryChange(cat: PaymentCategory) {
+    setCategory(cat);
+    const lt = categoryToLedgerType(cat);
+    if (entityId && projectId !== undefined) {
+      doFetchSuppliers(entityId, projectId, lt);
+    }
+  }
+
+  function handleBypassChange(checked: boolean) {
+    setBypassCascade(checked);
+    if (checked) {
+      abortSuppliers.current?.abort();
+      setAvailableSuppliers(suppliers);
+      setSuppliersFetched(true);
+    } else {
+      doFetchSuppliers(entityId, projectId, ledgerType);
+    }
+  }
+
   // pristine baseline — refresh re-syncs only if user hasn't edited
   const pristine = useRef({
+    entityId: item.entityId,
     supplierId: item.supplierId,
-    projectScope: item.projectScope,
     projectId: item.projectId,
     category: item.category,
     congNo: Number(item.congNo),
@@ -344,8 +479,8 @@ function ItemRow({
   useEffect(() => {
     const p = pristine.current;
     const matches =
+      entityId === p.entityId &&
       supplierId === p.supplierId &&
-      projectScope === p.projectScope &&
       projectId === p.projectId &&
       category === p.category &&
       congNoInput === p.congNo &&
@@ -353,8 +488,8 @@ function ItemRow({
       soDeNghi === p.soDeNghi &&
       note === p.note;
     if (matches) {
+      setEntityId(item.entityId);
       setSupplierId(item.supplierId);
-      setProjectScope(item.projectScope as ProjectScope);
       setProjectId(item.projectId);
       setCategory(item.category as PaymentCategory);
       setCongNoInput(Number(item.congNo));
@@ -362,8 +497,8 @@ function ItemRow({
       setSoDeNghi(Number(item.soDeNghi));
       setNote(item.note ?? "");
       pristine.current = {
+        entityId: item.entityId,
         supplierId: item.supplierId,
-        projectScope: item.projectScope,
         projectId: item.projectId,
         category: item.category,
         congNo: Number(item.congNo),
@@ -375,8 +510,8 @@ function ItemRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     item.id,
+    item.entityId,
     item.supplierId,
-    item.projectScope,
     item.projectId,
     item.category,
     item.congNo,
@@ -386,13 +521,14 @@ function ItemRow({
   ]);
 
   function save() {
+    if (!supplierId) { toast.error("Chọn NCC"); return; }
     startTransition(async () => {
       try {
         await upsertItemAction({
           id: item.id,
           roundId,
+          entityId,
           supplierId,
-          projectScope,
           projectId,
           category,
           congNo: override ? congNoInput : null,
@@ -453,6 +589,7 @@ function ItemRow({
 
   const approved = item.approvedAt !== null;
   const showApproveActions = canApprove && !approved;
+  const showEmptySupplierHelp = suppliersFetched && !loadingSuppliers && availableSuppliers.length === 0 && !bypassCascade;
 
   return (
     <tr className="border-t align-top">
@@ -461,7 +598,7 @@ function ItemRow({
           <select
             className="h-8 w-28 rounded border bg-background px-1 text-sm"
             value={category}
-            onChange={(e) => setCategory(e.target.value as PaymentCategory)}
+            onChange={(e) => handleCategoryChange(e.target.value as PaymentCategory)}
           >
             <option value="vat_tu">Vật tư</option>
             <option value="nhan_cong">Nhân công</option>
@@ -476,34 +613,16 @@ function ItemRow({
       <td className="px-2 py-2">
         {canEdit ? (
           <select
-            className="h-8 w-40 rounded border bg-background px-1 text-sm"
-            value={supplierId}
-            onChange={(e) => setSupplierId(Number(e.target.value))}
+            className="h-8 w-36 rounded border bg-background px-1 text-sm"
+            value={entityId}
+            onChange={(e) => handleEntityChange(Number(e.target.value))}
           >
-            {suppliers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
+            {entities.map((en) => (
+              <option key={en.id} value={en.id}>{en.name}</option>
             ))}
           </select>
         ) : (
-          item.supplier.name
-        )}
-      </td>
-      <td className="px-2 py-2">
-        {canEdit ? (
-          <select
-            className="h-8 w-32 rounded border bg-background px-1 text-sm"
-            value={projectScope}
-            onChange={(e) => setProjectScope(e.target.value as ProjectScope)}
-          >
-            <option value="cty_ql">Cty QL</option>
-            <option value="giao_khoan">Giao khoán</option>
-          </select>
-        ) : projectScope === "cty_ql" ? (
-          "Cty QL"
-        ) : (
-          "Giao khoán"
+          item.entity.name
         )}
       </td>
       <td className="px-2 py-2">
@@ -511,19 +630,60 @@ function ItemRow({
           <select
             className="h-8 w-44 rounded border bg-background px-1 text-sm"
             value={projectId ?? ""}
-            onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
+            disabled={loadingProjects || !entityId}
           >
-            <option value="">—</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.code} — {p.name}
-              </option>
+            <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
+            {availableProjects.map((p) => (
+              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
             ))}
           </select>
         ) : item.project ? (
           `${item.project.code} — ${item.project.name}`
         ) : (
           "—"
+        )}
+      </td>
+      <td className="px-2 py-2">
+        {canEdit ? (
+          <div className="space-y-1">
+            <select
+              className="h-8 w-40 rounded border bg-background px-1 text-sm"
+              value={supplierId || ""}
+              onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : 0)}
+              disabled={loadingSuppliers || (!bypassCascade && !projectId)}
+            >
+              <option value="">{loadingSuppliers ? "Đang tải..." : "— Chọn NCC —"}</option>
+              {availableSuppliers.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+            {showEmptySupplierHelp && (
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">
+                  Không có NCC khớp — kiểm tra Chủ thể/Công trình
+                </p>
+                {category === "nhan_cong" && (
+                  <p className="text-xs text-muted-foreground opacity-75">
+                    (nhan_cong: ledger labor dùng Contractor, payment chỉ link Supplier — chưa hỗ trợ)
+                  </p>
+                )}
+              </div>
+            )}
+            {isAdmin && (
+              <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={bypassCascade}
+                  onChange={(e) => handleBypassChange(e.target.checked)}
+                  className="h-3 w-3"
+                />
+                Bỏ cascade (full NCC)
+              </label>
+            )}
+          </div>
+        ) : (
+          item.supplier.name
         )}
       </td>
       <td className="px-2 py-2 text-right">
@@ -643,44 +803,136 @@ function ItemRow({
   );
 }
 
+// ── NewItemRow ───────────────────────────────────────────────────────────────
+
 function NewItemRow({
   roundId,
+  entities,
   suppliers,
   projects,
   nextIdx,
-  actorRole,
+  isAdmin,
 }: {
   roundId: number;
+  entities: Entity[];
   suppliers: Supplier[];
   projects: Project[];
   nextIdx: number;
-  actorRole: string | null;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const isAdmin = isAdminRole(actorRole);
 
-  const [supplierId, setSupplierId] = useState<number | "">("");
-  const [projectScope, setProjectScope] = useState<ProjectScope>("cty_ql");
+  const [entityId, setEntityId] = useState<number | null>(null);
   const [projectId, setProjectId] = useState<number | null>(null);
+  const [supplierId, setSupplierId] = useState<number | null>(null);
   const [category, setCategory] = useState<PaymentCategory>("vat_tu");
   const [soDeNghi, setSoDeNghi] = useState(0);
   const [note, setNote] = useState("");
   const [override, setOverride] = useState(false);
+  const [bypassCascade, setBypassCascade] = useState(false);
   const [congNoInput, setCongNoInput] = useState(0);
   const [luyKeInput, setLuyKeInput] = useState(0);
 
-  function add() {
-    if (!supplierId) {
-      toast.error("Chọn NCC");
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
+  const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [suppliersFetched, setSuppliersFetched] = useState(false);
+  const abortProjects = useRef<AbortController | null>(null);
+  const abortSuppliers = useRef<AbortController | null>(null);
+
+  // Cleanup pending fetches on unmount
+  useEffect(() => () => {
+    abortProjects.current?.abort();
+    abortSuppliers.current?.abort();
+  }, []);
+
+  const ledgerType = categoryToLedgerType(category);
+
+  function doFetchProjects(eid: number, lt: "material" | "labor" | "all") {
+    if (lt === "all") {
+      // dich_vu/khac: no cascade — use full projects prop
+      setAvailableProjects(projects);
       return;
     }
+    abortProjects.current?.abort();
+    const ctrl = new AbortController();
+    abortProjects.current = ctrl;
+    setLoadingProjects(true);
+    fetchCascadeProjects(eid, lt, ctrl.signal)
+      .then((ps) => { setAvailableProjects(ps); })
+      .catch(() => { /* aborted */ })
+      .finally(() => { setLoadingProjects(false); });
+  }
+
+  function doFetchSuppliers(eid: number, pid: number | null, lt: "material" | "labor" | "all") {
+    if (bypassCascade || lt === "all") {
+      setAvailableSuppliers(suppliers);
+      setSuppliersFetched(true);
+      return;
+    }
+    abortSuppliers.current?.abort();
+    const ctrl = new AbortController();
+    abortSuppliers.current = ctrl;
+    setLoadingSuppliers(true);
+    setSuppliersFetched(false);
+    fetchCascadeSuppliers(eid, pid, lt, ctrl.signal)
+      .then((ss) => { setAvailableSuppliers(ss); setSuppliersFetched(true); })
+      .catch(() => { /* aborted */ })
+      .finally(() => { setLoadingSuppliers(false); });
+  }
+
+  function handleEntityChange(eid: number | null) {
+    setEntityId(eid);
+    setProjectId(null);
+    setSupplierId(null);
+    setAvailableProjects([]);
+    setAvailableSuppliers([]);
+    setSuppliersFetched(false);
+    if (eid) doFetchProjects(eid, ledgerType);
+  }
+
+  function handleProjectChange(pid: number | null) {
+    setProjectId(pid);
+    setSupplierId(null);
+    setAvailableSuppliers([]);
+    setSuppliersFetched(false);
+    if (entityId) doFetchSuppliers(entityId, pid, ledgerType);
+  }
+
+  function handleCategoryChange(cat: PaymentCategory) {
+    setCategory(cat);
+    const lt = categoryToLedgerType(cat);
+    setSupplierId(null);
+    setSuppliersFetched(false);
+    if (entityId && projectId !== undefined) {
+      doFetchSuppliers(entityId, projectId, lt);
+    }
+  }
+
+  function handleBypassChange(checked: boolean) {
+    setBypassCascade(checked);
+    if (checked) {
+      abortSuppliers.current?.abort();
+      setAvailableSuppliers(suppliers);
+      setSuppliersFetched(true);
+    } else {
+      if (entityId) {
+        doFetchSuppliers(entityId, projectId, ledgerType);
+      }
+    }
+  }
+
+  function add() {
+    if (!entityId) { toast.error("Chọn Chủ thể"); return; }
+    if (!supplierId) { toast.error("Chọn NCC"); return; }
     startTransition(async () => {
       try {
         await upsertItemAction({
           roundId,
-          supplierId: Number(supplierId),
-          projectScope,
+          entityId,
+          supplierId,
           projectId,
           category,
           congNo: override ? congNoInput : null,
@@ -690,12 +942,17 @@ function NewItemRow({
           override: override ? true : undefined,
         });
         toast.success("Đã thêm");
-        setSupplierId("");
+        setEntityId(null);
         setProjectId(null);
+        setSupplierId(null);
+        setAvailableProjects([]);
+        setAvailableSuppliers([]);
+        setSuppliersFetched(false);
         setCategory("vat_tu");
         setSoDeNghi(0);
         setNote("");
         setOverride(false);
+        setBypassCascade(false);
         setCongNoInput(0);
         setLuyKeInput(0);
         router.refresh();
@@ -705,13 +962,15 @@ function NewItemRow({
     });
   }
 
+  const showEmptySupplierHelp = suppliersFetched && !loadingSuppliers && availableSuppliers.length === 0 && !bypassCascade;
+
   return (
     <tr className="border-t bg-muted/20 align-top">
       <td className="sticky left-0 bg-muted/20 px-2 py-2">
         <select
           className="h-8 w-28 rounded border bg-background px-1 text-sm"
           value={category}
-          onChange={(e) => setCategory(e.target.value as PaymentCategory)}
+          onChange={(e) => handleCategoryChange(e.target.value as PaymentCategory)}
         >
           <option value="vat_tu">Vật tư</option>
           <option value="nhan_cong">Nhân công</option>
@@ -722,41 +981,66 @@ function NewItemRow({
       <td className="px-2 py-2">{nextIdx}</td>
       <td className="px-2 py-2">
         <select
-          className="h-8 w-40 rounded border bg-background px-1 text-sm"
-          value={supplierId}
-          onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : "")}
+          className="h-8 w-36 rounded border bg-background px-1 text-sm"
+          value={entityId ?? ""}
+          onChange={(e) => handleEntityChange(e.target.value ? Number(e.target.value) : null)}
         >
-          <option value="">— Chọn NCC —</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
+          <option value="">— Chọn Chủ thể —</option>
+          {entities.map((en) => (
+            <option key={en.id} value={en.id}>{en.name}</option>
           ))}
-        </select>
-      </td>
-      <td className="px-2 py-2">
-        <select
-          className="h-8 w-32 rounded border bg-background px-1 text-sm"
-          value={projectScope}
-          onChange={(e) => setProjectScope(e.target.value as ProjectScope)}
-        >
-          <option value="cty_ql">Cty QL</option>
-          <option value="giao_khoan">Giao khoán</option>
         </select>
       </td>
       <td className="px-2 py-2">
         <select
           className="h-8 w-44 rounded border bg-background px-1 text-sm"
           value={projectId ?? ""}
-          onChange={(e) => setProjectId(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
+          disabled={loadingProjects || !entityId}
         >
-          <option value="">—</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.code} — {p.name}
-            </option>
+          <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
+          {availableProjects.map((p) => (
+            <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
           ))}
         </select>
+      </td>
+      <td className="px-2 py-2">
+        <div className="space-y-1">
+          <select
+            className="h-8 w-40 rounded border bg-background px-1 text-sm"
+            value={supplierId ?? ""}
+            onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : null)}
+            disabled={loadingSuppliers || (!bypassCascade && !projectId)}
+          >
+            <option value="">{loadingSuppliers ? "Đang tải..." : "— Chọn NCC —"}</option>
+            {availableSuppliers.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {showEmptySupplierHelp && (
+            <div className="space-y-0.5">
+              <p className="text-xs text-muted-foreground">
+                Không có NCC khớp — kiểm tra Chủ thể/Công trình
+              </p>
+              {category === "nhan_cong" && (
+                <p className="text-xs text-muted-foreground opacity-75">
+                  (nhan_cong: ledger labor dùng Contractor, payment chỉ link Supplier — chưa hỗ trợ)
+                </p>
+              )}
+            </div>
+          )}
+          {isAdmin && (
+            <label className="flex items-center gap-1 text-xs cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={bypassCascade}
+                onChange={(e) => handleBypassChange(e.target.checked)}
+                className="h-3 w-3"
+              />
+              Bỏ cascade (full NCC)
+            </label>
+          )}
+        </div>
       </td>
       <td className="px-2 py-2 text-right">
         {override ? (

@@ -16,8 +16,13 @@ export default async function Page({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) notFound();
 
-  const [round, suppliers, projects, dbUser] = await Promise.all([
+  const [round, entities, suppliers, projects, dbUser] = await Promise.all([
     getRound(Number(id)),
+    prisma.entity.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
     prisma.supplier.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true },
@@ -36,12 +41,15 @@ export default async function Page({
   if (!round) notFound();
 
   const actorRole: string | null = dbUser?.role ?? session.user.role ?? null;
+  const isAdmin = actorRole === "admin";
 
   return (
     <RoundDetailClient
       round={round}
+      entities={entities}
       suppliers={suppliers}
       projects={projects}
+      isAdmin={isAdmin}
       currentUser={{
         id: session.user.id,
         role: actorRole,

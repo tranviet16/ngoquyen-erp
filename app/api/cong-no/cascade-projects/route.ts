@@ -15,7 +15,8 @@ import type { ModuleKey } from "@/lib/acl";
  * ledger_opening_balances for the given ledgerType + entityIds.
  *
  * Auth: valid session required (401 if absent).
- *       Module access required: material→cong-no-vt.chi-tiet, labor→cong-no-nc.chi-tiet (403 if denied).
+ *       Module access required: any of cong-no-vt.chi-tiet, cong-no-nc.chi-tiet,
+ *       or thanh-toan.ke-hoach (403 if all denied).
  */
 
 interface ProjectIdRow {
@@ -41,14 +42,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Module-level access gate: material→cong-no-vt.chi-tiet, labor→cong-no-nc.chi-tiet
-  const moduleKey: ModuleKey =
-    ledgerType === "material" ? "cong-no-vt.chi-tiet" : "cong-no-nc.chi-tiet";
-  const allowed = await canAccess(session.user.id, moduleKey, {
-    minLevel: "read",
-    scope: "module",
-  });
-  if (!allowed) {
+  // ACL: accept any of the three modules — cong-no users OR payment plan users
+  const accessOpts = { minLevel: "read" as const, scope: "module" as const };
+  const [allowedDebt, allowedLabor, allowedPayment] = await Promise.all([
+    canAccess(session.user.id, "cong-no-vt.chi-tiet" as ModuleKey, accessOpts),
+    canAccess(session.user.id, "cong-no-nc.chi-tiet" as ModuleKey, accessOpts),
+    canAccess(session.user.id, "thanh-toan.ke-hoach" as ModuleKey, accessOpts),
+  ]);
+  if (!allowedDebt && !allowedLabor && !allowedPayment) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const projects = await prisma.project.findMany({
     where: { id: { in: ids }, deletedAt: null },
-    select: { id: true, name: true },
+    select: { id: true, code: true, name: true },
     orderBy: { name: "asc" },
   });
 

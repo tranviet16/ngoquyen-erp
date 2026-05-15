@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AggregateRow, PaymentCategory, ProjectScope } from "@/lib/payment/payment-service";
+import type { AggregateRow, PaymentCategory } from "@/lib/payment/payment-service";
 
 const CATEGORY_LABEL: Record<PaymentCategory, string> = {
   vat_tu: "Vật tư",
@@ -14,14 +14,14 @@ const CATEGORY_LABEL: Record<PaymentCategory, string> = {
 };
 
 const CATEGORIES: PaymentCategory[] = ["vat_tu", "nhan_cong", "dich_vu", "khac"];
-const SCOPES: ProjectScope[] = ["cty_ql", "giao_khoan"];
-const SCOPE_LABEL: Record<ProjectScope, string> = {
-  cty_ql: "Cty QL",
-  giao_khoan: "Giao khoán",
-};
 
-// Cell key: `${category}_${scope}_${'deNghi'|'duyet'}`
-type CellKey = `${PaymentCategory}_${ProjectScope}_${"deNghi" | "duyet"}`;
+interface EntityMeta {
+  id: number;
+  name: string;
+}
+
+// Cell key: `${category}_${entityId}_${'deNghi'|'duyet'}`
+type CellKey = string;
 
 interface PivotRow {
   supplierId: number;
@@ -30,19 +30,26 @@ interface PivotRow {
   totals: { deNghi: number; duyet: number };
 }
 
-function makeCells(): Record<CellKey, number> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: any = {};
-  for (const cat of CATEGORIES) {
-    for (const scope of SCOPES) {
-      result[`${cat}_${scope}_deNghi`] = 0;
-      result[`${cat}_${scope}_duyet`] = 0;
-    }
-  }
-  return result as Record<CellKey, number>;
+function uniqueEntities(rows: AggregateRow[]): EntityMeta[] {
+  const m = new Map<number, string>();
+  for (const r of rows) m.set(r.entityId, r.entityName);
+  return [...m.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
 }
 
-function buildPivot(rows: AggregateRow[]): PivotRow[] {
+function makeCells(entities: EntityMeta[]): Record<CellKey, number> {
+  const result: Record<CellKey, number> = {};
+  for (const cat of CATEGORIES) {
+    for (const en of entities) {
+      result[`${cat}_${en.id}_deNghi`] = 0;
+      result[`${cat}_${en.id}_duyet`] = 0;
+    }
+  }
+  return result;
+}
+
+function buildPivot(rows: AggregateRow[], entities: EntityMeta[]): PivotRow[] {
   const m = new Map<number, PivotRow>();
   for (const r of rows) {
     let p = m.get(r.supplierId);
@@ -50,15 +57,14 @@ function buildPivot(rows: AggregateRow[]): PivotRow[] {
       p = {
         supplierId: r.supplierId,
         supplierName: r.supplierName,
-        cells: makeCells(),
+        cells: makeCells(entities),
         totals: { deNghi: 0, duyet: 0 },
       };
       m.set(r.supplierId, p);
     }
     const cat = r.category as PaymentCategory;
-    const scope = r.projectScope as ProjectScope;
-    p.cells[`${cat}_${scope}_deNghi`] += r.soDeNghi;
-    p.cells[`${cat}_${scope}_duyet`] += r.soDuyet;
+    p.cells[`${cat}_${r.entityId}_deNghi`] += r.soDeNghi;
+    p.cells[`${cat}_${r.entityId}_duyet`] += r.soDuyet;
     p.totals.deNghi += r.soDeNghi;
     p.totals.duyet += r.soDuyet;
   }
@@ -74,23 +80,23 @@ function fmt(n: number) {
 export function TongHopClient({ month, rows }: { month: string; rows: AggregateRow[] }) {
   const router = useRouter();
   const [m, setM] = useState(month);
-  const pivot = buildPivot(rows);
+
+  const entities = uniqueEntities(rows);
+  const pivot = buildPivot(rows, entities);
 
   // Grand totals
-  const grandTotals = pivot.reduce(
-    (acc, p) => {
-      for (const cat of CATEGORIES) {
-        for (const scope of SCOPES) {
-          acc.cells[`${cat}_${scope}_deNghi`] += p.cells[`${cat}_${scope}_deNghi`];
-          acc.cells[`${cat}_${scope}_duyet`] += p.cells[`${cat}_${scope}_duyet`];
-        }
+  const grandCells = makeCells(entities);
+  const grandTotals = { deNghi: 0, duyet: 0 };
+  for (const p of pivot) {
+    for (const cat of CATEGORIES) {
+      for (const en of entities) {
+        grandCells[`${cat}_${en.id}_deNghi`] += p.cells[`${cat}_${en.id}_deNghi`];
+        grandCells[`${cat}_${en.id}_duyet`] += p.cells[`${cat}_${en.id}_duyet`];
       }
-      acc.totals.deNghi += p.totals.deNghi;
-      acc.totals.duyet += p.totals.duyet;
-      return acc;
-    },
-    { cells: makeCells(), totals: { deNghi: 0, duyet: 0 } }
-  );
+    }
+    grandTotals.deNghi += p.totals.deNghi;
+    grandTotals.duyet += p.totals.duyet;
+  }
 
   function apply() {
     router.push(`/thanh-toan/tong-hop?month=${m}`);
@@ -127,7 +133,7 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
         <div className="overflow-x-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs">
-              {/* Row 1: fixed cols + category groups + Totals */}
+              {/* Row 1: fixed cols + category groups (each spans N entities × 2 metrics) + Totals */}
               <tr>
                 <th
                   rowSpan={2}
@@ -144,7 +150,7 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
                 {CATEGORIES.map((cat) => (
                   <th
                     key={cat}
-                    colSpan={SCOPES.length * 2}
+                    colSpan={entities.length * 2}
                     className="border px-2 py-2 text-center"
                   >
                     {CATEGORY_LABEL[cat]}
@@ -154,16 +160,16 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
                   Tổng
                 </th>
               </tr>
-              {/* Row 2: scope × metric sub-headers per category + Totals sub-headers */}
+              {/* Row 2: entity × metric sub-headers per category + Totals sub-headers */}
               <tr>
                 {CATEGORIES.map((cat) =>
-                  SCOPES.map((scope) => (
-                    <Fragment key={`${cat}_${scope}`}>
+                  entities.map((en) => (
+                    <Fragment key={`${cat}_${en.id}`}>
                       <th className="border px-2 py-1 text-right text-nowrap">
-                        {SCOPE_LABEL[scope]} — Đề nghị
+                        {en.name} — Đề nghị
                       </th>
                       <th className="border px-2 py-1 text-right text-nowrap">
-                        {SCOPE_LABEL[scope]} — Duyệt
+                        {en.name} — Duyệt
                       </th>
                     </Fragment>
                   ))
@@ -180,13 +186,13 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
                     {p.supplierName}
                   </td>
                   {CATEGORIES.map((cat) =>
-                    SCOPES.map((scope) => (
-                      <Fragment key={`${cat}_${scope}`}>
+                    entities.map((en) => (
+                      <Fragment key={`${cat}_${en.id}`}>
                         <td className="border px-2 py-2 text-right">
-                          {fmt(p.cells[`${cat}_${scope}_deNghi`])}
+                          {fmt(p.cells[`${cat}_${en.id}_deNghi`])}
                         </td>
                         <td className="border px-2 py-2 text-right">
-                          {fmt(p.cells[`${cat}_${scope}_duyet`])}
+                          {fmt(p.cells[`${cat}_${en.id}_duyet`])}
                         </td>
                       </Fragment>
                     ))
@@ -209,19 +215,19 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
                   Tổng
                 </td>
                 {CATEGORIES.map((cat) =>
-                  SCOPES.map((scope) => (
-                    <Fragment key={`${cat}_${scope}`}>
+                  entities.map((en) => (
+                    <Fragment key={`${cat}_${en.id}`}>
                       <td className="border px-2 py-2 text-right">
-                        {fmt(grandTotals.cells[`${cat}_${scope}_deNghi`])}
+                        {fmt(grandCells[`${cat}_${en.id}_deNghi`])}
                       </td>
                       <td className="border px-2 py-2 text-right">
-                        {fmt(grandTotals.cells[`${cat}_${scope}_duyet`])}
+                        {fmt(grandCells[`${cat}_${en.id}_duyet`])}
                       </td>
                     </Fragment>
                   ))
                 )}
-                <td className="border px-2 py-2 text-right">{fmt(grandTotals.totals.deNghi)}</td>
-                <td className="border px-2 py-2 text-right">{fmt(grandTotals.totals.duyet)}</td>
+                <td className="border px-2 py-2 text-right">{fmt(grandTotals.deNghi)}</td>
+                <td className="border px-2 py-2 text-right">{fmt(grandTotals.duyet)}</td>
               </tr>
             </tfoot>
           </table>

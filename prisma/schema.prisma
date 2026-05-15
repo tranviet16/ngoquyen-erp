@@ -213,6 +213,8 @@ model Entity {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  paymentItems PaymentRoundItem[]
+
   // Partial unique enforced via raw SQL: entities_name_active_unique WHERE "deletedAt" IS NULL
   @@index([name])
   @@map("entities")
@@ -584,8 +586,8 @@ model PaymentRound {
 model PaymentRoundItem {
   id                  Int       @id @default(autoincrement())
   roundId             Int
+  entityId            Int
   supplierId          Int
-  projectScope        String // cty_ql | giao_khoan
   projectId           Int?
   category            String // vat_tu | nhan_cong | dich_vu | khac
   congNo              Decimal   @default(0) @db.Decimal(18, 2)
@@ -600,6 +602,7 @@ model PaymentRoundItem {
   updatedAt           DateTime  @updatedAt
 
   round      PaymentRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  entity     Entity       @relation(fields: [entityId], references: [id])
   supplier   Supplier     @relation(fields: [supplierId], references: [id])
   project    Project?     @relation(fields: [projectId], references: [id])
   approvedBy User?        @relation("PaymentItemApprover", fields: [approvedById], references: [id])
@@ -607,6 +610,7 @@ model PaymentRoundItem {
   @@index([roundId])
   @@index([supplierId])
   @@index([roundId, category])
+  @@index([roundId, entityId])
   @@map("payment_round_items")
 }
 

@@ -6,7 +6,6 @@ import { getOutstandingDebt, getCumulativePaid } from "@/lib/ledger/balance-serv
 import type { LedgerType } from "@/lib/ledger/ledger-types";
 
 export type PaymentCategory = "vat_tu" | "nhan_cong" | "dich_vu" | "khac";
-export type ProjectScope = "cty_ql" | "giao_khoan";
 export type RoundStatus =
   | "draft"
   | "submitted"
@@ -36,7 +35,7 @@ export interface UpsertItemInput {
   id?: number;
   roundId: number;
   supplierId: number;
-  projectScope: ProjectScope;
+  entityId: number;
   projectId: number | null;
   category: PaymentCategory;
   /** Optional on create: null/undefined → auto-fill from balance-service. */
@@ -107,6 +106,7 @@ export async function getRound(id: number) {
     include: {
       items: {
         include: {
+          entity: { select: { id: true, name: true } },
           supplier: { select: { id: true, name: true } },
           project: { select: { id: true, code: true, name: true } },
           approvedBy: { select: { id: true, name: true } },
@@ -145,9 +145,11 @@ export async function createRound(input: CreateRoundInput) {
 /**
  * Auto-fill congNo + luyKe from balance-service for categories with ledger backing.
  * dich_vu and khac have no ledger rows — they default to 0.
+ * entityId is required to prevent cross-entity balance bleed (bug fix).
  */
 async function autoFillBalances(
   category: PaymentCategory,
+  entityId: number,
   supplierId: number,
   projectId: number | null
 ): Promise<{ congNo: number; luyKe: number }> {
@@ -158,8 +160,8 @@ async function autoFillBalances(
   }
 
   const [outstanding, paid] = await Promise.all([
-    getOutstandingDebt({ ledgerType, partyId: supplierId, projectId }),
-    getCumulativePaid({ ledgerType, partyId: supplierId, projectId }),
+    getOutstandingDebt({ ledgerType, entityId, partyId: supplierId, projectId }),
+    getCumulativePaid({ ledgerType, entityId, partyId: supplierId, projectId }),
   ]);
 
   // Convert Prisma.Decimal → number at the DB write boundary
@@ -194,7 +196,7 @@ export async function upsertItem(input: UpsertItemInput) {
       soDeNghi: input.soDeNghi,
     };
     if (input.supplierId !== undefined) updateData.supplierId = input.supplierId;
-    if (input.projectScope !== undefined) updateData.projectScope = input.projectScope;
+    if (input.entityId !== undefined) updateData.entityId = input.entityId;
     if (input.projectId !== undefined) updateData.projectId = input.projectId;
     if (input.note !== undefined) updateData.note = input.note;
     if (input.congNo != null) updateData.congNo = input.congNo;
@@ -227,8 +229,8 @@ export async function upsertItem(input: UpsertItemInput) {
     return prisma.paymentRoundItem.create({
       data: {
         roundId: input.roundId,
+        entityId: input.entityId,
         supplierId: input.supplierId,
-        projectScope: input.projectScope,
         projectId: input.projectId,
         category: input.category,
         congNo: input.congNo ?? 0,
@@ -247,6 +249,7 @@ export async function upsertItem(input: UpsertItemInput) {
     // Auto-fill from balance-service (snapshot frozen at creation time)
     const filled = await autoFillBalances(
       input.category,
+      input.entityId,
       input.supplierId,
       input.projectId
     );
@@ -262,8 +265,8 @@ export async function upsertItem(input: UpsertItemInput) {
   return prisma.paymentRoundItem.create({
     data: {
       roundId: input.roundId,
+      entityId: input.entityId,
       supplierId: input.supplierId,
-      projectScope: input.projectScope,
       projectId: input.projectId,
       category: input.category,
       congNo,
@@ -301,7 +304,7 @@ export async function refreshItemBalances(itemId: number) {
   }
 
   const category = item.category as PaymentCategory;
-  const filled = await autoFillBalances(category, item.supplierId, item.projectId);
+  const filled = await autoFillBalances(category, item.entityId, item.supplierId, item.projectId);
 
   return prisma.paymentRoundItem.update({
     where: { id: itemId },
@@ -482,7 +485,8 @@ export interface AggregateRow {
   supplierId: number;
   supplierName: string;
   category: PaymentCategory;
-  projectScope: ProjectScope;
+  entityId: number;
+  entityName: string;
   soDeNghi: number;
   soDuyet: number;
 }
@@ -494,7 +498,8 @@ export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
       supplier_id: number;
       supplier_name: string;
       category: string;
-      project_scope: string;
+      entity_id: number;
+      entity_name: string;
       so_de_nghi: string;
       so_duyet: string;
     }>
@@ -503,23 +508,26 @@ export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
       i."supplierId"      AS supplier_id,
       s.name              AS supplier_name,
       i.category          AS category,
-      i."projectScope"    AS project_scope,
+      i."entityId"        AS entity_id,
+      e.name              AS entity_name,
       COALESCE(SUM(i."soDeNghi"), 0) AS so_de_nghi,
       COALESCE(SUM(i."soDuyet"), 0)  AS so_duyet
     FROM payment_round_items i
     JOIN payment_rounds r ON r.id = i."roundId"
     JOIN suppliers s ON s.id = i."supplierId"
+    JOIN entities  e ON e.id = i."entityId"
     WHERE r."month" = ${month}
       AND r.status IN ('approved', 'closed')
       AND r."deletedAt" IS NULL
-    GROUP BY i."supplierId", s.name, i.category, i."projectScope"
-    ORDER BY s.name, i.category;
+    GROUP BY i."supplierId", s.name, i.category, i."entityId", e.name
+    ORDER BY s.name, i.category, e.name;
   `;
   return rows.map((r) => ({
     supplierId: Number(r.supplier_id),
     supplierName: r.supplier_name,
     category: r.category as PaymentCategory,
-    projectScope: r.project_scope as ProjectScope,
+    entityId: Number(r.entity_id),
+    entityName: r.entity_name,
     soDeNghi: Number(r.so_de_nghi),
     soDuyet: Number(r.so_duyet),
   }));
