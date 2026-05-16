@@ -37,6 +37,20 @@ export default defineConfig({
             "test/security/**/*.test.ts",
             "test/performance/**/*.test.ts",
           ],
+          // Load tests are on-demand/nightly only (slow, need a live server) —
+          // run them via `npm run test:load`, never in the PR integration run.
+          exclude: ["node_modules/**", "test/performance/load/**"],
+          pool: "forks",
+          fileParallelism: false,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          // On-demand load suite — selected only via `--project load`
+          // (`npm run test:load`); never part of the default test runs.
+          name: "load",
+          include: ["test/performance/load/**/*.test.ts"],
           pool: "forks",
           fileParallelism: false,
         },

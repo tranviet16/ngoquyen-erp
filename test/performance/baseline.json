@@ -1,0 +1,14 @@
+{
+  "_comment": "Query-count ceilings + load-test p95 ceilings. Ratchet: tighten on improvement, never loosen silently. Observed counts (2026-05-16): dashboard 8, ledgerSummary 1, aggregateMonth 2, taskBoard 9 — all constant w.r.t. row volume, no N+1. Ceilings carry a small margin for plan/driver variance.",
+  "dashboard": 12,
+  "ledgerSummary": 3,
+  "aggregateMonth": 4,
+  "taskBoard": 14,
+  "load": {
+    "_comment": "p95 latency ceilings in ms for the load suite (on-demand / nightly). Generous initial values; tighten after a stable baseline.",
+    "/api/health": 400,
+    "/api/notifications": 600,
+    "/api/cong-no/cascade-projects": 600,
+    "/api/thanh-toan/cascade-suppliers": 600
+  }
+}
