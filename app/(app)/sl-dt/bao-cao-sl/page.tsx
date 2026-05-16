@@ -2,7 +2,7 @@ import { getSanLuongReport, getAvailableMonths } from "@/lib/sl-dt/report-servic
 import { fmtNum, fmtPct } from "@/lib/sl-dt/format";
 import type { SanLuongRow } from "@/lib/sl-dt/rollup";
 import { MonthYearPicker } from "@/components/ui/month-year-picker";
-import { EditableNumberCell, EditableTextCell } from "@/components/sl-dt/editable-cell";
+import { EditableNumberCell, EditableLotNumberCell, EditableTextCell } from "@/components/sl-dt/editable-cell";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>;
@@ -73,8 +73,19 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
                 <tr key={`${r.kind}-${idx}`} className={rowClass(r.kind)}>
                   <td className="p-2 text-center">{r.kind === "lot" ? stt : ""}</td>
                   <td className={`p-2 ${r.kind !== "lot" ? "pl-2" : "pl-4"}`}>{r.lotName}</td>
-                  <td className="p-2 text-right tabular-nums">{fmtNum(r.estimateValue)}</td>
-                  <td className="p-2 text-right tabular-nums">{fmtNum(r.slKeHoachKy)}</td>
+                  {editable ? (
+                    <EditableLotNumberCell lotId={r.lotId!} field="estimateValue" value={r.estimateValue} />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums">{fmtNum(r.estimateValue)}</td>
+                  )}
+                  {editable ? (
+                    <EditableNumberCell
+                      lotId={r.lotId!} year={year} month={month}
+                      field="slKeHoachKy" value={r.slKeHoachKy}
+                    />
+                  ) : (
+                    <td className="p-2 text-right tabular-nums">{fmtNum(r.slKeHoachKy)}</td>
+                  )}
                   {editable ? (
                     <EditableNumberCell
                       lotId={r.lotId!} year={year} month={month}

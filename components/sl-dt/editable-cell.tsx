@@ -7,9 +7,18 @@ import { fmtNum } from "@/lib/sl-dt/format";
 import {
   patchMonthlyInputCell,
   patchProgressStatusCell,
+  patchLotCell,
 } from "@/app/(app)/sl-dt/nhap-thang-moi/actions";
 
-type NumField = "slThucKyTho" | "slTrat" | "dtThoKy" | "qtTratChua" | "dtTratKy";
+type NumField =
+  | "slKeHoachKy"
+  | "slThucKyTho"
+  | "slTrat"
+  | "dtKeHoachKy"
+  | "dtThoKy"
+  | "qtTratChua"
+  | "dtTratKy";
+type LotNumField = "estimateValue" | "contractValue";
 type TextField = "ghiChu";
 
 interface BaseProps {
@@ -74,6 +83,68 @@ export function EditableNumberCell({
     <td
       onClick={() => setEditing(true)}
       title="Click để sửa"
+      className={`p-2 text-right tabular-nums cursor-pointer hover:ring-2 hover:ring-inset hover:ring-primary/40 ${className ?? ""}`}
+    >
+      {fmtNum(value)}
+    </td>
+  );
+}
+
+export function EditableLotNumberCell({
+  lotId, field, value, className,
+}: { lotId: number; field: LotNumField; value: number; className?: string }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value || 0));
+  const [pending, startTransition] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const next = Number(draft.replace(/[,\s]/g, "")) || 0;
+    if (next === value) { setEditing(false); return; }
+    startTransition(async () => {
+      try {
+        await patchLotCell(lotId, { [field]: next });
+        router.refresh();
+        setEditing(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : String(err));
+        setDraft(String(value || 0));
+      }
+    });
+  };
+
+  if (editing) {
+    return (
+      <td className={`p-1 text-right ${className ?? ""}`}>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="numeric"
+          value={draft}
+          disabled={pending}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") { setDraft(String(value || 0)); setEditing(false); }
+          }}
+          className="w-full px-1.5 py-1 text-right tabular-nums border border-primary rounded bg-background"
+        />
+      </td>
+    );
+  }
+  return (
+    <td
+      onClick={() => setEditing(true)}
+      title="Click để sửa (giá trị lô)"
       className={`p-2 text-right tabular-nums cursor-pointer hover:ring-2 hover:ring-inset hover:ring-primary/40 ${className ?? ""}`}
     >
       {fmtNum(value)}
