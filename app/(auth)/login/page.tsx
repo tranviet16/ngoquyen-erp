@@ -28,13 +28,13 @@ export default function LoginPage() {
       });
 
       if (result.error) {
-        setError(result.error.message ?? "Dang nhap that bai");
+        setError(result.error.message ?? "Đăng nhập thất bại");
       } else {
         router.push("/dashboard");
         router.refresh();
       }
     } catch {
-      setError("Co loi xay ra. Vui long thu lai.");
+      setError("Có lỗi xảy ra. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -44,8 +44,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">ERP Ngo Quyen</CardTitle>
-          <CardDescription>Dang nhap vao he thong quan ly noi bo</CardDescription>
+          <CardTitle className="text-2xl font-bold">ERP Ngô Quyền</CardTitle>
+          <CardDescription>Đăng nhập vào hệ thống quản lý nội bộ</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -62,7 +62,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Mat khau</Label>
+              <Label htmlFor="password">Mật khẩu</Label>
               <Input
                 id="password"
                 type="password"
@@ -76,7 +76,7 @@ export default function LoginPage() {
               <p className="text-sm text-destructive">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Dang xu ly..." : "Dang nhap"}
+              {loading ? "Đang xử lý..." : "Đăng nhập"}
             </Button>
           </form>
         </CardContent>

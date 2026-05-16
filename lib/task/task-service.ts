@@ -25,6 +25,44 @@ import {
 import { createNotification } from "@/lib/notification/notification-service";
 import { getChildCounts, type ChildCounts } from "./subtask-service";
 
+type TaskAuditTx = Pick<typeof prisma, "auditLog">;
+
+function serializeTaskForAudit(t: Task): Record<string, unknown> {
+  return {
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    status: t.status,
+    priority: t.priority,
+    deptId: t.deptId,
+    assigneeId: t.assigneeId,
+    deadline: t.deadline ? t.deadline.toISOString() : null,
+    completedAt: t.completedAt ? t.completedAt.toISOString() : null,
+    parentId: t.parentId,
+    sourceFormId: t.sourceFormId,
+  };
+}
+
+async function logTaskAudit(
+  tx: TaskAuditTx,
+  action: "create" | "update" | "delete" | "assign" | "move",
+  before: Task | null,
+  after: Task | null,
+  userId: string,
+) {
+  const recordId = String((after ?? before)?.id);
+  await tx.auditLog.create({
+    data: {
+      userId,
+      tableName: "Task",
+      recordId,
+      action,
+      beforeJson: before ? serializeTaskForAudit(before) : undefined,
+      afterJson: after ? serializeTaskForAudit(after) : undefined,
+    },
+  });
+}
+
 export type TaskWithRelations = Task & {
   assignee: Pick<User, "id" | "name"> | null;
   creator: Pick<User, "id" | "name">;
@@ -234,6 +272,7 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
         tx,
       );
     }
+    await logTaskAudit(tx, "create", null, task, ctx.userId);
     return task;
   });
 }
@@ -257,7 +296,9 @@ export async function updateTask(id: number, input: UpdateTaskInput): Promise<Ta
     if (data.priority !== undefined) patch.priority = data.priority;
     if (data.deadline !== undefined) patch.deadline = data.deadline;
 
-    return tx.task.update({ where: { id }, data: patch });
+    const updated = await tx.task.update({ where: { id }, data: patch });
+    await logTaskAudit(tx, "update", existing, updated, ctx.userId);
+    return updated;
   });
 }
 
@@ -308,6 +349,7 @@ export async function assignTask(id: number, assigneeId: string | null): Promise
       );
     }
 
+    await logTaskAudit(tx, "assign", existing, updated, ctx.userId);
     return updated;
   });
 }
@@ -356,6 +398,7 @@ export async function moveTask(id: number, toStatus: TaskStatus, toOrder?: numbe
       await maybeBumpParentToReview(tx, existing.parentId, ctx.userId);
     }
 
+    await logTaskAudit(tx, "move", existing, updated, ctx.userId);
     return updated;
   });
 }
@@ -405,6 +448,7 @@ export async function deleteTask(id: number): Promise<void> {
     if (!canDeleteTask(existing, ctx, role))
       throw new Error("Chỉ creator (khi task ở 'todo') hoặc admin được xoá");
     await tx.task.delete({ where: { id } });
+    await logTaskAudit(tx, "delete", existing, null, ctx.userId);
   });
 }
 
