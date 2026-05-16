@@ -26,8 +26,8 @@ Build an automated test suite from scratch for this Next.js 16.2.4 + Prisma 7.8 
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | [Test infrastructure foundation](./phase-01-test-infrastructure-foundation.md) | Completed |
-| 2 | [Functional tests — critical hotspots](./phase-02-functional-tests-critical-hotspots.md) | Pending |
-| 3 | [Functional tests — high/medium hotspots](./phase-03-functional-tests-high-medium-hotspots.md) | Pending |
+| 2 | [Functional tests — critical hotspots](./phase-02-functional-tests-critical-hotspots.md) | Completed |
+| 3 | [Functional tests — high/medium hotspots](./phase-03-functional-tests-high-medium-hotspots.md) | Completed (60% gate shortfall — see note) |
 | 4 | [E2E Playwright tests](./phase-04-e2e-playwright-tests.md) | Pending |
 | 5 | [Security tests](./phase-05-security-tests.md) | Pending |
 | 6 | [Performance tests](./phase-06-performance-tests.md) | Pending |
@@ -43,3 +43,7 @@ Build an automated test suite from scratch for this Next.js 16.2.4 + Prisma 7.8 
 - **Phase 7** depends on **all** phases — CI runs the suites they produce; do it last.
 
 Critical path: 1 → 2 → 3 → 7. Phases 4, 5, 6 can run in parallel once their blockers clear.
+
+## Phase 3 coverage shortfall (step 13)
+
+All ~30 named in-scope `lib/` services are covered with depth; `npm run test` is green (339 unit tests) and `npx tsc --noEmit` passes. However the project-wide `lib/` line coverage gate of 60% was NOT reached — achieved 30.93% (1303/4212 lines). Per phase-03 step 13, scope was NOT expanded. The gap (~1224 lines) is dominated by services explicitly out of scope for this plan: `lib/tai-chinh/*` (~1300 lines, 9 services), `lib/export/report-service.ts` (423), `lib/storage/*`, `lib/vat-tu-ncc/*`, `lib/utils/*`, `lib/task/comment-service.ts` + `attachment-service.ts` + `subtask-service.ts`. The Vitest 60% global threshold remains as the project target; `npm run test:coverage` will fail until a follow-up plan covers the out-of-scope services. Phase 7 CI should gate on `npm run test` (unit), not `test:coverage`.
