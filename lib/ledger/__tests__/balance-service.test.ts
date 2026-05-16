@@ -316,3 +316,85 @@ describe("getBalancesBulk — map structure and multiple pairs", () => {
     expect(entry.thanhToan).toBeInstanceOf(Prisma.Decimal);
   });
 });
+
+// ─── Decimal precision — no float drift ───────────────────────────────────────
+
+describe("Decimal precision", () => {
+  it("opening 0.1 + layHang 0.2 → outstanding exactly 0.3 (no float drift)", async () => {
+    mockQueryRaw.mockResolvedValue([
+      makeRow({ entityId: 1, partyId: 10, projectId: null, opening: "0.1", layHang: "0.2", thanhToan: 0 }),
+    ]);
+
+    const result = await getOutstandingDebt({ ledgerType: "material", entityId: 1, partyId: 10 });
+
+    // JS `0.1 + 0.2 === 0.30000000000000004` — Prisma.Decimal must not drift.
+    expect(result.equals(new Prisma.Decimal("0.3"))).toBe(true);
+    expect(result.toString()).toBe("0.3");
+  });
+
+  it("preserves 2-decimal cents through plus/minus", async () => {
+    mockQueryRaw.mockResolvedValue([
+      makeRow({ entityId: 1, partyId: 10, projectId: null, opening: "1000.55", layHang: "0.45", thanhToan: "0.99" }),
+    ]);
+
+    const result = await getOutstandingDebt({ ledgerType: "material", entityId: 1, partyId: 10 });
+
+    expect(result.toString()).toBe("1000.01"); // 1000.55 + 0.45 − 0.99
+  });
+});
+
+// ─── Negative balances ────────────────────────────────────────────────────────
+
+describe("Negative balances", () => {
+  it("thanhToan exceeding opening + layHang yields a negative outstanding", async () => {
+    mockQueryRaw.mockResolvedValue([
+      makeRow({ entityId: 1, partyId: 10, projectId: null, opening: 0, layHang: 100, thanhToan: 300 }),
+    ]);
+
+    const result = await getOutstandingDebt({ ledgerType: "material", entityId: 1, partyId: 10 });
+
+    expect(result.toNumber()).toBe(-200); // 0 + 100 − 300
+    expect(result.isNegative()).toBe(true);
+  });
+});
+
+// ─── asOf boundary ────────────────────────────────────────────────────────────
+
+describe("asOf boundary", () => {
+  it("forwards the supplied asOf Date into the SQL query (used by the <= cutoff)", async () => {
+    mockQueryRaw.mockResolvedValue([]);
+    const asOf = new Date("2026-05-16T00:00:00.000Z");
+
+    await getBalancesBulk({
+      ledgerType: "material",
+      pairs: [{ entityId: 1, partyId: 10, projectId: null }],
+      asOf,
+    });
+
+    // $queryRaw tagged-template: call args = [stringsArray, ...interpolatedValues].
+    // The boundary date must appear among the interpolated values so the DB
+    // `"date" <= asOf` filter is anchored to exactly the caller-supplied instant.
+    const callArgs = mockQueryRaw.mock.calls[0];
+    const passedAsOf = callArgs.find(
+      (v: unknown) => v instanceof Date && v.getTime() === asOf.getTime(),
+    );
+    expect(passedAsOf).toBeInstanceOf(Date);
+  });
+
+  it("defaults asOf to ~now when omitted", async () => {
+    mockQueryRaw.mockResolvedValue([]);
+    const before = Date.now();
+
+    await getBalancesBulk({
+      ledgerType: "material",
+      pairs: [{ entityId: 1, partyId: 10, projectId: null }],
+    });
+
+    const after = Date.now();
+    const callArgs = mockQueryRaw.mock.calls[0];
+    const passedAsOf = callArgs.find((v: unknown) => v instanceof Date) as Date | undefined;
+    expect(passedAsOf).toBeInstanceOf(Date);
+    expect(passedAsOf!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(passedAsOf!.getTime()).toBeLessThanOrEqual(after);
+  });
+});

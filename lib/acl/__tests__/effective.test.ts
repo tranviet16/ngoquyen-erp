@@ -760,3 +760,112 @@ describe("canAccess — scope: any", () => {
     expect(result).toBe(false);
   });
 });
+
+// ─── D3 concurrency — no cross-request state leak ─────────────────────────────
+
+describe("canAccess — D3 concurrency", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  /**
+   * Two interleaved canAccess calls with conflicting per-user mock data must
+   * resolve independently. canAccess takes the userId as a parameter and the
+   * resolver carries no module-level mutable state — proving no cross-talk.
+   */
+  it("interleaved canAccess for an admin and a viewer return independent results", async () => {
+    mockFindUnique.mockImplementation(
+      (args: { where: { id?: string } }) => {
+        if (args.where.id === "concurrent-admin") {
+          return Promise.resolve({
+            id: "concurrent-admin", role: "admin", isLeader: false, isDirector: false,
+          });
+        }
+        if (args.where.id === "concurrent-viewer") {
+          return Promise.resolve({
+            id: "concurrent-viewer", role: "viewer", isLeader: false, isDirector: false,
+          });
+        }
+        return Promise.resolve(null); // grantAll lookups → none
+      },
+    );
+    mockFindMany.mockResolvedValue([]);
+
+    const [adminResult, viewerResult] = await Promise.all([
+      canAccess("concurrent-admin", "admin.permissions", { minLevel: "admin", scope: "module" }),
+      canAccess("concurrent-viewer", "admin.permissions", { minLevel: "admin", scope: "module" }),
+    ]);
+
+    expect(adminResult).toBe(true);
+    expect(viewerResult).toBe(false);
+  });
+
+  it("100 interleaved calls alternating admin/viewer keep per-call correctness", async () => {
+    mockFindUnique.mockImplementation(
+      (args: { where: { id?: string } }) => {
+        if (args.where.id === "ca") {
+          return Promise.resolve({ id: "ca", role: "admin", isLeader: false, isDirector: false });
+        }
+        if (args.where.id === "cv") {
+          return Promise.resolve({ id: "cv", role: "viewer", isLeader: false, isDirector: false });
+        }
+        return Promise.resolve(null);
+      },
+    );
+    mockFindMany.mockResolvedValue([]);
+
+    const calls = Array.from({ length: 100 }, (_, i) =>
+      canAccess(i % 2 === 0 ? "ca" : "cv", "admin.permissions", {
+        minLevel: "admin",
+        scope: "module",
+      }),
+    );
+    const results = await Promise.all(calls);
+
+    results.forEach((r, i) => expect(r).toBe(i % 2 === 0));
+  });
+});
+
+// ─── Axis interaction — dept axis without dept access ─────────────────────────
+
+describe("canAccess — axis interaction", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("dept-axis module: Trục 1 passes but no UserDeptAccess row → false", async () => {
+    // canbo_vt has a role fallback for cong-no-vt (Trục 1 passes), but the user
+    // has no dept-access grant for D7 → the dept axis must veto.
+    mockFindUnique.mockResolvedValue({
+      id: "u-axis", role: "canbo_vt", isLeader: false, isDirector: false, departmentId: null,
+    });
+    mockFindMany.mockResolvedValue([]); // no UserDeptAccess rows
+
+    const result = await canAccess("u-axis", "cong-no-vt", {
+      minLevel: "read",
+      scope: { kind: "dept", deptId: 7 },
+    });
+    expect(result).toBe(false);
+  });
+
+  it("dept-axis module: dept access on D1 does not leak to D2", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "u-axis2", role: "canbo_vt", isLeader: false, isDirector: false, departmentId: null,
+    });
+    mockFindMany.mockImplementation((args: { where: { userId?: string } }) => {
+      if (!args.where?.userId) return Promise.resolve([]);
+      return Promise.resolve([{ deptId: 1, level: "edit" }]);
+    });
+
+    const onD1 = await canAccess("u-axis2", "cong-no-vt", {
+      minLevel: "read",
+      scope: { kind: "dept", deptId: 1 },
+    });
+    const onD2 = await canAccess("u-axis2", "cong-no-vt", {
+      minLevel: "read",
+      scope: { kind: "dept", deptId: 2 },
+    });
+    expect(onD1).toBe(true);
+    expect(onD2).toBe(false);
+  });
+});
