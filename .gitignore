@@ -54,6 +54,12 @@ next-env.d.ts
 # Excel temp lock files
 SOP/~$*.xlsx
 
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+.env.test.local
+
 # Diagnostic / one-off scripts
 scripts/diag-*
 scripts/inspect-*
