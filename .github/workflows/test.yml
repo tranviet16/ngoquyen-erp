@@ -1,0 +1,147 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+env:
+  # Ephemeral service-container creds — NOT secrets. DB name ends in `_test`,
+  # which the truncateAll() / global-setup guards require.
+  DATABASE_URL: postgresql://test:test@localhost:5432/ngoquyyen_erp_test
+  BETTER_AUTH_SECRET: ci-test-secret-not-a-real-key
+
+jobs:
+  unit:
+    name: Unit + integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ngoquyyen_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      # Blocking gate: unit + integration must pass. Coverage is NOT gated here —
+      # the lib/ 60% threshold is a project target not yet met (see plan.md
+      # "Phase 3 coverage shortfall"); a coverage drop must not block merges yet.
+      - run: npm run test
+      - run: npm run test:integration
+      # Coverage is informational only — continue-on-error so the unmet 60%
+      # threshold reports a number without failing the build.
+      - name: Coverage (informational)
+        continue-on-error: true
+        run: npm run test:coverage
+      - name: Coverage summary
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            node -e "const c=require('./coverage/coverage-summary.json').total;console.log('lib/ lines: '+c.lines.pct+'%')" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
+
+  e2e:
+    name: E2E + security
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      BETTER_AUTH_URL: http://localhost:3333
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ngoquyyen_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Cache key = resolved Playwright version, NOT package-lock.json — only a
+      # real Playwright bump should invalidate the browser cache.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - run: npx playwright install --with-deps chromium
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run build
+      # E2E users are seeded idempotently by e2e/global-setup.ts via the running
+      # app's better-auth sign-up endpoint; webServer (next start) is launched by
+      # playwright.config.ts before globalSetup runs.
+      - run: npm run test:e2e
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  perf:
+    name: Performance (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ngoquyyen_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      # Non-blocking: fork-pool warmup inflates first-run query counts; a perf
+      # wobble must never gate a merge. Load tests are excluded (on-demand only).
+      - run: npm run test:perf
