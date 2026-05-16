@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Performance tests"
-status: pending
+status: completed
 priority: P3
 effort: "10h"
 dependencies: [1, 4]
@@ -71,12 +71,12 @@ Query-count harness: build a `PrismaClient({ log: [{ level: "query", emit: "even
 
 ## Success Criteria
 
-- [ ] `countQueries` harness accurately counts Prisma queries (verified with a known 2-query call).
-- [ ] N+1 tests cover dashboard, ledger aggregations, `aggregateMonth`, task list — each with a query-count ceiling.
-- [ ] Any N+1 found is filed as a bug; threshold ratchets at current value, never loosens silently.
-- [ ] Load runner reports p95 + error rate for the 5 target endpoints.
-- [ ] `baseline.json` populated with initial thresholds.
-- [ ] `npm run test:perf` runs in CI; `npm run test:load` documented as on-demand.
+- [x] `countQueries` harness accurately counts Prisma queries (verified with a known 2-query call).
+- [x] N+1 tests cover dashboard, ledger aggregations, `aggregateMonth`, task list — each with a query-count ceiling.
+- [x] Any N+1 found is filed as a bug; threshold ratchets at current value, never loosens silently.
+- [x] Load runner reports p95 + error rate for the 5 target endpoints.
+- [x] `baseline.json` populated with initial thresholds.
+- [x] `npm run test:perf` runs in CI; `npm run test:load` documented as on-demand.
 
 ## Risk Assessment
 

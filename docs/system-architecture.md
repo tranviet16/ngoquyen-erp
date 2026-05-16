@@ -164,9 +164,22 @@ Related audit tables: `AuditLog` (existing) captures writes to `ModulePermission
 
 ## Testing & Validation
 
-- **ACL Effective Resolver:** 40/40 vitest cases pass
-- **Golden ACL Fixtures:** 32/32 fixtures (3 roles × 3 axes × 3+ level boundaries)
-- **Route Guard Audit:** All 28 segments verified protected
+### Automated Test Suite (Comprehensive)
+
+**Coverage:** 339 unit/integration tests + 6 E2E specs + security matrix + performance queries + load tests
+
+**Test Layers:**
+- **Unit Tests (lib/):** 40+ ACL resolver cases, 32+ golden fixtures (3 roles × 3 axes), payment service, import engine, balance-service
+- **Integration Tests:** Real DB with `truncateAll()` cleanup per `*_test` guard
+- **E2E Tests (Playwright):** 6 Server-Action workflows + 4 security specs (authz matrix, auth bypass, IDOR, SSE stream)
+- **Security Tests:** ACL enforcement matrix + manual checklist (`SECURITY-MANUAL-REVIEW.md`)
+- **Performance Tests:** N+1 query counter (0 N+1 found; baseline: dashboard 8, ledgerSummary 1, aggregateMonth 2, taskBoard 9) + load suite (on-demand)
+- **CI Pipeline:** GitHub Actions with 3 jobs (unit/integration blocking, e2e blocking, perf informational)
+
+**Key Metrics:**
+- **Line Coverage (lib/):** 30.93% (1303/4212 lines) — 60% project threshold deferred (out-of-scope services documented)
+- **ACL Test Coverage:** 40/40 resolver + 32/32 golden fixtures PASS
+- **Route Guard Audit:** 28/28 segments protected ✓
 - **Build & Type Check:** `next build` green, `tsc --noEmit` clean
 
 ## Next Steps (Unblocked Plans)

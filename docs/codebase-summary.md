@@ -343,17 +343,102 @@ await writeAuditLog({
 
 ## Testing
 
-### Unit Tests (lib/acl/__tests__/)
+### Test Infrastructure (Phase 1)
 
-- **40/40 ACL Resolver Tests:** Effective access checks per role × axis × level boundary
-- **32/32 Golden Fixtures:** Role-based scenarios (admin, leader, viewer × module/dept/project axes)
-- All existing dept-access tests still pass (backward compatible)
+**Vitest Config (`vitest.config.mts`)** — Three projects:
+- `unit` — Fast unit tests in `lib/**/*.test.ts`, `test/unit/**/*.test.ts` (no DB)
+- `integration` — Real DB integration tests in `test/integration/**`, `test/security/**`, `test/performance/**` (serial, forks pool)
+- `load` — On-demand load suite in `test/performance/load/**` (not part of CI; manual only via `npm run test:load`)
+
+**Playwright Config (`playwright.config.ts`)** — E2E tests in `e2e/`, testDir mode, port 3333
+
+**Test Database Helpers (`test/helpers/`):**
+- `test-db.ts` — `truncateAll()` for test DB cleanup (guards on `*_test` DB names)
+- `prisma-mock.ts`, `session-mock.ts`, `fixtures.ts` — Shared test utilities
+
+**Environment:** `.env.test` for dedicated `ngoquyyen_erp_test` PostgreSQL database
+
+### Unit + Integration Tests (Phases 2–3)
+
+- **339 unit tests** covering ~30 named `lib/` services (payment, ACL, import, ledger)
+- **Hotspots covered:** Payment round, ACL resolver, import engine, balance-service, dept-access
+- **Line coverage (lib/):** 30.93% achieved (1303/4212 lines) — 60% project threshold is a known shortfall (out-of-scope services documented)
+- **Test status:** All 339 tests PASS
+
+### E2E Tests (Phase 4)
+
+**6 Playwright specs** for Server-Action flows:
+- `login.spec.ts` — Authentication workflow
+- `import-export.spec.ts` — Bulk import + export cycle
+- `kanban-task.spec.ts` — Task swimlane interactions
+- `payment-round.spec.ts` — Payment round approval + entity cascade
+- `sl-dt-cell-edit.spec.ts` — Inline cell editing on báo cáo SL/DT
+- `e2e/security/` — 4 specs for authz matrix, auth-bypass, IDOR, SSE stream validation
+
+### Security Tests (Phase 5)
+
+- **Authorization Matrix (`e2e/security/authz-matrix.spec.ts`)** — Syntactic checks for 2-axis ACL per role
+- **Auth Bypass (`e2e/security/auth-bypass.spec.ts`)** — Attempt unauthenticated route access
+- **IDOR (`e2e/security/idor.spec.ts`)** — Cross-user resource access attempts
+- **SSE Stream (`e2e/security/notifications-stream.spec.ts`)** — Real-time notification stream isolation
+- **ACL Enforcement Unit (`test/security/acl-enforcement.test.ts`)** — 50+ programmatic ACL checks
+- **Manual Checklist:** `plans/260516-comprehensive-test-suite/SECURITY-MANUAL-REVIEW.md` for config + crypto audits
+
+### Performance Tests (Phase 6)
+
+**N+1 Query Count Suite (`test/performance/`):**
+- `query-count.helper.ts` — pg.Pool wrapper counting real queries through extended Prisma client
+- `n-plus-one.test.ts` — Tests: dashboard (8 queries), ledgerSummary (1), aggregateMonth (2), taskBoard (9)
+- Result: **No N+1 patterns found** — all counts constant w.r.t. row volume
+- `seed-perf-data.ts` — Seeded perf test data; `baseline.json` stores p95 thresholds
+
+**Load Suite (`test/performance/load/`):**
+- `endpoints.load.test.ts` — Autocannon-based load tests for critical paths
+- `autocannon-runner.ts` — Test runner with customizable concurrency/duration
+- **On-demand only** — run via `npm run test:load` (requires live server); not part of PR pipeline
+
+### CI Pipeline (Phase 7)
+
+**GitHub Actions (`.github/workflows/test.yml`)**
+
+3 jobs:
+
+1. **Unit + Integration Job**
+   - Runs `npm run test` (unit blocking)
+   - Runs `npm run test:integration` (integration blocking)
+   - Runs `npm run test:coverage` (informational; continues on error — 60% threshold not yet met)
+   - PostgreSQL 16 service container
+   - Uploads coverage artifacts
+
+2. **E2E + Security Job**
+   - Starts Next.js dev server on port 3333
+   - Runs `npx playwright test` (E2E blocking)
+   - Runs security tests (included in e2e run)
+   - Caches Playwright browsers by resolved version
+   - Uploads test report + failure videos
+
+3. **Perf Job (Non-Blocking)**
+   - Informational; reports query counts
+   - Does NOT run load suite (deferred to nightly manual runs)
+
+### npm Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run test` | Unit tests (Vitest unit project, ~3s) |
+| `npm run test:watch` | Unit tests in watch mode |
+| `npm run test:coverage` | Unit tests + coverage report (generates `coverage/` HTML) |
+| `npm run test:integration` | Integration + security + perf unit tests (requires test DB) |
+| `npm run test:perf` | Alias for `npm run test:integration test/performance` |
+| `npm run test:load` | On-demand load suite (requires `RUN_LOAD=1` + live server on :3333) |
+| `npm run test:e2e` | Playwright E2E tests (requires `next dev` or built app on :3333) |
 
 ### Build Validation
 
 - `next build` — PASS
 - `tsc --noEmit` — PASS (clean, no type errors)
-- `npm run test` — All tests PASS
+- `npm run test` — 339 tests PASS
+- `npm run test:integration` — All integration + security + perf tests PASS
 
 ---
 

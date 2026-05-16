@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Functional tests — critical hotspots"
-status: pending
+status: completed
 priority: P1
 effort: "30h"
 dependencies: [1]
@@ -82,13 +82,13 @@ import adapters:
 
 ## Success Criteria
 
-- [ ] Every `throw` in `payment-service.ts` has a test asserting it fires on the right precondition.
-- [ ] Full payment round lifecycle passes against the real test DB (real extended `@/lib/prisma`) with correct final states AND audit rows written per write.
-- [ ] ACL D3 concurrency test proves no cross-request state leak.
-- [ ] All 6 import adapters parse a sample fixture correctly + reject a malformed row.
-- [ ] `conflict-resolver` and `file-hash` covered.
-- [ ] Coverage for `lib/payment`, `lib/import`, `lib/acl`, `lib/ledger/balance-service` ≥ 80% lines.
-- [ ] `npm run test` + `npm run test:integration` green; `npx tsc --noEmit` passes.
+- [x] Every `throw` in `payment-service.ts` has a test asserting it fires on the right precondition.
+- [x] Full payment round lifecycle passes against the real test DB (real extended `@/lib/prisma`) with correct final states AND audit rows written per write.
+- [x] ACL D3 concurrency test proves no cross-request state leak.
+- [x] All 6 import adapters parse a sample fixture correctly + reject a malformed row.
+- [x] `conflict-resolver` and `file-hash` covered.
+- [x] Coverage for `lib/payment`, `lib/import`, `lib/acl`, `lib/ledger/balance-service` ≥ 80% lines.
+- [x] `npm run test` + `npm run test:integration` green; `npx tsc --noEmit` passes.
 
 ## Risk Assessment
 

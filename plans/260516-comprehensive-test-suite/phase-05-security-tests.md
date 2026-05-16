@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Security tests"
-status: pending
+status: completed
 priority: P2
 effort: "18h"
 dependencies: [1, 4]
@@ -75,13 +75,13 @@ The matrix is data-driven: one `endpoints` array drives all parametrized tests. 
 
 ## Success Criteria
 
-- [ ] `endpoints.ts` covers all 10 routes with verified expected-access values.
-- [ ] Authz matrix: every role × endpoint cell asserted; all pass.
-- [ ] IDOR spec proves user B cannot read user A's attachment and no field leaks.
-- [ ] Auth-bypass spec covers no-cookie, tampered-token, insufficient-role.
-- [ ] `assertAccess` denial paths covered for module, dept, and project axes.
-- [ ] `SECURITY-MANUAL-REVIEW.md` lists every semantic check with verification steps.
-- [ ] Any discovered authz gap is filed as a bug (not hidden by a weakened assertion).
+- [x] `endpoints.ts` covers all 10 routes with verified expected-access values.
+- [x] Authz matrix: every role × endpoint cell asserted; all pass.
+- [x] IDOR spec proves user B cannot read user A's attachment and no field leaks.
+- [x] Auth-bypass spec covers no-cookie, tampered-token, insufficient-role.
+- [x] `assertAccess` denial paths covered for module, dept, and project axes.
+- [x] `SECURITY-MANUAL-REVIEW.md` lists every semantic check with verification steps.
+- [x] Any discovered authz gap is filed as a bug (not hidden by a weakened assertion).
 
 ## Risk Assessment
 

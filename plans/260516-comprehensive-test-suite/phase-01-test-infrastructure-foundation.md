@@ -173,16 +173,16 @@ Vitest runner
 
 ## Success Criteria
 
-- [ ] `npm run test` discovers + passes the 6 existing test files, no regressions.
-- [ ] `npm run test:coverage` emits `coverage/coverage-summary.json`.
-- [ ] `@/...` import resolves in a new sample test.
-- [ ] `mockSession({ role: "admin" })` makes a service calling `auth.api.getSession` see an admin.
-- [ ] `truncateAll()` against `localhost:5433` empties app + audit tables; a second test sees a clean DB.
-- [ ] Integration project runs serially (`pool: 'forks'`, `fileParallelism: false`) — verified by two integration files not interleaving rows.
-- [ ] A sample integration test using the REAL `@/lib/prisma` performs a write and finds the corresponding audit row.
-- [ ] `next/cache`, `next/navigation`, and `react` `cache()` are globally mocked — a service importing `revalidatePath`/`unstable_cache` runs without error.
-- [ ] `npx tsc --noEmit` passes for all new files.
-- [ ] `npx playwright test --list` runs without config error.
+- [x] `npm run test` discovers + passes the 6 existing test files, no regressions.
+- [x] `npm run test:coverage` emits `coverage/coverage-summary.json`.
+- [x] `@/...` import resolves in a new sample test.
+- [x] `mockSession({ role: "admin" })` makes a service calling `auth.api.getSession` see an admin.
+- [x] `truncateAll()` against `localhost:5433` empties app + audit tables; a second test sees a clean DB.
+- [x] Integration project runs serially (`pool: 'forks'`, `fileParallelism: false`) — verified by two integration files not interleaving rows.
+- [x] A sample integration test using the REAL `@/lib/prisma` performs a write and finds the corresponding audit row.
+- [x] `next/cache`, `next/navigation`, and `react` `cache()` are globally mocked — a service importing `revalidatePath`/`unstable_cache` runs without error.
+- [x] `npx tsc --noEmit` passes for all new files.
+- [x] `npx playwright test --list` runs without config error.
 
 ## Risk Assessment
 

@@ -277,13 +277,49 @@ Chunk operations in batches of 100 to prevent timeout. Wrap entire batch in a si
 
 ## Build & Validation
 
+### Pre-Commit Checks
+
 - **Type Checking:** `npx tsc --noEmit` must pass before commit. Module keys and level enums are type-safe.
 - **Linting:** Standard ESLint config; focus on no syntax errors, meaningful variable names, no unused imports.
-- **Tests:** Existing dept-access tests must still pass. New ACL helper tests in `lib/acl/__tests__/` cover:
-  - Module-level effective checks (40+ cases)
-  - Golden ACL fixtures for each role × axis × level boundary (32+ cases)
-  - Route guard audit (all 28 segments verified)
 - **Build:** `next build` must complete without errors
+- **Unit Tests:** `npm run test` must pass (339 tests covering lib/ services)
+
+### Automated Test Suite
+
+**Running Tests:**
+
+```bash
+# Fast unit tests (no DB required) — ~3s
+npm run test
+
+# Integration + security + perf tests (requires test DB) — ~30s
+npm run test:integration
+
+# Coverage report (unit tests only)
+npm run test:coverage
+
+# E2E tests (requires `next dev` on :3333)
+npm run test:e2e
+
+# Load tests (on-demand; requires live server on :3333)
+npm run test:load
+```
+
+**Test Structure:**
+- `lib/**/*.test.ts` — Unit tests for individual services (payment, ACL, import, etc.)
+- `test/integration/**/*.test.ts` — Integration tests with real DB
+- `test/security/*.test.ts` — Security-focused integration tests (ACL enforcement)
+- `test/performance/*.test.ts` — Performance tests (N+1 query counting; load is on-demand)
+- `e2e/**/*.spec.ts` — Playwright E2E tests for Server-Action flows
+- `e2e/security/**/*.spec.ts` — Security-specific E2E tests (auth bypass, IDOR, SSE)
+
+**Key Test Guidelines:**
+- Unit tests must NOT hit the database (use mocks from `test/helpers/`)
+- Integration tests use `truncateAll()` from `test/helpers/test-db.ts` to clean test DB after each suite
+- ACL tests verify both explicit grants and AppRole fallback paths
+- New ACL helper tests in `lib/acl/__tests__/` must maintain 100% pass rate (40+ resolver + 32+ fixture cases)
+- Security tests validate authorization matrix + auth bypass + IDOR + SSE isolation
+- All service layer changes should add corresponding integration test coverage
 
 ## Common Pitfalls
 

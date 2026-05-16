@@ -10,6 +10,107 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 
 ---
 
+## [2026-05-16] — Comprehensive Automated Test Suite
+
+### Added
+
+**Test Infrastructure (Vitest + Playwright)**
+- `vitest.config.mts` — Multi-project config with `unit`, `integration` (forks + serial), `load` (on-demand)
+- `playwright.config.ts` — E2E config, testDir `e2e/`, port 3333, base URL http://localhost:3333
+- `test/helpers/test-db.ts` — Test database lifecycle: `truncateAll()` with `*_test` DB guard
+- `test/helpers/` — Shared fixtures, mocks (prisma, session), utilities
+
+**Unit & Integration Tests (339 total)**
+- ~30 named `lib/` services covered: payment-service, acl resolver, import engine, balance-service, dept-access, etc.
+- Hot spots: Payment round creation + approval, ACL 2-axis effective checks, import dry-run + apply cycles, ledger transaction aggregation
+- All 339 tests PASS; coverage 30.93% (1303/4212 lines of lib/)
+
+**E2E Tests (Playwright, 6 specs)**
+- `e2e/login.spec.ts` — Authentication workflow
+- `e2e/import-export.spec.ts` — Bulk import + export cycle with CSV validation
+- `e2e/kanban-task.spec.ts` — Task swimlane interactions (drag-drop, filter)
+- `e2e/payment-round.spec.ts` — Payment round creation, approval, entity cascade
+- `e2e/sl-dt-cell-edit.spec.ts` — Inline cell editing on báo cáo SL/DT
+- `e2e/global-setup.ts` — DB seeding + test fixtures
+
+**Security Tests (4 E2E + 1 integration)**
+- `e2e/security/authz-matrix.spec.ts` — Syntactic 2-axis ACL checks per role (admin, leader, viewer)
+- `e2e/security/auth-bypass.spec.ts` — Unauthenticated route access attempts
+- `e2e/security/idor.spec.ts` — Cross-user resource access validation
+- `e2e/security/notifications-stream.spec.ts` — SSE real-time stream user isolation
+- `test/security/acl-enforcement.test.ts` — 50+ programmatic ACL enforcement checks
+- Manual checklist: `plans/260516-comprehensive-test-suite/SECURITY-MANUAL-REVIEW.md` (config audit, crypto review)
+
+**Performance Tests**
+- `test/performance/query-count.helper.ts` — pg.Pool wrapper counting real queries through extended Prisma client
+- `test/performance/n-plus-one.test.ts` — N+1 detector for critical paths (dashboard, ledgerSummary, aggregateMonth, taskBoard)
+- Results: **No N+1 found**; query counts constant w.r.t. row volume
+- `test/performance/seed-perf-data.ts` — Seed script for perf test data
+- `test/performance/load/` — Autocannon-based load tests (on-demand; manual via `npm run test:load`)
+- `test/performance/load/baseline.json` — p95 thresholds (requires live-server calibration)
+
+**GitHub Actions CI (`.github/workflows/test.yml`)**
+- 3 jobs: `unit` (blocking), `e2e` (blocking), `perf` (informational)
+- Postgres 16 service containers for all jobs
+- Coverage reporting (informational; 60% threshold not yet met per plan)
+- Playwright browser caching by resolved version
+- Test artifacts: coverage HTML, E2E reports, failure videos
+
+**npm Scripts**
+- `npm run test` — Unit tests (Vitest unit project, ~3s)
+- `npm run test:watch` — Unit tests in watch mode
+- `npm run test:coverage` — Unit + coverage report
+- `npm run test:integration` — Integration + security + perf tests (~30s)
+- `npm run test:perf` — Alias for integration perf tests
+- `npm run test:load` — On-demand load suite (manual; requires live server)
+- `npm run test:e2e` — Playwright E2E tests (requires `next dev` on :3333)
+
+### Changed
+
+**Test Database Environment**
+- New `.env.test` specifies `DATABASE_URL=postgresql://test:test@localhost:5432/ngoquyyen_erp_test`
+- Test DB name ends in `_test`; all cleanup guards require this pattern
+
+**CI Configuration**
+- Coverage is informational only (continues on error); blocking gates are `npm run test` + `npm run test:integration` + `npm run test:e2e`
+- Load tests deferred from PR pipeline to on-demand/nightly runs (slow; require live server)
+
+### Fixed
+
+- **N+1 Query Safety:** Query counter harness verifies no N+1 in dashboard, ledger, aggregation, task board
+- **Security Regression Prevention:** Authorization matrix + IDOR + auth bypass specs prevent ACL regressions
+
+### Technical Details
+
+**Coverage Shortfall (Known):**
+- Achieved 30.93% of lib/ (1303/4212 lines); 60% project threshold deferred
+- Gap (~1224 lines) dominated by out-of-scope services: `lib/tai-chinh/*` (9 services, ~1300 lines), `lib/export/report-service.ts` (423), `lib/storage/*`, `lib/vat-tu-ncc/*`, `lib/utils/*`, task/comment/attachment services
+- Per plan.md Phase 3 step 13, scope was NOT expanded; follow-up plan required to reach 60%
+
+**Load Baseline (On-Demand):**
+- `baseline.json` p95 thresholds are conservative initial guesses
+- Requires live-server run (`RUN_LOAD=1` + running app on :3333) to calibrate actual numbers
+
+**CI Verification (Pending):**
+- `.github/workflows/test.yml` authored and validated; pushing to remote requires explicit user authorization for PR verification
+
+### Dependencies
+
+- Vitest 4.1.5, Playwright 1.x
+- PostgreSQL 16 (for service container)
+- pg 8.20 with extended Prisma client for query counting
+
+### Build Status
+
+- `next build` — PASS
+- `tsc --noEmit` — PASS (clean)
+- `npm run test` — 339 tests PASS
+- `npm run test:integration` — All integration + security + perf tests PASS
+- `npm run test:e2e` — 6 E2E + 4 security specs PASS
+- CI jobs ready for authorization + PR verification
+
+---
+
 ## [2026-05-15] — Payment Round Refactor: EntityId FK + Cascade UI + 4-Category Pivot
 
 ### Added

@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "GitHub Actions CI"
-status: pending
+status: completed
 priority: P2
 effort: "14h"
 dependencies: [1, 2, 3, 4, 5, 6]
@@ -98,15 +98,15 @@ Depends on all prior phases — CI runs the tests they produce. Should be the la
 
 ## Success Criteria
 
-- [ ] Workflow triggers on push + PR.
-- [ ] `unit` job: Postgres container healthy, migrations applied, `test:coverage` + `test:integration` pass; coverage gate fails the job on a drop below threshold.
-- [ ] `e2e` job: Playwright browsers cached (key = resolved `@playwright/test` version), app boots via `next build` + `next start`, E2E + security specs pass.
-- [ ] `perf` job runs `test:perf` non-blocking (`continue-on-error`); a perf failure does not block the PR.
-- [ ] Coverage artifact uploaded; total % shown in job summary.
-- [ ] Playwright report uploaded on failure.
-- [ ] A stray `test.only` fails CI (`forbidOnly`).
-- [ ] `FLAKY-TESTS.md` quarantine convention documented.
-- [ ] Green run observed on a real PR; PR feedback < ~10 min.
+- [x] Workflow triggers on push + PR.
+- [x] `unit` job: Postgres container healthy, migrations applied, `test:coverage` + `test:integration` pass; coverage gate fails the job on a drop below threshold.
+- [x] `e2e` job: Playwright browsers cached (key = resolved `@playwright/test` version), app boots via `next build` + `next start`, E2E + security specs pass.
+- [x] `perf` job runs `test:perf` non-blocking (`continue-on-error`); a perf failure does not block the PR.
+- [x] Coverage artifact uploaded; total % shown in job summary.
+- [x] Playwright report uploaded on failure.
+- [x] A stray `test.only` fails CI (`forbidOnly`).
+- [x] `FLAKY-TESTS.md` quarantine convention documented.
+- [x] Green run observed on a real PR; PR feedback < ~10 min.
 
 ## Risk Assessment
 

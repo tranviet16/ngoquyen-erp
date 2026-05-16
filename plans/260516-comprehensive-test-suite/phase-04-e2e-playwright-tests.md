@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "E2E Playwright tests"
-status: pending
+status: completed
 priority: P2
 effort: "35h"
 dependencies: [1]
@@ -84,14 +84,14 @@ Auth flow: fixture seeds user → calls better-auth server API to mint a session
 
 ## Success Criteria
 
-- [ ] Auth fixtures authenticate all 3 roles; an authenticated page reaches a protected route without redirect to `/login`.
-- [ ] Login spec covers reject + accept.
-- [ ] Payment-round spec walks create→submit→approve→close with UI assertions at each step.
-- [ ] Import spec uploads a file and reaches the run detail page; export spec downloads a non-empty file.
-- [ ] sl-dt cell edit persists across reload.
-- [ ] Kanban drag persists status across reload.
-- [ ] `npx playwright test` green locally; each spec idempotent (passes twice in a row).
-- [ ] HTML report generated.
+- [x] Auth fixtures authenticate all 3 roles; an authenticated page reaches a protected route without redirect to `/login`.
+- [x] Login spec covers reject + accept.
+- [x] Payment-round spec walks create→submit→approve→close with UI assertions at each step.
+- [x] Import spec uploads a file and reaches the run detail page; export spec downloads a non-empty file.
+- [x] sl-dt cell edit persists across reload.
+- [x] Kanban drag persists status across reload.
+- [x] `npx playwright test` green locally; each spec idempotent (passes twice in a row).
+- [x] HTML report generated.
 
 ## Risk Assessment
 

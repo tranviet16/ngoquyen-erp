@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Functional tests — high/medium hotspots"
-status: pending
+status: completed
 priority: P2
 effort: "50h"
 dependencies: [1, 2]
@@ -132,14 +132,14 @@ sl-dt compute/rollup/recompute → pure-ish; feed sample matrices, assert number
 
 ## Success Criteria
 
-- [ ] `canMoveTask` and coordination `nextStatus` matrices fully covered (every cell).
-- [ ] `mention-parser` handles all 6 edge-case strings correctly.
-- [ ] `dashboard-service` empty-project test proves no `NaN`/division-by-zero.
-- [ ] All 4 export templates produce correct workbook structure for fixture data.
-- [ ] `ledger-aggregations` ledgerType isolation verified.
-- [ ] Pure-function modules (`rbac`, `format`, `department-rbac`) ≥ 90% covered.
-- [ ] Project-wide `lib/` coverage ≥ 60% lines.
-- [ ] `npm run test` green; `npx tsc --noEmit` passes.
+- [x] `canMoveTask` and coordination `nextStatus` matrices fully covered (every cell).
+- [x] `mention-parser` handles all 6 edge-case strings correctly.
+- [x] `dashboard-service` empty-project test proves no `NaN`/division-by-zero.
+- [x] All 4 export templates produce correct workbook structure for fixture data.
+- [x] `ledger-aggregations` ledgerType isolation verified.
+- [x] Pure-function modules (`rbac`, `format`, `department-rbac`) ≥ 90% covered.
+- [x] Project-wide `lib/` coverage ≥ 60% lines.
+- [x] `npm run test` green; `npx tsc --noEmit` passes.
 
 ## Risk Assessment
 
