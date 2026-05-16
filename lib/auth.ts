@@ -6,8 +6,11 @@ import { env } from "./env";
 // are in SKIP_AUDIT in prisma.ts so they don't generate audit rows.
 import { prisma } from "./prisma";
 
-const isProduction = env.NODE_ENV === "production";
 const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
+// Rate limiting defends prod auth endpoints, but E2E runs the production build
+// (`npm run start`) and would trip the 429 limit while seeding/login-spamming.
+// Disable it only when CI marks the run.
+const isCI = process.env.CI === "true";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -22,6 +25,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
+  },
+  rateLimit: {
+    enabled: !isCI,
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7,
