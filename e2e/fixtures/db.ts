@@ -69,6 +69,27 @@ export async function deleteLot(lotId: number): Promise<void> {
   await db.slDtLot.delete({ where: { id: lotId } });
 }
 
+/**
+ * Ensures one active entity, supplier, and project exist so the payment-round
+ * NewItemRow dropdowns (Chủ thể / NCC / Công trình) have a selectable option.
+ * Idempotent — reuses the `E2E` fixtures across runs. Left in place after the
+ * spec since they carry no per-run state.
+ */
+export async function ensurePaymentRefData(): Promise<void> {
+  const entity = await db.entity.findFirst({ where: { name: "Chủ thể E2E", deletedAt: null } });
+  if (!entity) {
+    await db.entity.create({ data: { name: "Chủ thể E2E", type: "company" } });
+  }
+  const supplier = await db.supplier.findFirst({ where: { name: "NCC E2E", deletedAt: null } });
+  if (!supplier) {
+    await db.supplier.create({ data: { name: "NCC E2E" } });
+  }
+  const project = await db.project.findFirst({ where: { code: "E2E-PRJ", deletedAt: null } });
+  if (!project) {
+    await db.project.create({ data: { code: "E2E-PRJ", name: "Công trình E2E" } });
+  }
+}
+
 /** Deletes a payment round and its items (FK-safe order). */
 export async function deleteRound(roundId: number): Promise<void> {
   await db.paymentRoundItem.deleteMany({ where: { roundId } });

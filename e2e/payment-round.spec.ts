@@ -1,8 +1,12 @@
 import { test, expect } from "./fixtures/auth";
-import { findRoundByNote, deleteRound } from "./fixtures/db";
+import { findRoundByNote, deleteRound, ensurePaymentRefData } from "./fixtures/db";
 
 test.describe("payment round", () => {
   const note = `E2E-ROUND-${Date.now()}`;
+
+  test.beforeAll(async () => {
+    await ensurePaymentRefData();
+  });
 
   test.afterAll(async () => {
     const round = await findRoundByNote(note);
