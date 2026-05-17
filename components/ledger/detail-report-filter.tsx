@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ControlledMultiSelect } from "@/components/ledger/controlled-multi-select";
 import type { Option } from "@/components/ledger/controlled-multi-select";
-import type { ViewMode } from "@/lib/cong-no-vt/balance-report-service";
 
 interface Props {
   entities: Option[];
@@ -17,7 +16,6 @@ interface Props {
     month?: number;
     entityIds: number[];
     projectIds: number[];
-    view: ViewMode;
     showZero: boolean;
   };
 }
@@ -25,12 +23,6 @@ interface Props {
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 7 }, (_, i) => CURRENT_YEAR - 3 + i);
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
-const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
-  { value: "trong-thang", label: "Trong tháng" },
-  { value: "luy-ke", label: "Lũy kế" },
-  { value: "ca-hai", label: "Cả hai" },
-];
 
 export function DetailReportFilter({
   entities,
@@ -50,7 +42,6 @@ export function DetailReportFilter({
   const [selectedEntityIds, setSelectedEntityIds] = useState<number[]>(defaultValues.entityIds);
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(defaultValues.projectIds);
   const [projectOptions, setProjectOptions] = useState<Option[]>(initialProjects);
-  const [view, setView] = useState<ViewMode>(defaultValues.view);
   const [showZero, setShowZero] = useState(defaultValues.showZero);
 
   // AbortController ref — latest-wins for cascade fetch
@@ -94,7 +85,6 @@ export function DetailReportFilter({
     if (month) params.set("month", month);
     if (selectedEntityIds.length > 0) params.set("entityIds", selectedEntityIds.join(","));
     if (selectedProjectIds.length > 0) params.set("projectIds", selectedProjectIds.join(","));
-    params.set("view", view);
     params.set("showZero", showZero ? "1" : "0");
     router.push(`?${params.toString()}`, { scroll: false });
   }
@@ -104,9 +94,8 @@ export function DetailReportFilter({
     setMonth("");
     setSelectedEntityIds([]);
     setSelectedProjectIds([]);
-    setView("ca-hai");
     setShowZero(false);
-    router.push("?view=ca-hai&showZero=0", { scroll: false });
+    router.push("?showZero=0", { scroll: false });
   }
 
   return (
@@ -162,28 +151,9 @@ export function DetailReportFilter({
         </div>
       </div>
 
-      {/* Row 2: View + hide-zero + actions */}
+      {/* Row 2: hide-zero + actions */}
       <div className="flex flex-wrap items-center gap-4">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">Hiển thị</span>
-          <div className="flex gap-3">
-            {VIEW_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                <input
-                  type="radio"
-                  name="detail-report-view"
-                  value={opt.value}
-                  checked={view === opt.value}
-                  onChange={() => setView(opt.value)}
-                  className="h-4 w-4"
-                />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm cursor-pointer mt-3">
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
             checked={showZero}
@@ -193,13 +163,13 @@ export function DetailReportFilter({
           Hiện dòng = 0
         </label>
 
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2">
           <Button size="sm" onClick={handleApply}>Áp dụng</Button>
           <Button size="sm" variant="ghost" onClick={handleReset}>Xóa bộ lọc</Button>
         </div>
 
-        <p className="text-xs text-muted-foreground mt-3 italic">
-          Lọc {partyLabel}: tìm kiếm qua trang nhập liệu.
+        <p className="text-xs text-muted-foreground italic">
+          Lọc {partyLabel}: tìm kiếm qua trang nhập liệu. Năm/tháng = mốc lũy kế tính đến hết kỳ.
         </p>
       </div>
     </div>

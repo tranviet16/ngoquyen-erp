@@ -1,9 +1,8 @@
-import type { DetailRow, SubtotalRow, ViewMode } from "@/lib/cong-no-vt/balance-report-service";
+import type { DetailRow, SubtotalRow } from "@/lib/cong-no-vt/balance-report-service";
 
 interface Props {
   rows: DetailRow[];
   subtotals: SubtotalRow[];
-  view: ViewMode;
   partyLabel: string;
 }
 
@@ -37,37 +36,33 @@ function findEntitySubtotal(
 // ─── Column definitions ────────────────────────────────────────────────────────
 
 type ColId =
-  | "phatSinhT"
-  | "daTraT"
-  | "noCuoiT"
-  | "phatSinhCum"
-  | "daTraCum"
-  | "noCum";
+  | "openingTt"
+  | "phatSinhTt"
+  | "daTraTt"
+  | "cuoiKyTt"
+  | "openingHd"
+  | "phatSinhHd"
+  | "daTraHd"
+  | "cuoiKyHd";
 
 interface ColDef {
   id: ColId;
   header: string;
 }
 
-const TRONG_THANG_COLS: ColDef[] = [
-  { id: "phatSinhT", header: "Phát sinh T (đ)" },
-  { id: "daTraT", header: "Đã trả T (đ)" },
-  { id: "noCuoiT", header: "Nợ cuối T (đ)" },
+// 4 field headers, shown once under each of the TT / HĐ group headers.
+const FIELD_HEADERS = ["Đầu kỳ", "Phát sinh", "Đã trả", "Cuối kỳ"] as const;
+
+const COLS: ColDef[] = [
+  { id: "openingTt", header: "Đầu kỳ" },
+  { id: "phatSinhTt", header: "Phát sinh" },
+  { id: "daTraTt", header: "Đã trả" },
+  { id: "cuoiKyTt", header: "Cuối kỳ" },
+  { id: "openingHd", header: "Đầu kỳ" },
+  { id: "phatSinhHd", header: "Phát sinh" },
+  { id: "daTraHd", header: "Đã trả" },
+  { id: "cuoiKyHd", header: "Cuối kỳ" },
 ];
-
-const LUY_KE_COLS: ColDef[] = [
-  { id: "phatSinhCum", header: "Phát sinh ∑ (đ)" },
-  { id: "daTraCum", header: "Đã trả ∑ (đ)" },
-  { id: "noCum", header: "Nợ ∑ (đ)" },
-];
-
-const CA_HAI_COLS: ColDef[] = [...TRONG_THANG_COLS, ...LUY_KE_COLS];
-
-function getCols(view: ViewMode): ColDef[] {
-  if (view === "trong-thang") return TRONG_THANG_COLS;
-  if (view === "luy-ke") return LUY_KE_COLS;
-  return CA_HAI_COLS;
-}
 
 function getVal(row: DetailRow | SubtotalRow, id: ColId): string {
   return row[id];
@@ -119,12 +114,10 @@ function buildGroups(rows: DetailRow[]): EntityGroup[] {
 function SubtotalTr({
   label,
   sub,
-  cols,
   groupSpan,
 }: {
   label: string;
   sub: SubtotalRow;
-  cols: ColDef[];
   groupSpan: number;
 }) {
   return (
@@ -135,7 +128,7 @@ function SubtotalTr({
       >
         {label}
       </td>
-      {cols.map((c) => (
+      {COLS.map((c) => (
         <td key={c.id} className="px-3 py-1.5 border text-right tabular-nums">
           {fmt(getVal(sub, c.id))}
         </td>
@@ -146,8 +139,7 @@ function SubtotalTr({
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function DetailReportTable({ rows, subtotals, view, partyLabel }: Props) {
-  const cols = getCols(view);
+export function DetailReportTable({ rows, subtotals, partyLabel }: Props) {
   const groups = buildGroups(rows);
 
   if (rows.length === 0) {
@@ -160,17 +152,37 @@ export function DetailReportTable({ rows, subtotals, view, partyLabel }: Props) 
 
   return (
     <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm border-collapse min-w-[700px]">
+      <table className="w-full text-sm border-collapse min-w-[980px]">
         <thead>
-          <tr className="bg-muted text-left text-xs font-semibold uppercase tracking-wide">
-            <th className="px-3 py-2 border sticky left-0 bg-muted z-10 min-w-[140px]">
+          <tr className="bg-muted text-xs font-semibold uppercase tracking-wide">
+            <th
+              rowSpan={2}
+              className="px-3 py-2 border sticky left-0 bg-muted z-10 min-w-[140px] text-left"
+            >
               Chủ thể
             </th>
-            <th className="px-3 py-2 border min-w-[160px]">{partyLabel}</th>
-            <th className="px-3 py-2 border min-w-[160px]">Công trình</th>
-            {cols.map((c) => (
-              <th key={c.id} className="px-3 py-2 border text-right min-w-[120px]">
-                {c.header}
+            <th rowSpan={2} className="px-3 py-2 border min-w-[160px] text-left">
+              {partyLabel}
+            </th>
+            <th rowSpan={2} className="px-3 py-2 border min-w-[160px] text-left">
+              Công trình
+            </th>
+            <th colSpan={4} className="px-3 py-2 border text-center">
+              Thực tế (TT)
+            </th>
+            <th colSpan={4} className="px-3 py-2 border text-center">
+              Hóa đơn (HĐ)
+            </th>
+          </tr>
+          <tr className="bg-muted text-xs font-semibold uppercase tracking-wide">
+            {FIELD_HEADERS.map((h) => (
+              <th key={`tt-${h}`} className="px-3 py-2 border text-right min-w-[110px]">
+                {h}
+              </th>
+            ))}
+            {FIELD_HEADERS.map((h) => (
+              <th key={`hd-${h}`} className="px-3 py-2 border text-right min-w-[110px]">
+                {h}
               </th>
             ))}
           </tr>
@@ -183,67 +195,70 @@ export function DetailReportTable({ rows, subtotals, view, partyLabel }: Props) 
               1 // +1 for entity subtotal
             );
 
-            return eg.partyGroups.map((pg, pgIdx) => {
-              const partyKey = `${eg.entityId}:${pg.partyId}`;
-              const partySub = findEntityPartySubtotal(subtotals, eg.entityId, pg.partyId);
-              const partyRowSpan = pg.detailRows.length + 1; // +1 for subtotal row
+            return eg.partyGroups
+              .map((pg, pgIdx) => {
+                const partyKey = `${eg.entityId}:${pg.partyId}`;
+                const partySub = findEntityPartySubtotal(subtotals, eg.entityId, pg.partyId);
+                const partyRowSpan = pg.detailRows.length + 1; // +1 for subtotal row
 
-              return [
-                ...pg.detailRows.map((row, rowIdx) => {
-                  const isFirstOfEntity = pgIdx === 0 && rowIdx === 0;
-                  const isFirstOfParty = rowIdx === 0;
-                  return (
-                    <tr key={`${partyKey}:${row.projectId ?? "null"}`} className="hover:bg-muted/30">
-                      {isFirstOfEntity && (
-                        <td
-                          rowSpan={entityRowSpan}
-                          className="px-3 py-2 border align-top font-medium sticky left-0 bg-background z-10"
-                        >
-                          {eg.entityName}
+                return [
+                  ...pg.detailRows.map((row, rowIdx) => {
+                    const isFirstOfEntity = pgIdx === 0 && rowIdx === 0;
+                    const isFirstOfParty = rowIdx === 0;
+                    return (
+                      <tr
+                        key={`${partyKey}:${row.projectId ?? "null"}`}
+                        className="hover:bg-muted/30"
+                      >
+                        {isFirstOfEntity && (
+                          <td
+                            rowSpan={entityRowSpan}
+                            className="px-3 py-2 border align-top font-medium sticky left-0 bg-background z-10"
+                          >
+                            {eg.entityName}
+                          </td>
+                        )}
+                        {isFirstOfParty && (
+                          <td rowSpan={partyRowSpan} className="px-3 py-2 border align-top">
+                            {pg.partyName}
+                          </td>
+                        )}
+                        <td className="px-3 py-2 border text-muted-foreground">
+                          {row.projectName ?? <span className="italic opacity-50">—</span>}
                         </td>
-                      )}
-                      {isFirstOfParty && (
-                        <td
-                          rowSpan={partyRowSpan}
-                          className="px-3 py-2 border align-top"
-                        >
-                          {pg.partyName}
-                        </td>
-                      )}
-                      <td className="px-3 py-2 border text-muted-foreground">
-                        {row.projectName ?? <span className="italic opacity-50">—</span>}
-                      </td>
-                      {cols.map((c) => (
-                        <td key={c.id} className="px-3 py-2 border text-right tabular-nums">
-                          {fmt(getVal(row, c.id))}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                }),
-                // Entity-party subtotal row
-                partySub ? (
+                        {COLS.map((c) => (
+                          <td
+                            key={c.id}
+                            className="px-3 py-2 border text-right tabular-nums"
+                          >
+                            {fmt(getVal(row, c.id))}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  }),
+                  partySub ? (
+                    <SubtotalTr
+                      key={`sub-ep-${partyKey}`}
+                      label={`Tổng ${pg.partyName}`}
+                      sub={partySub}
+                      groupSpan={1} // project col only (entity + party already spanned)
+                    />
+                  ) : null,
+                ];
+              })
+              .flat()
+              .concat(
+                entitySub ? (
                   <SubtotalTr
-                    key={`sub-ep-${partyKey}`}
-                    label={`Tổng ${pg.partyName}`}
-                    sub={partySub}
-                    cols={cols}
-                    groupSpan={1} // project col only (entity + party already spanned)
+                    key={`sub-e-${eg.entityId}`}
+                    label={`Tổng ${eg.entityName}`}
+                    sub={entitySub}
+                    groupSpan={2} // party + project cols
                   />
-                ) : null,
-              ];
-            }).flat().concat(
-              // Entity subtotal row after all party groups
-              entitySub ? (
-                <SubtotalTr
-                  key={`sub-e-${eg.entityId}`}
-                  label={`Tổng ${eg.entityName}`}
-                  sub={entitySub}
-                  cols={cols}
-                  groupSpan={2} // party + project cols
-                />
-              ) : null
-            ).filter(Boolean);
+                ) : null
+              )
+              .filter(Boolean);
           })}
         </tbody>
       </table>

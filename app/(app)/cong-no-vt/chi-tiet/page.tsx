@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getMaterialDetailReport } from "@/lib/cong-no-vt/balance-report-service";
 import { DetailReportTable } from "@/components/ledger/detail-report-table";
 import { DetailReportFilter } from "@/components/ledger/detail-report-filter";
-import type { ViewMode } from "@/lib/cong-no-vt/balance-report-service";
 
 interface PageProps {
   searchParams: Promise<{
@@ -11,13 +10,12 @@ interface PageProps {
     month?: string;
     entityIds?: string;
     projectIds?: string;
-    view?: string;
     showZero?: string;
   }>;
 }
 
 export default async function ChiTietPage({ searchParams }: PageProps) {
-  await requireModuleAccess("cong-no-vt.chi-tiet", { minLevel: "read", scope: "module" });
+  await requireModuleAccess("cong-no-vt", { minLevel: "read", scope: "module" });
 
   const sp = await searchParams;
 
@@ -36,11 +34,6 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
       ?.split(",")
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => Number.isFinite(n) && n > 0) ?? [];
-
-  const validViews: ViewMode[] = ["trong-thang", "luy-ke", "ca-hai"];
-  const view: ViewMode = validViews.includes(sp.view as ViewMode)
-    ? (sp.view as ViewMode)
-    : "ca-hai";
 
   const showZero = sp.showZero === "1";
 
@@ -83,22 +76,21 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
     : [];
 
   // Fetch report data
-  const { rows, subtotals, periodEnd: _periodEnd } = await getMaterialDetailReport({
+  const { rows, subtotals } = await getMaterialDetailReport({
     ledgerType: "material",
     year,
     month,
     entityIds: entityIds.length > 0 ? entityIds : undefined,
     projectIds: projectIds.length > 0 ? projectIds : undefined,
-    view,
     showZero,
   });
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Công nợ chi tiết – Vật tư</h1>
+        <h1 className="text-2xl font-bold">Công nợ lũy kế – Vật tư</h1>
         <p className="text-sm text-muted-foreground">
-          Phát sinh / Đã trả / Nợ theo (Chủ thể × NCC × Công trình)
+          Đầu kỳ / Phát sinh / Đã trả / Cuối kỳ (TT &amp; HĐ) theo (Chủ thể × NCC × Công trình)
         </p>
       </div>
 
@@ -112,17 +104,11 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
           month,
           entityIds,
           projectIds,
-          view,
           showZero,
         }}
       />
 
-      <DetailReportTable
-        rows={rows}
-        subtotals={subtotals}
-        view={view}
-        partyLabel="NCC"
-      />
+      <DetailReportTable rows={rows} subtotals={subtotals} partyLabel="NCC" />
     </div>
   );
 }

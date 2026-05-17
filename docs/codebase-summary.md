@@ -115,6 +115,7 @@ ngoquyyen-erp/
 **Models:** SupplierDebt, SupplierDebtDetail (per dept), PaymentRound, PaymentRoundItem (Entity-Supplier-Project-Category matrix)
 
 **Key Features:**
+- **Công nợ lũy kế** (Cumulative debt report): 8-column report (Đầu kỳ / Phát sinh / Đã trả / Cuối kỳ for TT & HĐ), grouped by Chủ thể × NCC × Công trình with subtotals; includes `dieu_chinh` transactions; accessed via parent page tab
 - Debt matrix by supplier × dept
 - Aging calculation and payment terms
 - Debt filter by entity type (chu thể)
@@ -123,12 +124,17 @@ ngoquyyen-erp/
 - Payment round approval workflow with entity cascade
 
 **ACL Axis:** Dept-scoped (`UserDeptAccess`) for debt routes; Project-filtered for payment cascade
+- Module keys: `cong-no-vt`, `cong-no-nc` (no third-level submodule keys as of 2026-05-17)
 
 **Routes:**
 - `/cong-no-vt/` — Supplier debt (Vật Tư Materials dept)
 - `/cong-no-nc/` — Supplier debt (Nhân Công Labor dept)
-- `/api/cong-no/cascade-projects` — Fetch projects by ledgerType + entityIds (widened ACL: accepts 3 modules)
+- `/api/cong-no/cascade-projects` — Fetch projects by ledgerType + entityIds (ACL: cong-no-vt, cong-no-nc, thanh-toan.ke-hoach)
 - `/api/thanh-toan/cascade-suppliers` — Fetch suppliers by ledgerType + entityId + projectId
+
+**Service Layer:**
+- `lib/cong-no-vt/balance-report-service.ts` — Cumulative debt report (FULL OUTER JOIN opening_balances ⋈ transactions)
+- `lib/cong-no-nc/balance-report-service.ts` — Delegates to VT service
 
 ### 4. Tasks (van-hanh/cong-viec)
 

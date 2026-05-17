@@ -20,7 +20,7 @@ export default async function CongNoNcPage() {
         { href: "/cong-no-nc/nhap-lieu", label: "Nhập liệu" },
         { href: "/cong-no-nc/so-du-ban-dau", label: "Số dư ban đầu" },
         { href: "/cong-no-nc/bao-cao-thang", label: "Báo cáo tháng" },
-        { href: "/cong-no-nc/chi-tiet", label: "Chi tiết đội" },
+        { href: "/cong-no-nc/chi-tiet", label: "Công nợ lũy kế" },
       ]}
       summary={summary}
       parties={parties}

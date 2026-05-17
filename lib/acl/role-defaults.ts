@@ -33,8 +33,6 @@ const CANBO_VT_EDIT_MODULES = new Set<ModuleKey>([
   "thanh-toan.tong-hop",
   "dashboard",
   "thong-bao",
-  "cong-no-vt.chi-tiet",
-  "cong-no-nc.chi-tiet",
 ]);
 
 /** Modules where viewer gets "read" fallback. */

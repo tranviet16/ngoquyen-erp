@@ -10,6 +10,33 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 
 ---
 
+## [2026-05-17] — Công Nợ Lũy Kế: Cumulative Report Refactor
+
+### Changed
+
+**Công nợ (Debt) Reporting**
+- "Công nợ chi tiết" detail report restructured into pure cumulative "Công nợ lũy kế"
+  - 8 columns: Đầu kỳ / Phát sinh / Đã trả / Cuối kỳ (each for TT thực tế and HĐ hóa đơn)
+  - Grouping: Chủ thể × NCC × Công trình with subtotals
+  - `dieu_chinh` transactions now included (positive → phát sinh, negative → đã trả)
+  - year/month filter acts as cutoff point ("tính đến hết tháng X"), not in-month window
+  - Accessed via parent page tab, not standalone sidebar item
+
+**ACL Module Registry (lib/acl/modules.ts)**
+- REMOVED: `cong-no-vt.chi-tiet` and `cong-no-nc.chi-tiet` submodule keys
+- Parent modules `cong-no-vt` and `cong-no-nc` remain; detail report functionality folded into parent ACL scope
+
+**Navigation (components/layout/app-sidebar.tsx)**
+- REMOVED: 2 sidebar items for detail reports (Công nợ VT Chi tiết, Công nợ NC Chi tiết)
+- Detail report now accessible via tab in parent Công nợ VT/NC pages
+
+**Service Layer**
+- `lib/cong-no-vt/balance-report-service.ts` rewritten as cumulative report (FULL OUTER JOIN + aggregation)
+- `lib/cong-no-nc/balance-report-service.ts` delegates to VT service
+- `ViewMode` type removed; single report format
+
+---
+
 ## [2026-05-16] — Comprehensive Automated Test Suite
 
 ### Added
@@ -123,7 +150,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - `GET /api/thanh-toan/cascade-suppliers` — Query: ledgerType + entityId + optional projectId → returns distinct suppliers from ledger_transactions
   - Handles all ledger types (material, labor); labor short-circuits to `[]` (uses Contractor, not Supplier)
   - Falls back to all active suppliers when ledgerType=all
-- Modified `GET /api/cong-no/cascade-projects` — Now widened ACL to accept any of 3 modules: cong-no-vt.chi-tiet, cong-no-nc.chi-tiet, **thanh-toan.ke-hoach**
+- Modified `GET /api/cong-no/cascade-projects` — ACL accepts cong-no-vt, cong-no-nc, **thanh-toan.ke-hoach** (submodule keys deprecated as of 2026-05-17)
   - Filters projects by entityIds (optional, multi-select) + ledgerType
 
 **Cascade UI**

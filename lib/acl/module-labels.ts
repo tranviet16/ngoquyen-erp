@@ -23,8 +23,6 @@ export const MODULE_LABELS: Record<ModuleKey, string> = {
   "admin.phong-ban": "Quản trị – Phòng ban",
   "admin.nguoi-dung": "Quản trị – Người dùng",
   "admin.permissions": "Quản trị – Phân quyền",
-  "cong-no-vt.chi-tiet": "Công nợ vật tư – Chi tiết",
-  "cong-no-nc.chi-tiet": "Công nợ nhân công – Chi tiết",
 };
 
 export const LEVEL_LABELS: Record<AccessLevel, string> = {

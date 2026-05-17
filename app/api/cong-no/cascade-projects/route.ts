@@ -15,7 +15,7 @@ import type { ModuleKey } from "@/lib/acl";
  * ledger_opening_balances for the given ledgerType + entityIds.
  *
  * Auth: valid session required (401 if absent).
- *       Module access required: any of cong-no-vt.chi-tiet, cong-no-nc.chi-tiet,
+ *       Module access required: any of cong-no-vt, cong-no-nc,
  *       or thanh-toan.ke-hoach (403 if all denied).
  */
 
@@ -45,8 +45,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // ACL: accept any of the three modules — cong-no users OR payment plan users
   const accessOpts = { minLevel: "read" as const, scope: "module" as const };
   const [allowedDebt, allowedLabor, allowedPayment] = await Promise.all([
-    canAccess(session.user.id, "cong-no-vt.chi-tiet" as ModuleKey, accessOpts),
-    canAccess(session.user.id, "cong-no-nc.chi-tiet" as ModuleKey, accessOpts),
+    canAccess(session.user.id, "cong-no-vt" as ModuleKey, accessOpts),
+    canAccess(session.user.id, "cong-no-nc" as ModuleKey, accessOpts),
     canAccess(session.user.id, "thanh-toan.ke-hoach" as ModuleKey, accessOpts),
   ]);
   if (!allowedDebt && !allowedLabor && !allowedPayment) {

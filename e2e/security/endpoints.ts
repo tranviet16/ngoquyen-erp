@@ -58,7 +58,7 @@ export const SECURITY_ENDPOINTS: SecEndpoint[] = [
     name: "cong-no-cascade-projects",
     method: "GET",
     path: "/api/cong-no/cascade-projects?ledgerType=material",
-    note: "ACL: needs any of cong-no-vt.chi-tiet / cong-no-nc.chi-tiet / thanh-toan.ke-hoach. canbo_vt has edit fallback on all three → 200; viewer has none → 403.",
+    note: "ACL: needs any of cong-no-vt / cong-no-nc / thanh-toan.ke-hoach. canbo_vt has edit fallback on all three → 200; viewer has none → 403.",
     expect: { admin: [200], viewer: [403], scoped: [200], anon: ANON_BLOCKED },
   },
   {

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getLaborDetailReport } from "@/lib/cong-no-nc/balance-report-service";
 import { DetailReportTable } from "@/components/ledger/detail-report-table";
 import { DetailReportFilter } from "@/components/ledger/detail-report-filter";
-import type { ViewMode } from "@/lib/cong-no-nc/balance-report-service";
 
 interface PageProps {
   searchParams: Promise<{
@@ -11,13 +10,12 @@ interface PageProps {
     month?: string;
     entityIds?: string;
     projectIds?: string;
-    view?: string;
     showZero?: string;
   }>;
 }
 
 export default async function ChiTietNcPage({ searchParams }: PageProps) {
-  await requireModuleAccess("cong-no-nc.chi-tiet", { minLevel: "read", scope: "module" });
+  await requireModuleAccess("cong-no-nc", { minLevel: "read", scope: "module" });
 
   const sp = await searchParams;
 
@@ -36,11 +34,6 @@ export default async function ChiTietNcPage({ searchParams }: PageProps) {
       ?.split(",")
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => Number.isFinite(n) && n > 0) ?? [];
-
-  const validViews: ViewMode[] = ["trong-thang", "luy-ke", "ca-hai"];
-  const view: ViewMode = validViews.includes(sp.view as ViewMode)
-    ? (sp.view as ViewMode)
-    : "ca-hai";
 
   const showZero = sp.showZero === "1";
 
@@ -88,16 +81,15 @@ export default async function ChiTietNcPage({ searchParams }: PageProps) {
     month,
     entityIds: entityIds.length > 0 ? entityIds : undefined,
     projectIds: projectIds.length > 0 ? projectIds : undefined,
-    view,
     showZero,
   });
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Công nợ chi tiết – Nhân công</h1>
+        <h1 className="text-2xl font-bold">Công nợ lũy kế – Nhân công</h1>
         <p className="text-sm text-muted-foreground">
-          Phát sinh / Đã trả / Nợ theo (Chủ thể × Đội thi công × Công trình)
+          Đầu kỳ / Phát sinh / Đã trả / Cuối kỳ (TT &amp; HĐ) theo (Chủ thể × Đội thi công × Công trình)
         </p>
       </div>
 
@@ -111,17 +103,11 @@ export default async function ChiTietNcPage({ searchParams }: PageProps) {
           month,
           entityIds,
           projectIds,
-          view,
           showZero,
         }}
       />
 
-      <DetailReportTable
-        rows={rows}
-        subtotals={subtotals}
-        view={view}
-        partyLabel="Đội thi công"
-      />
+      <DetailReportTable rows={rows} subtotals={subtotals} partyLabel="Đội thi công" />
     </div>
   );
 }

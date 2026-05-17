@@ -17,8 +17,6 @@ export const MODULE_KEYS = [
   "admin.phong-ban",
   "admin.nguoi-dung",
   "admin.permissions",
-  "cong-no-vt.chi-tiet",
-  "cong-no-nc.chi-tiet",
 ] as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -56,8 +54,6 @@ export const MODULE_AXIS: Record<ModuleKey, AxisType> = {
   "admin.phong-ban": "admin-only",
   "admin.nguoi-dung": "admin-only",
   "admin.permissions": "admin-only",
-  "cong-no-vt.chi-tiet": "dept",
-  "cong-no-nc.chi-tiet": "dept",
 };
 
 // D4: per-module valid level domain. Admin UI dropdown filters by this.
@@ -81,8 +77,6 @@ export const MODULE_LEVELS: Record<ModuleKey, readonly AccessLevel[]> = {
   "thanh-toan.tong-hop": ["read", "comment", "edit"],
   "van-hanh.cong-viec": ["read", "comment", "edit"],
   "van-hanh.phieu-phoi-hop": ["read", "comment", "edit"],
-  "cong-no-vt.chi-tiet": ["read", "comment", "edit"],
-  "cong-no-nc.chi-tiet": ["read", "comment", "edit"],
 };
 
 export function isValidLevelForModule(mk: ModuleKey, level: AccessLevel): boolean {

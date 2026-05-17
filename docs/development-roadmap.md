@@ -6,8 +6,45 @@ This document tracks the project's development phases, milestones, and progress 
 
 ## Current Status
 
-**Date:** 2026-05-16  
-**Active Phases:** Plan A (ACL) ✅ Complete (2026-05-10); Comprehensive Test Suite ✅ Complete (2026-05-16); Plan B and C unblocked for parallel execution
+**Date:** 2026-05-17  
+**Active Phases:** Plan A (ACL) ✅ Complete (2026-05-10); Comprehensive Test Suite ✅ Complete (2026-05-16); Công nợ Lũy Kế ✅ Complete (2026-05-17); Plan B and C unblocked for parallel execution
+
+---
+
+## Công Nợ Lũy Kế Report Refactor (COMPLETE)
+
+**Status:** ✅ Complete  
+**Duration:** 2026-05-17  
+**Priority:** P2
+
+### Overview
+
+Restructured the "Công nợ chi tiết" (detail debt) report into a pure cumulative "Công nợ lũy kế" report. Removed view toggle and detail-report sidebar items. Folded ACL submodule keys (`cong-no-vt.chi-tiet`, `cong-no-nc.chi-tiet`) into parent module scopes. Included `dieu_chinh` transactions to match báo cáo tháng numbers.
+
+### Deliverables
+
+**Service Layer Rewrite**
+- `lib/cong-no-vt/balance-report-service.ts` — Cumulative report with 8 columns (Đầu kỳ / Phát sinh / Đã trả / Cuối kỳ for TT & HĐ)
+- `lib/cong-no-nc/balance-report-service.ts` — Delegates to VT service
+- FULL OUTER JOIN aggregation; `dieu_chinh` included with sign-split (positive→phát sinh, negative→đã trả)
+- Grouping: Chủ thể × NCC × Công trình with entity-party and entity subtotals
+
+**ACL Simplification**
+- Removed `cong-no-vt.chi-tiet` and `cong-no-nc.chi-tiet` from MODULE_KEYS
+- Parent modules `cong-no-vt` and `cong-no-nc` now scope all debt functionality (no third-level submodule keys)
+- Updated ACL reference in cascade endpoint: `cong-no-vt`, `cong-no-nc`, `thanh-toan.ke-hoach`
+
+**Navigation Refactoring**
+- Removed 2 sidebar items for detail reports
+- Detail report now accessed via tab on parent Công nợ VT/NC pages
+- Sidebar remains ACL-filtered with parent module keys only
+
+### Outcomes
+
+- Simpler ACL hierarchy (no nested submodule keys); easier maintenance
+- Cumulative report eliminates view toggle; single, clear representation
+- Numbers now match báo cáo tháng (dieu_chinh included)
+- Tab-based access reduces sidebar clutter
 
 ---
 
