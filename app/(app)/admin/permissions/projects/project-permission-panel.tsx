@@ -229,9 +229,9 @@ export function ProjectPermissionPanel({
               <div className="flex-1 overflow-y-auto p-4">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b text-left">
-                      <th className="pb-2 font-medium">Dự án</th>
-                      <th className="pb-2 font-medium w-40">Mức quyền</th>
+                    <tr className="border-b">
+                      <th className="pb-2 text-left font-medium">Dự án</th>
+                      <th className="pb-2 text-left font-medium w-40">Mức quyền</th>
                     </tr>
                   </thead>
                   <tbody>

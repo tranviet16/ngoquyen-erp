@@ -79,15 +79,15 @@ export default async function ImportRunDetailPage({ params }: Props) {
           <div className="overflow-x-auto max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left">
-                  <th className="p-2">Dòng</th>
-                  <th className="p-2">Thông báo</th>
+                <tr className="border-b">
+                  <th className="p-2 text-right w-20">Dòng</th>
+                  <th className="p-2 text-left">Thông báo</th>
                 </tr>
               </thead>
               <tbody>
                 {errors.map((e, i) => (
                   <tr key={i} className="border-b">
-                    <td className="p-2 font-mono">{e.rowIndex >= 0 ? e.rowIndex + 1 : "—"}</td>
+                    <td className="p-2 text-right font-mono tabular-nums">{e.rowIndex >= 0 ? e.rowIndex + 1 : "—"}</td>
                     <td className="p-2 text-red-700">{e.message}</td>
                   </tr>
                 ))}

@@ -3,10 +3,10 @@ import { auth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 const TEST_USERS = [
-  { email: "ketoan@nq.local", name: "Ke toan", role: "ketoan" },
-  { email: "canbovt@nq.local", name: "Can bo Vat tu", role: "canbo_vt" },
-  { email: "chct@nq.local", name: "Chi huy Cong truong", role: "chihuy_ct" },
-  { email: "viewer@nq.local", name: "Nguoi xem", role: "viewer" },
+  { email: "ketoan@nq.local", name: "Kế toán", role: "ketoan" },
+  { email: "canbovt@nq.local", name: "Cán bộ Vật tư", role: "canbo_vt" },
+  { email: "chct@nq.local", name: "Chỉ huy Công trường", role: "chihuy_ct" },
+  { email: "viewer@nq.local", name: "Người xem", role: "viewer" },
 ];
 
 const PASSWORD = "changeme123";

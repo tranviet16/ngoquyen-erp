@@ -63,7 +63,7 @@ export function OpeningBalanceClient({ initialData, entities, partyOptions, part
               <th className="p-2 text-right">Số dư TT</th>
               <th className="p-2 text-right">Số dư HĐ</th>
               <th className="p-2 text-left">Ghi chú</th>
-              <th className="p-2 w-[120px]">Thao tác</th>
+              <th className="p-2 text-left w-[120px]">Thao tác</th>
             </tr>
           </thead>
           <tbody>

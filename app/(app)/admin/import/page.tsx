@@ -47,16 +47,16 @@ export default async function AdminImportPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="border-b bg-muted/50 text-left">
-                  <th className="p-2">#</th>
-                  <th className="p-2">File</th>
-                  <th className="p-2">Adapter</th>
-                  <th className="p-2">Trạng thái</th>
+                <tr className="border-b bg-muted/50">
+                  <th className="p-2 text-left">#</th>
+                  <th className="p-2 text-left">File</th>
+                  <th className="p-2 text-left">Adapter</th>
+                  <th className="p-2 text-left">Trạng thái</th>
                   <th className="p-2 text-right">Đã nhập</th>
                   <th className="p-2 text-right">Bỏ qua</th>
-                  <th className="p-2">Thời gian</th>
-                  <th className="p-2">Chi tiết</th>
-                  <th className="p-2"></th>
+                  <th className="p-2 text-left">Thời gian</th>
+                  <th className="p-2 text-left">Chi tiết</th>
+                  <th className="p-2 text-left"></th>
                 </tr>
               </thead>
               <tbody>
