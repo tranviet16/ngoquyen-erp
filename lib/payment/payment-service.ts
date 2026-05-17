@@ -481,6 +481,28 @@ export async function closeRound(roundId: number) {
   });
 }
 
+/**
+ * Soft-delete a payment round (sets deletedAt). Allowed for the round creator
+ * or an admin, and only while the round is not yet approved/closed —
+ * approved/closed rounds carry settled figures and must stay auditable.
+ */
+export async function deleteRound(roundId: number) {
+  const actor = await getActor();
+  const round = await prisma.paymentRound.findFirst({
+    where: { id: roundId, deletedAt: null },
+    select: { status: true, createdById: true },
+  });
+  if (!round) throw new Error("Không tìm thấy đợt");
+  if (round.status === "approved" || round.status === "closed")
+    throw new Error("Không xoá được đợt đã duyệt hoặc đã đóng");
+  if (round.createdById !== actor.id && !isAdmin(actor.role))
+    throw new Error("Chỉ người lập đợt hoặc admin được xoá");
+  await prisma.paymentRound.update({
+    where: { id: roundId },
+    data: { deletedAt: new Date() },
+  });
+}
+
 export interface AggregateRow {
   supplierId: number;
   supplierName: string;

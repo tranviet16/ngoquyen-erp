@@ -61,6 +61,11 @@ export async function closeRoundAction(roundId: number) {
   revalidatePath("/thanh-toan/ke-hoach");
 }
 
+export async function deleteRoundAction(roundId: number) {
+  await svc.deleteRound(roundId);
+  revalidatePath("/thanh-toan/ke-hoach");
+}
+
 export async function refreshItemBalancesAction(
   itemId: number,
   roundId: number

@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createRoundAction } from "../actions";
+import { createRoundAction, deleteRoundAction } from "../actions";
 import type { PaymentCategory, RoundStatus } from "@/lib/payment/payment-service";
 
 export const CATEGORY_LABEL: Record<PaymentCategory, string> = {
@@ -125,12 +125,17 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
                   {new Date(r.createdAt).toLocaleDateString("vi-VN")}
                 </td>
                 <td className="px-3 py-2">
-                  <Link
-                    href={`/thanh-toan/ke-hoach/${r.id}`}
-                    className="text-primary underline-offset-2 hover:underline"
-                  >
-                    Xem
-                  </Link>
+                  <div className="flex items-center justify-end gap-3">
+                    <Link
+                      href={`/thanh-toan/ke-hoach/${r.id}`}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      Xem
+                    </Link>
+                    {r.status !== "approved" && r.status !== "closed" && (
+                      <DeleteRoundButton round={r} onDeleted={() => router.refresh()} />
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -148,6 +153,62 @@ const STATUS_LABEL: Record<RoundStatus, string> = {
   rejected: "Từ chối",
   closed: "Đã đóng",
 };
+
+function DeleteRoundButton({
+  round,
+  onDeleted,
+}: {
+  round: RoundRow;
+  onDeleted: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function confirmDelete() {
+    startTransition(async () => {
+      try {
+        await deleteRoundAction(round.id);
+        toast.success("Đã xoá đợt thanh toán");
+        setOpen(false);
+        onDeleted();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Lỗi");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <button
+            type="button"
+            className="text-destructive underline-offset-2 hover:underline"
+          >
+            Xoá
+          </button>
+        }
+      />
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Xoá đợt thanh toán</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Xoá đợt {round.month} #{round.sequence} ({round._count.items} dòng)?
+          Hành động này không thể hoàn tác.
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+            Huỷ
+          </Button>
+          <Button variant="destructive" onClick={confirmDelete} disabled={pending}>
+            Xoá
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function CreateRoundDialog({
   onClose,
