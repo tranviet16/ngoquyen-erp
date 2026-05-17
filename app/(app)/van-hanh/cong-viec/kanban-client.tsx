@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -24,17 +23,9 @@ import {
 } from "@/lib/task/state-machine";
 import type { TaskWithRelations } from "@/lib/task/task-service";
 import { regroupBySwimlane } from "@/lib/task/regroup-swimlane";
-import {
-  assignTaskAction,
-  createTaskAction,
-  deleteTaskAction,
-  moveTaskAction,
-  updateTaskAction,
-} from "./actions";
-import { CommentSection } from "@/components/cong-viec/comment-section";
-import { AttachmentSection } from "@/components/cong-viec/attachment-section";
-import { SubtaskSection } from "@/components/cong-viec/subtask-section";
+import { createTaskAction, moveTaskAction } from "./actions";
 import { TaskCard } from "@/components/task/task-card";
+import { TaskDetailPanel } from "./task-detail-panel";
 import { ViewToggle, type ViewMode } from "@/components/task/view-toggle";
 import { SwimlaneBoard } from "@/components/task/swimlane-board";
 import { AssigneeMultiSelect } from "@/components/task/assignee-multi-select";
@@ -317,7 +308,7 @@ export function KanbanClient({
         />
       )}
       {openEdit && (
-        <EditTaskDialog
+        <TaskDetailPanel
           task={openEdit}
           members={openEdit.deptId === currentDeptId ? members : []}
           currentUserId={currentUserId}
@@ -329,7 +320,6 @@ export function KanbanClient({
             setOpenEdit(null);
             router.refresh();
           }}
-          pending={pending}
         />
       )}
     </div>
@@ -487,176 +477,6 @@ function CreateTaskDialog({
           </Button>
         </div>
       </form>
-    </Backdrop>
-  );
-}
-
-function EditTaskDialog({
-  task,
-  members,
-  currentUserId,
-  canEdit,
-  canAssign,
-  canDelete,
-  onClose,
-  onChanged,
-  pending,
-}: {
-  task: TaskWithRelations;
-  members: MemberOpt[];
-  currentUserId: string;
-  canEdit: boolean;
-  canAssign: boolean;
-  canDelete: boolean;
-  onClose: () => void;
-  onChanged: () => void;
-  pending: boolean;
-}) {
-  const [title, setTitle] = useState(task.title);
-  const [description, setDescription] = useState(task.description ?? "");
-  const [priority, setPriority] = useState(task.priority);
-  const [deadline, setDeadline] = useState(
-    task.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : "",
-  );
-  const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? "");
-  const [submitting, startSubmit] = useTransition();
-
-  function saveEdit() {
-    startSubmit(async () => {
-      try {
-        await updateTaskAction(task.id, {
-          title,
-          description: description || null,
-          priority: priority as "cao" | "trung_binh" | "thap",
-          deadline: deadline || null,
-        });
-        toast.success("Đã cập nhật");
-        onChanged();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : String(err));
-      }
-    });
-  }
-
-  function saveAssign() {
-    startSubmit(async () => {
-      try {
-        await assignTaskAction(task.id, assigneeId || null);
-        toast.success("Đã phân công");
-        onChanged();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : String(err));
-      }
-    });
-  }
-
-  function doDelete() {
-    if (!confirm("Xóa task này?")) return;
-    startSubmit(async () => {
-      try {
-        await deleteTaskAction(task.id);
-        toast.success("Đã xóa");
-        onChanged();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : String(err));
-      }
-    });
-  }
-
-  return (
-    <Backdrop onClose={onClose}>
-      <div className="space-y-3">
-        <div>
-          <h2 className="text-lg font-bold">Chi tiết task</h2>
-          {task.sourceForm && (
-            <Link href={`/van-hanh/phieu-phoi-hop/${task.sourceForm.id}`} className="text-xs text-primary hover:underline">
-              Từ phiếu {task.sourceForm.code}
-            </Link>
-          )}
-        </div>
-        <div>
-          <Label>Tiêu đề</Label>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} maxLength={200} />
-        </div>
-        <div>
-          <Label>Mô tả</Label>
-          <textarea
-            className="mt-1 w-full min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={!canEdit}
-            maxLength={2000}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>Ưu tiên</Label>
-            <select
-              className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              disabled={!canEdit}
-            >
-              <option value="cao">Cao</option>
-              <option value="trung_binh">Trung bình</option>
-              <option value="thap">Thấp</option>
-            </select>
-          </div>
-          <div>
-            <Label>Hạn chót</Label>
-            <DateInput value={deadline} onChange={(v) => setDeadline(v)} disabled={!canEdit} />
-          </div>
-        </div>
-        <div>
-          <Label>Người được giao</Label>
-          <div className="mt-1 flex gap-2">
-            <select
-              className="h-9 flex-1 rounded-md border border-input bg-transparent px-2 text-sm"
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              disabled={!canAssign}
-            >
-              <option value="">— Chưa giao —</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-            {canAssign && (
-              <Button type="button" size="sm" onClick={saveAssign} disabled={submitting || pending}>
-                Lưu
-              </Button>
-            )}
-          </div>
-          {!canAssign && (
-            <p className="text-xs text-muted-foreground mt-1">Chỉ lãnh đạo phòng được phân công</p>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Phòng: {task.dept.code} - {task.dept.name} • Người tạo: {task.creator.name}
-        </p>
-        {!task.parentId && (
-          <SubtaskSection parentId={task.id} members={members} canEditParent={canEdit} />
-        )}
-        <CommentSection taskId={task.id} currentUserId={currentUserId} members={members} />
-        <AttachmentSection taskId={task.id} />
-        <div className="flex justify-between gap-2 pt-2 border-t">
-          <div>
-            {canDelete && (
-              <Button type="button" variant="outline" onClick={doDelete} disabled={submitting || pending} className="text-destructive">
-                Xóa
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={onClose} disabled={submitting || pending}>Đóng</Button>
-            {canEdit && (
-              <Button type="button" onClick={saveEdit} disabled={submitting || pending}>
-                {submitting ? "Đang lưu..." : "Lưu"}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
     </Backdrop>
   );
 }
