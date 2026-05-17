@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import { ArrowLeft, LogOut, User as UserIcon } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth-client";
 import {
   DropdownMenu,
@@ -41,7 +41,9 @@ function initialsOf(name?: string, email?: string): string {
 
 export function Topbar() {
   const router = useRouter();
+  const pathname = usePathname();
   const { data: session } = useSession();
+  const showBack = pathname !== "/dashboard" && pathname !== "/";
   const user = session?.user as ExtendedUser | undefined;
   const roleLabel = user?.role ? ROLE_LABELS[user.role] ?? user.role : null;
 
@@ -55,6 +57,17 @@ export function Topbar() {
     <header className="flex h-14 items-center gap-3 border-b bg-background/95 backdrop-blur-sm px-4 sticky top-0 z-20 supports-[backdrop-filter]:bg-background/80">
       <SidebarTrigger className="-ml-1 shrink-0" />
       <div className="h-5 w-px bg-border shrink-0" aria-hidden="true" />
+      {showBack && (
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="inline-flex items-center justify-center size-8 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
+          aria-label="Quay lại"
+          title="Quay lại"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+        </button>
+      )}
       <div className="flex-1 min-w-0">
         <Breadcrumb />
       </div>
@@ -94,7 +107,7 @@ export function Topbar() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => router.push("/master-data")}
+              onClick={() => router.push("/ho-so")}
               className="cursor-pointer gap-2"
             >
               <UserIcon className="size-4" aria-hidden="true" />
