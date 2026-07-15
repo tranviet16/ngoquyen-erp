@@ -17,4 +17,9 @@ Performance and coverage remain informational. The protection policy was updated
 3. Revert the fixture, confirm the green PR can merge, and link that PR in this document.
 4. Any break-glass change requires repository-admin approval and an incident record.
 
-The first remote PR evidence is pending because the workflow revision has not yet been published from this dirty workspace.
+## Verified PR evidence
+
+PR [#1](https://github.com/tranviet16/ngoquyen-erp/pull/1) verified the policy on
+2026-07-15. Its security-scoped head SHA `491efe474103de4c70825f1f4d4bbffbff636d24`
+passed `baseline`, `security-contract`, and `e2e-security`; performance also
+passed as informational. The PR was `CLEAN` after the required checks completed.
