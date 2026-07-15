@@ -4,6 +4,7 @@
  */
 
 import { CongNoVatTuAdapter } from "./cong-no-vat-tu.adapter";
+import { CongNoNhanCongAdapter } from "./cong-no-nhan-cong.adapter";
 import { DuAnXayDungAdapter } from "./du-an-xay-dung.adapter";
 import { TaiChinhNqAdapter } from "./tai-chinh-nq.adapter";
 import { GachNamHuongAdapter } from "./gach-nam-huong.adapter";
@@ -13,6 +14,7 @@ import type { ImportAdapter } from "./adapter-types";
 
 const ADAPTERS: ImportAdapter[] = [
   CongNoVatTuAdapter,
+  CongNoNhanCongAdapter,
   DuAnXayDungAdapter,
   TaiChinhNqAdapter,
   GachNamHuongAdapter,
@@ -28,6 +30,6 @@ export function getAdapter(name: string): ImportAdapter | undefined {
   return REGISTRY.get(name);
 }
 
-export function listAdapters(): { name: string; label: string }[] {
-  return ADAPTERS.map((a) => ({ name: a.name, label: a.label }));
+export function listAdapters(): { name: string; label: string; supportsRollback: boolean }[] {
+  return ADAPTERS.map((a) => ({ name: a.name, label: a.label, supportsRollback: a.supportsRollback }));
 }
