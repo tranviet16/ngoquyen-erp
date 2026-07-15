@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { canAccess } from "@/lib/acl";
 import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/rbac";
 
 /**
  * GET /api/thanh-toan/cascade-suppliers
@@ -32,6 +34,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const actor = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+  if (!isAdmin(actor?.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const allowed = await canAccess(session.user.id, "thanh-toan.tong-hop", {
+    minLevel: "read",
+    scope: "module",
+  });
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = req.nextUrl;
   const ledgerType = searchParams.get("ledgerType");

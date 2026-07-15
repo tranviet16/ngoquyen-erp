@@ -15,6 +15,7 @@ import { truncateAll, closeTestDb } from "@/test/helpers/test-db";
 import * as svc from "@/lib/payment/payment-service";
 
 const ADMIN_ID = "admin-int";
+const APPROVER_ID = "approver-int";
 
 async function seed() {
   await prisma.user.create({
@@ -22,6 +23,16 @@ async function seed() {
       id: ADMIN_ID,
       name: "Integration Admin",
       email: "admin-int@test.local",
+      role: "admin",
+      isDirector: true,
+      isLeader: false,
+    },
+  });
+  await prisma.user.create({
+    data: {
+      id: APPROVER_ID,
+      name: "Integration Approver",
+      email: "approver-int@test.local",
       role: "admin",
       isDirector: true,
       isLeader: false,
@@ -71,6 +82,7 @@ describe("payment round lifecycle (integration)", () => {
       "submitted",
     );
 
+    mockSession({ id: APPROVER_ID, role: "admin" });
     await svc.bulkApproveAsRequested(round.id);
     const afterBulk = await prisma.paymentRound.findUniqueOrThrow({ where: { id: round.id } });
     expect(afterBulk.status).toBe("approved");

@@ -45,7 +45,7 @@ location /kuma/ {
 
 ## GlitchTip (Self-hosted Sentry alternative)
 
-GlitchTip is optional. Add to `docker-compose.prod.yml` if error tracking is required.
+GlitchTip self-hosted is required for production error tracking. Its DSN is stored only in the production secret store.
 
 ### Quick Setup with Docker
 
@@ -102,4 +102,4 @@ docker compose -f docker/docker-compose.prod.yml logs nginx
 - [ ] ERP health endpoint monitor active
 - [ ] Telegram/Email notification configured and tested
 - [ ] Backup push monitor configured
-- [ ] GlitchTip DSN added to `.env.production` (optional)
+- [ ] GlitchTip DSN added through the production secret store

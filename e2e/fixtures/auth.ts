@@ -27,24 +27,30 @@ async function signedInPage(browser: Browser, email: string): Promise<Page> {
 
 type AuthFixtures = {
   asAdmin: Page;
+  asApprover: Page;
   asViewer: Page;
   asProjectUser: Page;
 };
 
 export const test = base.extend<AuthFixtures>({
-  asAdmin: async ({ browser }, use) => {
+  asAdmin: async ({ browser }, runFixture) => {
     const page = await signedInPage(browser, "e2e-admin@nq.local");
-    await use(page);
+    await runFixture(page);
     await page.context().close();
   },
-  asViewer: async ({ browser }, use) => {
+  asViewer: async ({ browser }, runFixture) => {
     const page = await signedInPage(browser, "e2e-viewer@nq.local");
-    await use(page);
+    await runFixture(page);
     await page.context().close();
   },
-  asProjectUser: async ({ browser }, use) => {
+  asApprover: async ({ browser }, runFixture) => {
+    const page = await signedInPage(browser, "e2e-approver@nq.local");
+    await runFixture(page);
+    await page.context().close();
+  },
+  asProjectUser: async ({ browser }, runFixture) => {
     const page = await signedInPage(browser, "e2e-project@nq.local");
-    await use(page);
+    await runFixture(page);
     await page.context().close();
   },
 });

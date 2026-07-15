@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { canAccess } from "@/lib/acl";
+import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/rbac";
 import {
   aggregateMonth,
   type AggregateRow,
@@ -80,6 +83,18 @@ export async function GET(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const actor = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true },
+  });
+  if (!isAdmin(actor?.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const allowed = await canAccess(session.user.id, "thanh-toan.tong-hop", {
+    minLevel: "read",
+    scope: "module",
+  });
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const month =
     req.nextUrl.searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
@@ -155,7 +170,7 @@ export async function GET(req: NextRequest) {
 
   // ── Header row 2: entity×metric sub-headers per category + Totals subs ───
   const headerRow2: (string | number)[] = ["", ""];
-  for (const _cat of CATEGORIES) {
+  for (let categoryIndex = 0; categoryIndex < CATEGORIES.length; categoryIndex += 1) {
     for (const en of entities) {
       headerRow2.push(`${en.name} — Đề nghị`);
       headerRow2.push(`${en.name} — Duyệt`);

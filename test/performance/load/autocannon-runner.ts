@@ -24,6 +24,11 @@ export interface LoadOpts {
 }
 
 export async function runLoad(url: string, opts: LoadOpts = {}): Promise<LoadResult> {
+  const target = new URL(url);
+  const localTarget = target.hostname === "localhost" || target.hostname === "127.0.0.1";
+  if (!localTarget && process.env.ALLOW_PRODUCTION_LOAD !== "yes") {
+    throw new Error("Refusing non-local load target without ALLOW_PRODUCTION_LOAD=yes");
+  }
   const result = await autocannon({
     url,
     connections: opts.connections ?? 10,

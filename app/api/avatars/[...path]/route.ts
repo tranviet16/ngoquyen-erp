@@ -23,6 +23,9 @@ export async function GET(_req: Request, { params }: Params): Promise<Response> 
 
   const { path } = await params;
   if (!path || path.length === 0) return new Response("Bad request", { status: 400 });
+  if (path[0] !== session.user.id && session.user.role !== "admin") {
+    return new Response("Forbidden", { status: 403 });
+  }
 
   const rel = `avatars/${path.join("/")}`;
   const ext = rel.split(".").pop()?.toLowerCase() ?? "";

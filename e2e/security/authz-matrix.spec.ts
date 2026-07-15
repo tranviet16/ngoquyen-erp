@@ -14,7 +14,7 @@ async function hit(ctx: APIRequestContext, ep: SecEndpoint): Promise<number> {
   const opts = { maxRedirects: 0, timeout: 20_000, failOnStatusCode: false };
   const res =
     ep.method === "POST"
-      ? await ctx.post(ep.path, opts)
+      ? await ctx.post(ep.path, { ...opts, data: ep.body })
       : await ctx.get(ep.path, opts);
   return res.status();
 }

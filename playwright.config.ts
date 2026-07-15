@@ -15,6 +15,7 @@ const serverEnv: Record<string, string> = {
   BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",
   BETTER_AUTH_URL: baseURL,
   NODE_ENV: "test",
+  E2E: "true",
   PORT: String(PORT),
 };
 
@@ -37,7 +38,9 @@ export default defineConfig({
     // Dev locally; CI builds + starts for deterministic E2E (see Phase 7).
     command: process.env.CI ? "npm run start" : "npm run dev",
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // E2E setup mutates the isolated test database. Reusing a developer's
+    // already-running server can point setup and the app at different state.
+    reuseExistingServer: false,
     timeout: 120_000,
     env: serverEnv,
   },

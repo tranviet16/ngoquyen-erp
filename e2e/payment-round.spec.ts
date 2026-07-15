@@ -15,6 +15,7 @@ test.describe("payment round", () => {
 
   test("creates a round, adds a dịch vụ item, then runs the full lifecycle", async ({
     asAdmin: page,
+    asApprover,
   }) => {
     // Every lifecycle action confirms via window.confirm — auto-accept all.
     page.on("dialog", (dialog) => dialog.accept());
@@ -44,9 +45,11 @@ test.describe("payment round", () => {
     await expect(page.getByText("Đã thêm")).toBeVisible();
 
     await page.getByRole("button", { name: "Gửi duyệt" }).click();
-    await page.getByRole("button", { name: "Duyệt tất cả = đề xuất" }).click();
-    await page.getByRole("button", { name: "Đóng đợt" }).click();
+    await asApprover.goto(page.url());
+    asApprover.on("dialog", (dialog) => dialog.accept());
+    await asApprover.getByRole("button", { name: "Duyệt tất cả = đề xuất" }).click();
+    await asApprover.getByRole("button", { name: "Đóng đợt" }).click();
 
-    await expect(page.getByText("Đã đóng")).toBeVisible();
+    await expect(asApprover.getByText("Đã đóng")).toBeVisible();
   });
 });

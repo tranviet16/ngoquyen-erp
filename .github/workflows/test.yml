@@ -8,11 +8,38 @@ env:
   # Ephemeral service-container creds — NOT secrets. DB name ends in `_test`,
   # which the truncateAll() / global-setup guards require.
   DATABASE_URL: postgresql://test:test@localhost:5432/ngoquyyen_erp_test
-  BETTER_AUTH_SECRET: ci-test-secret-not-a-real-key
+  BETTER_AUTH_SECRET: Q7mV2xL9pR4sT8wY3zB6cD1fG5hJ0kNq
 
 jobs:
+  classify:
+    name: risk-classify
+    runs-on: ubuntu-latest
+    outputs:
+      strict: ${{ steps.classify.outputs.strict }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - id: classify
+        shell: bash
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "strict=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          result="$(npm run --silent risk:classify -- $(git diff --name-only "$base" "$GITHUB_SHA"))"
+          echo "$result"
+          strict="$(node -e "console.log(JSON.parse(process.argv[1]).securityContract)" "$result")"
+          echo "strict=$strict" >> "$GITHUB_OUTPUT"
+
   unit:
-    name: Unit + integration
+    name: baseline
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -36,6 +63,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate
+      - run: npm run risk:verify
       - run: npx prisma migrate deploy
       # Blocking gate: unit + integration must pass. Coverage is NOT gated here —
       # the lib/ 60% threshold is a project target not yet met (see plan.md
@@ -62,8 +90,41 @@ jobs:
           path: coverage/
           if-no-files-found: ignore
 
+  security-contract:
+    name: security-contract
+    needs: classify
+    if: needs.classify.outputs.strict == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ngoquyyen_erp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - run: npm run risk:verify
+      - run: npm run test:integration -- test/security
+
   e2e:
-    name: E2E + security
+    name: e2e-security
+    needs: classify
+    if: needs.classify.outputs.strict == 'true'
     runs-on: ubuntu-latest
     env:
       CI: "true"
