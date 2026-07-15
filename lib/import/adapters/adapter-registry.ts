@@ -31,5 +31,5 @@ export function getAdapter(name: string): ImportAdapter | undefined {
 }
 
 export function listAdapters(): { name: string; label: string; supportsRollback: boolean }[] {
-  return ADAPTERS.map((a) => ({ name: a.name, label: a.label, supportsRollback: a.supportsRollback }));
+  return ADAPTERS.map((a) => ({ name: a.name, label: a.label, supportsRollback: Boolean(a.supportsRollback) }));
 }
