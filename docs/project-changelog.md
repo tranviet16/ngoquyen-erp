@@ -14,6 +14,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - Added controlled finance payable/receivable sync snapshots with admin override preservation, SL-DT receivable sync, payable exclusions, and clearer Excel export formatting.
 
 ### Fixed
+- Restored labor-specific Excel header mapping after the upstream merge so both `Đội Thi Công` transaction rows and legacy supplier headers remain importable; added fail-closed risk-manifest coverage for role administration, finance payable/receivable sync, and the SL-DT lot catalog.
 - Synced Finance overview Phải thu/Phải trả totals from the consolidated tab source and added row/all-row delete handling for PR lines.
 - Aggregated duplicate Công nợ Nhân công opening-balance rows during import so repeated entity/contractor/project tuples no longer drop source amounts.
 - Reworked browser PDF printing with page size/orientation controls and print CSS that prevents wide tables from being cropped.

@@ -61,13 +61,14 @@ export const CongNoNhanCongAdapter: ImportAdapter = {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const contractorNames = new Set<string>();
     const entityNames = new Set<string>();
+    const options = { partyHeaders: PARTY_HEADERS, itemHeaders: ITEM_HEADERS };
 
     const txSheetName = findSheet(wb, "nhập liệu", "nhap lieu");
     const openSheetName = findSheet(wb, "số dư ban đầu", "so du ban dau");
 
     const rows: ParsedRow[] = [];
-    if (txSheetName) rows.push(...toLaborRows(parseTxSheet(wb.Sheets[txSheetName]!, 0, contractorNames, entityNames)));
-    if (openSheetName) rows.push(...toLaborRows(parseOpenSheet(wb.Sheets[openSheetName]!, 100000, contractorNames, entityNames)));
+    if (txSheetName) rows.push(...toLaborRows(parseTxSheet(wb.Sheets[txSheetName]!, 0, contractorNames, entityNames, options)));
+    if (openSheetName) rows.push(...toLaborRows(parseOpenSheet(wb.Sheets[openSheetName]!, 100000, contractorNames, entityNames, options)));
 
     const conflicts: ConflictItem[] = [];
     for (const name of contractorNames) conflicts.push(await resolveContractor(name));
