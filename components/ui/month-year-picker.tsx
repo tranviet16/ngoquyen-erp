@@ -38,9 +38,14 @@ export function MonthYearPicker({
   const maxYear = yearOptions ? Math.max(...yearOptions, currentYear + 1) : currentYear + 1;
 
   useEffect(() => {
-    setSelYear(year);
-    setSelMonth(month);
-    setViewYear(year);
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setSelYear(year);
+      setSelMonth(month);
+      setViewYear(year);
+    });
+    return () => { active = false; };
   }, [year, month]);
 
   useEffect(() => {

@@ -3,6 +3,7 @@ import { fmtNum, fmtPct } from "@/lib/sl-dt/format";
 import type { SanLuongRow } from "@/lib/sl-dt/rollup";
 import { MonthYearPicker } from "@/components/ui/month-year-picker";
 import { EditableNumberCell, EditableLotNumberCell, EditableTextCell } from "@/components/sl-dt/editable-cell";
+import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 
 interface Props {
   searchParams: Promise<{ year?: string; month?: string }>;
@@ -10,8 +11,8 @@ interface Props {
 
 function rowClass(kind: SanLuongRow["kind"]) {
   if (kind === "grand") return "border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold text-sm [&>td]:!bg-transparent [&>td]:!border-x-0 [&>td]:py-2.5";
-  if (kind === "phase") return "border-t-2 border-slate-400 dark:border-slate-500 bg-slate-100 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 font-semibold text-sm [&>td]:!bg-transparent [&>td]:!border-x-0 [&>td]:py-2";
-  if (kind === "group") return "border-t border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 font-medium text-sm [&>td]:!bg-transparent [&>td]:!border-x-0";
+  if (kind === "phase") return "border-t-[3px] border-slate-500 dark:border-slate-400 bg-slate-200 dark:bg-slate-800 text-slate-950 dark:text-slate-50 font-bold text-sm [&>td]:!bg-transparent [&>td]:!border-x-0 [&>td]:py-2.5";
+  if (kind === "group") return "border-t border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 font-semibold text-sm [&>td]:!bg-transparent [&>td]:!border-x-0 [&>td:first-child]:border-l-4 [&>td:first-child]:border-primary";
   return "border-b hover:bg-muted/10 text-sm transition-colors";
 }
 
@@ -32,9 +33,20 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
-        <p className="text-sm text-muted-foreground">Tháng {month}/{year} — SL nghiệm thu nội bộ theo lô</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
+          <p className="text-sm text-muted-foreground">Tháng {month}/{year} — SL nghiệm thu nội bộ theo lô</p>
+        </div>
+        <div className="no-print flex flex-wrap gap-2">
+          <ExcelExportButton
+            template="sl-dt"
+            params={{ year, month }}
+            filename={`bao-cao-sl-dt-${String(month).padStart(2, "0")}-${year}.xlsx`}
+            label="Xuất Excel"
+          />
+          <PrintButton label="Xuất PDF (In)" />
+        </div>
       </div>
 
       <form className="flex gap-2 items-center flex-wrap">
@@ -72,7 +84,7 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
               return (
                 <tr key={`${r.kind}-${idx}`} className={rowClass(r.kind)}>
                   <td className="p-2 text-center">{r.kind === "lot" ? stt : ""}</td>
-                  <td className={`p-2 ${r.kind !== "lot" ? "pl-2" : "pl-4"}`}>{r.lotName}</td>
+                  <td className={`p-2 ${r.kind === "phase" ? "pl-3" : r.kind === "group" ? "pl-5" : "pl-8"}`}>{r.lotName}</td>
                   {editable ? (
                     <EditableLotNumberCell lotId={r.lotId!} field="estimateValue" value={r.estimateValue} />
                   ) : (

@@ -75,7 +75,7 @@ export function SubtaskSection({ parentId, members, canEditParent }: Props) {
   }
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId]);
 

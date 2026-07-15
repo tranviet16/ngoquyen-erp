@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { MODULE_KEYS, MODULE_LEVELS } from "@/lib/acl/modules";
 import type { ModuleKey, AccessLevel } from "@/lib/acl/modules";
-import type { MODULE_LABELS } from "@/lib/acl/module-labels";
 import {
   bulkApplyModulePermissionChanges,
   type ModulePermissionChange,

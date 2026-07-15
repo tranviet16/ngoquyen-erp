@@ -16,7 +16,7 @@ export default async function BaoCaoThangNcPage({ searchParams }: Props) {
   const year = params.year ? parseInt(params.year, 10) : now.getFullYear();
   const month = params.month ? parseInt(params.month, 10) : now.getMonth() + 1;
 
-  let entityId = params.entityId ? parseInt(params.entityId, 10) : NaN;
+  const entityId = params.entityId ? parseInt(params.entityId, 10) : NaN;
   if (!Number.isFinite(entityId) || entityId <= 0) {
     const fallback = await firstLaborEntityWithActivity(year, month);
     if (fallback == null) {

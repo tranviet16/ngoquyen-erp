@@ -50,6 +50,6 @@ test.describe("payment round", () => {
     await asApprover.getByRole("button", { name: "Duyệt tất cả = đề xuất" }).click();
     await asApprover.getByRole("button", { name: "Đóng đợt" }).click();
 
-    await expect(asApprover.getByText("Đã đóng")).toBeVisible();
+    await expect(asApprover.getByText("Đã đóng", { exact: true })).toBeVisible();
   });
 });

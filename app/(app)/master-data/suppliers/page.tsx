@@ -1,26 +1,39 @@
 import { Suspense } from "react";
+import { prisma } from "@/lib/prisma";
+import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { SUPPLIER_SPEC } from "@/lib/master-data/suppliers/table-spec";
 import { SuppliersClient } from "./suppliers-client";
-import { listSuppliers } from "@/lib/master-data/supplier-service";
 
 interface Props {
-  searchParams: Promise<{ search?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function SuppliersPage({ searchParams }: Props) {
-  const params = await searchParams;
-  const search = params.search ?? "";
-  const page = Number(params.page ?? 1);
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") params.set(k, v);
+  }
 
-  const result = await listSuppliers({ search, page, pageSize: 20 });
+  const state = parseTableQuery(params, SUPPLIER_SPEC);
+  const args = buildPrismaArgs(state, SUPPLIER_SPEC);
+
+  const [rows, total] = await Promise.all([
+    prisma.supplier.findMany({
+      ...args,
+      where: { ...args.where, deletedAt: null },
+    }),
+    prisma.supplier.count({ where: { ...args.where, deletedAt: null } }),
+  ]);
 
   return (
     <Suspense>
       <SuppliersClient
-        data={result.items}
-        total={result.total}
-        page={result.page}
-        pageSize={result.pageSize}
-        searchValue={search}
+        data={rows}
+        total={total}
+        page={state.page}
+        pageSize={state.pageSize}
+        searchValue={state.search ?? ""}
       />
     </Suspense>
   );

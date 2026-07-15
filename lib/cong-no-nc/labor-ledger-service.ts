@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { prisma } from "@/lib/prisma";
 import { LedgerService } from "@/lib/ledger/ledger-service";
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
@@ -50,7 +50,7 @@ export async function listLaborTransactions(filter?: Parameters<typeof service.l
 
 export async function createLaborTransaction(input: TransactionInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const data = transactionSchema.parse(input);
   await assertContractorExists(data.partyId);
   const tx = await service.create(data);
@@ -60,7 +60,7 @@ export async function createLaborTransaction(input: TransactionInput) {
 
 export async function updateLaborTransaction(id: number, input: TransactionInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const data = transactionSchema.parse(input);
   await assertContractorExists(data.partyId);
   const tx = await service.update(id, data);
@@ -70,14 +70,14 @@ export async function updateLaborTransaction(id: number, input: TransactionInput
 
 export async function softDeleteLaborTransaction(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
   await service.softDelete(id);
   revalidateAll();
 }
 
 export async function softDeleteLaborTransactions(ids: number[]) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
   for (const id of ids) await service.softDelete(id);
   revalidateAll();
 }
@@ -87,7 +87,7 @@ export async function patchLaborTransaction(
   patch: Record<string, unknown>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const current = await prisma.ledgerTransaction.findUnique({ where: { id } });
   if (!current || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
 
@@ -126,7 +126,7 @@ export async function adminPatchLaborTransaction(
   patch: Partial<{ vatTt: number | string; totalTt: number | string; vatHd: number | string; totalHd: number | string }>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
   const data: Record<string, unknown> = {};
   if (patch.vatTt !== undefined) data.vatTt = String(patch.vatTt ?? "0");
   if (patch.totalTt !== undefined) data.totalTt = String(patch.totalTt ?? "0");
@@ -144,7 +144,7 @@ export async function bulkUpsertLaborTransactions(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const results: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;
@@ -168,7 +168,7 @@ export async function listLaborOpeningBalances(filter?: Parameters<typeof servic
 
 export async function setLaborOpeningBalance(input: OpeningBalanceInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const data = openingBalanceSchema.parse(input);
   await assertContractorExists(data.partyId);
   const ob = await service.setOpeningBalance(data);
@@ -178,14 +178,14 @@ export async function setLaborOpeningBalance(input: OpeningBalanceInput) {
 
 export async function deleteLaborOpeningBalance(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
   await service.deleteOpeningBalance(id);
   revalidateAll();
 }
 
 export async function deleteLaborOpeningBalances(ids: number[]) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
   for (const id of ids) await service.deleteOpeningBalance(id);
   revalidateAll();
 }
@@ -195,7 +195,7 @@ export async function patchLaborOpeningBalance(
   patch: Record<string, unknown>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const current = await prisma.ledgerOpeningBalance.findUnique({ where: { id } });
   if (!current) throw new Error(`Số dư #${id} không tồn tại`);
 
@@ -220,7 +220,7 @@ export async function bulkUpsertLaborOpeningBalances(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
   const results: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;

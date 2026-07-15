@@ -88,7 +88,7 @@ export async function listComments(taskId: number): Promise<CommentRow[]> {
 
 export async function createComment(taskId: number, bodyRaw: string): Promise<CommentRow> {
   const body = sanitizeBody(bodyRaw);
-  const { ctx, role, accessMap } = await requireContext();
+  const { ctx, accessMap } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const task = await tx.task.findUnique({
@@ -210,7 +210,7 @@ export async function createComment(taskId: number, bodyRaw: string): Promise<Co
 
 export async function editComment(commentId: number, bodyRaw: string): Promise<CommentRow> {
   const body = sanitizeBody(bodyRaw);
-  const { ctx, role } = await requireContext();
+  const { ctx } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.taskComment.findUnique({

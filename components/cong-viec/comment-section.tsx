@@ -169,7 +169,7 @@ export function CommentSection({ taskId, currentUserId, members = [] }: Props) {
   }
 
   useEffect(() => {
-    load();
+    void Promise.resolve().then(load);
     const es = new EventSource("/api/notifications/stream");
     esRef.current = es;
     es.addEventListener("message", (event) => {

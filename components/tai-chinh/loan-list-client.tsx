@@ -8,23 +8,9 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { LoanFormDialog } from "./loan-form-dialog";
 import { formatVND, formatDate, formatPercent } from "@/lib/utils/format";
+import { LOAN_SPEC, type LoanRow } from "@/lib/tai-chinh/loans/table-spec";
+import { patchLoan } from "@/lib/tai-chinh/loan-service";
 import type { Prisma } from "@prisma/client";
-
-interface LoanRow {
-  id: number;
-  lenderName: string;
-  principalVnd: Prisma.Decimal;
-  interestRatePct: Prisma.Decimal;
-  startDate: Date;
-  endDate: Date;
-  paymentSchedule: string;
-  status: string;
-  payments: { status: string }[];
-}
-
-interface Props {
-  loans: LoanRow[];
-}
 
 const SCHEDULE_LABELS: Record<string, string> = {
   monthly: "Hàng tháng",
@@ -32,8 +18,17 @@ const SCHEDULE_LABELS: Record<string, string> = {
   bullet: "Một lần",
 };
 
-const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "lenderName", header: "Bên cho vay", className: "font-medium" },
+const LOAN_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
+  {
+    key: "lenderName",
+    header: "Bên cho vay",
+    kind: "text",
+    className: "font-medium",
+    sortable: true,
+    filterable: true,
+    editable: true,
+    editKind: "text",
+  },
   {
     key: "principalVnd",
     header: "Gốc vay",
@@ -51,19 +46,30 @@ const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   {
     key: "startDate",
     header: "Bắt đầu",
+    kind: "date",
     className: "w-[120px]",
+    sortable: true,
     render: (row) => formatDate(row.startDate as Date),
   },
   {
     key: "endDate",
     header: "Đáo hạn",
+    kind: "date",
     className: "w-[120px]",
+    sortable: true,
     render: (row) => formatDate(row.endDate as Date),
   },
   {
     key: "paymentSchedule",
     header: "Lịch trả",
+    kind: "select",
     className: "w-[120px]",
+    filterable: true,
+    filterOptions: [
+      { id: "monthly", name: "Hàng tháng" },
+      { id: "quarterly", name: "Hàng quý" },
+      { id: "bullet", name: "Một lần" },
+    ],
     render: (row) =>
       SCHEDULE_LABELS[row.paymentSchedule as string] ?? (row.paymentSchedule as string),
   },
@@ -84,12 +90,35 @@ const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   {
     key: "status",
     header: "Trạng thái",
+    kind: "select",
     className: "w-[140px]",
+    sortable: true,
+    filterable: true,
+    filterOptions: [
+      { id: "active", name: "Đang vay" },
+      { id: "paid_off", name: "Đã tất toán" },
+      { id: "terminated", name: "Chấm dứt" },
+    ],
     render: (row) => <StatusBadge status={row.status as string} />,
+    editable: true,
+    editKind: "select",
+    editOptions: [
+      { id: "active", name: "Đang vay" },
+      { id: "paid_off", name: "Đã tất toán" },
+      { id: "terminated", name: "Chấm dứt" },
+    ],
   },
 ];
 
-export function LoanListClient({ loans }: Props) {
+interface Props {
+  loans: LoanRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  searchValue: string;
+}
+
+export function LoanListClient({ loans, total, page, pageSize, searchValue }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const router = useRouter();
 
@@ -109,13 +138,20 @@ export function LoanListClient({ loans }: Props) {
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={LOAN_COLUMNS}
         data={loans as unknown as Record<string, unknown>[]}
-        total={loans.length}
-        page={1}
-        pageSize={loans.length || 1}
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        searchValue={searchValue}
+        searchPlaceholder="Tìm theo tên bên cho vay..."
+        resourceSpec={LOAN_SPEC}
         emptyText="Chưa có hợp đồng vay"
         emptyDescription="Tạo hợp đồng đầu tiên để theo dõi gốc, lãi và lịch trả."
+        onCellEdit={async (row, key, value) => {
+          const loan = row as unknown as LoanRow;
+          return patchLoan(loan.id, { [key]: value }) as Promise<Record<string, unknown>>;
+        }}
         onRowClick={(row) => router.push(`/tai-chinh/vay/${(row as unknown as LoanRow).id}`)}
       />
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { settingsSchema, type SettingsInput } from "./schemas";
 
@@ -23,7 +23,7 @@ export async function getSettings(projectId: number) {
 
 export async function upsertSettings(input: SettingsInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = settingsSchema.parse(input);
 
   // Use create/update loop pattern (no upsert allowed by audit log guard)

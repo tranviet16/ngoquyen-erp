@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 
@@ -32,7 +32,7 @@ export async function listCashAccounts() {
 
 export async function createCashAccount(input: CashAccountInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const name = input.name.trim();
   if (!name) throw new Error("Tên nguồn tiền là bắt buộc");
@@ -53,7 +53,7 @@ export async function createCashAccount(input: CashAccountInput) {
 
 export async function updateCashAccount(id: number, input: CashAccountInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const name = input.name.trim();
   if (!name) throw new Error("Tên nguồn tiền là bắt buộc");
@@ -75,7 +75,7 @@ export async function updateCashAccount(id: number, input: CashAccountInput) {
 
 export async function softDeleteCashAccount(id: number) {
   const role = await getRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "tai-chinh", "admin");
 
   const refCount = await prisma.journalEntry.count({
     where: {

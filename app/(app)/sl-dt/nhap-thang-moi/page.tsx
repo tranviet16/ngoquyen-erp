@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { getMilestoneScores, getAvailableMonths } from "@/lib/sl-dt/report-service";
 import { suggestTargetMilestone, computeDtCanThucHien, computeTinhTrangDoanhThu } from "@/lib/sl-dt/compute";
+import { activeLotWhere } from "@/lib/sl-dt/lot-effective";
 import { NhapThangMoiClient } from "./nhap-thang-moi-client";
 import { CloneBanner } from "./clone-banner";
 import { prevMonth } from "./helpers";
@@ -39,7 +40,7 @@ export default async function NhapThangMoiPage({ searchParams }: Props) {
 
   const [lots, monthInputs, monthProgress, prevInputs, scores, paymentPlans] = await Promise.all([
     prisma.slDtLot.findMany({
-      where: { deletedAt: null },
+      where: activeLotWhere(tgt.year, tgt.month),
       orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
     }),
     prisma.slDtMonthlyInput.findMany({ where: { year: tgt.year, month: tgt.month } }),

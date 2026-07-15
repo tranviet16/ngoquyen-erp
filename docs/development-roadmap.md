@@ -6,8 +6,72 @@ This document tracks the project's development phases, milestones, and progress 
 
 ## Current Status
 
-**Date:** 2026-05-17  
-**Active Phases:** Plan A (ACL) ✅ Complete (2026-05-10); Comprehensive Test Suite ✅ Complete (2026-05-16); Công nợ Lũy Kế ✅ Complete (2026-05-17); Plan B and C unblocked for parallel execution
+**Date:** 2026-07-15  
+**Active Phases:** Product-wide iteration feedback loop ✅ Complete (2026-07-15); Plan A (ACL) ✅ Complete; Comprehensive Test Suite ✅ Complete; Công nợ Lũy Kế ✅ Complete; State Obligations ✅ Complete
+
+## Product-wide Quality Feedback Loop (COMPLETE)
+
+Security, ACL and API changes are protected by required GitHub checks. The full local gate covers lint/typecheck, unit/integration/security/performance/E2E/load, dependency audit, risk-manifest verification, production build, HTTPS browser smoke and active/passive DAST. GlitchTip and Uptime Kuma are deployed on the host with private Tailscale access, documented owners, DPAPI secret storage and 30-day operational retention. Final DAST result: zero failures and zero warnings.
+
+---
+
+## State Obligations Tracking (COMPLETE)
+
+**Status:** ✅ Complete  
+**Duration:** 2026-05-21  
+**Priority:** P2
+
+### Overview
+
+Implemented a dedicated module for tracking Vietnamese tax and social insurance obligations with period-by-period reporting. Features include catalog management for 8 standard VN obligation types, full transaction ledger (accrual and payment), and JournalEntry sync for payment transactions.
+
+### Deliverables
+
+**Schema Models**
+- `StateObligationType` — Obligation catalog with opening balance, code, category (thue | bao_hiem | khac), soft-delete
+- `StateObligationTxn` — Ledger with per-type transactions; kind (phai_tra | da_nop), optional cash account + journal entry FK
+- Migration: `prisma/migrations/20260521000000_state_obligations`
+
+**Service Layer (lib/tai-chinh/)**
+- `state-obligation-service.ts` — CRUD server actions with JournalEntry sync
+- `state-obligation-internal.ts` — Internal transaction helpers + JournalEntry cascade logic
+- `state-obligation-report.ts` — Period aggregation (opening + phát sinh + đã nộp + closing)
+
+**UI Layer (app/(app)/tai-chinh/nghia-vu-nha-nuoc/)**
+- `/danh-muc` — Obligation type catalog (editable opening balances, soft-delete, sort order)
+- `/so-theo-doi` — Ledger grid (CRUD transactions per type, filtered by kind)
+- `/bao-cao` — Period report (read-only; opening + period accrual + period payment + closing per type)
+- Dashboard navigation link to state obligations report page
+
+**JournalEntry Integration**
+- `da_nop` (paid) txns → auto-create read-only "chi" JournalEntry (refModule="state_obligation")
+- `phai_tra` (accrual) txns → ledger-only, no JournalEntry generated
+- journal-service rejects edit/delete of derived state_obligation entries (user guided to StateObligationTxn UI)
+- Cascade delete on txn → JournalEntry ensures consistency
+
+**Testing**
+- 14 unit tests: CRUD, JournalEntry sync, period aggregation
+- Mocked Prisma; all path branches covered
+- All tests PASS
+
+**Seed & Deployment**
+- `prisma/seed-state-obligations.ts` — Idempotent seeder for 8 VN standards (GTGT, TNDN, TNCN, Môn bài, BHXH, BHYT, BHTN, KPCĐ)
+- Preserves user-entered opening balances on re-run
+- Run before prod cutover to populate defaults
+
+### Outcomes
+
+- Centralized obligation tracking eliminates manual spreadsheets
+- JournalEntry sync ensures single source of truth (StateObligationTxn) while maintaining GL consistency
+- Period reporting matches accounting calendar (month/quarter/year cutoff)
+- Admin-only scope simplifies ACL (no granular submodule keys)
+
+### Build Status
+
+- `next build` — PASS
+- `tsc --noEmit` — PASS (clean)
+- `npm run test` — All 14 state-obligation tests PASS
+- `npm run test:integration` — All integration tests PASS
 
 ---
 

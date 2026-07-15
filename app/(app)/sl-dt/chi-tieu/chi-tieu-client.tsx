@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
+import { BarChart3, Calculator, FileText } from "lucide-react";
 import { fmtNum } from "@/lib/sl-dt/format";
 import {
   updateProgressStatus,
   adminPatchChiTieuRow,
+  calculateMonthlyTargets,
   cascadeRecomputeLuyKe,
   setSubtotalLabel,
 } from "./actions";
@@ -20,6 +22,7 @@ interface Props {
 }
 
 const SETTLEMENT_OPTIONS = ["Đã quyết toán", "Tạm dừng", "Đã ký HĐ", "Đã ký phụ lục"];
+const QT_OPTIONS = ["Đã ký", "Chưa ký"];
 
 const groupCls = {
   sl: "bg-amber-50 dark:bg-amber-950/30",
@@ -42,6 +45,7 @@ type AdminNumField = (typeof ADMIN_NUM_FIELDS)[number];
 interface EditForm {
   targetMilestone: string;
   milestoneText: string;
+  hoSoQuyetToan: string;
   settlementStatus: string;
   ghiChu: string;
   nums: Record<AdminNumField, string>;
@@ -53,7 +57,7 @@ const emptyNums: Record<AdminNumField, string> = {
   slTrat: "", dtTratKy: "",
 };
 const empty: EditForm = {
-  targetMilestone: "", milestoneText: "", settlementStatus: "", ghiChu: "",
+  targetMilestone: "", milestoneText: "", hoSoQuyetToan: "", settlementStatus: "", ghiChu: "",
   nums: { ...emptyNums },
 };
 
@@ -76,7 +80,12 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
   const editingRef = useRef<{ lotId: number; original: ChiTieuRow } | null>(null);
   const formRef = useRef<EditForm>(empty);
-  formRef.current = form;
+
+  function updateForm(updater: (current: EditForm) => EditForm) {
+    const next = updater(formRef.current);
+    formRef.current = next;
+    setForm(next);
+  }
 
   function startEdit(row: ChiTieuRow) {
     if (row.lotId == null) return;
@@ -84,6 +93,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
     const next: EditForm = {
       targetMilestone: row.targetMilestone ?? "",
       milestoneText: row.milestoneText ?? "",
+      hoSoQuyetToan: row.hoSoQuyetToan ?? "",
       settlementStatus: row.settlementStatus ?? "",
       ghiChu: row.ghiChu ?? "",
       nums: {
@@ -104,7 +114,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
   }
 
   function setNum(field: AdminNumField, value: string) {
-    setForm((f) => ({ ...f, nums: { ...f.nums, [field]: value } }));
+    updateForm((f) => ({ ...f, nums: { ...f.nums, [field]: value } }));
   }
 
   function saveRow(lotId: number, original: ChiTieuRow, currentForm: EditForm) {
@@ -113,6 +123,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
         lotId, year, month,
         targetMilestone: currentForm.targetMilestone || null,
         milestoneText: currentForm.milestoneText || null,
+        hoSoQuyetToan: currentForm.hoSoQuyetToan || null,
         settlementStatus: currentForm.settlementStatus || null,
         ghiChu: currentForm.ghiChu || null,
       });
@@ -215,6 +226,32 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
     startEdit(r);
   }
 
+  function openReport(type: "san-luong" | "doanh-thu") {
+    if (pending) return;
+    if (editingRef.current) {
+      commitEditing();
+      window.alert("Dòng đang sửa đã được lưu. Vui lòng bấm tạo báo cáo lại sau khi lưu xong.");
+      return;
+    }
+
+    const path = type === "san-luong" ? "/sl-dt/bao-cao-sl" : "/sl-dt/bao-cao-dt";
+    router.push(`${path}?year=${year}&month=${month}`);
+  }
+
+  function calculateTargets() {
+    if (pending) return;
+    if (editingRef.current) {
+      commitEditing();
+      window.alert("Dòng đang sửa đã được lưu. Vui lòng bấm tính chỉ tiêu lại sau khi lưu xong.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await calculateMonthlyTargets(year, month);
+      window.alert(`Đã tính chỉ tiêu cho ${result.updated} lô${result.skipped ? `, bỏ qua ${result.skipped} lô chưa có tiến độ nộp tiền` : ""}.`);
+      router.refresh();
+    });
+  }
+
   // Auto-focus on label input when entering label edit mode
   const labelInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -228,12 +265,53 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
   let stt = 0;
 
   return (
-    <div className="overflow-x-auto border rounded">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded border bg-muted/20 px-3 py-2">
+        <div>
+          <div className="text-sm font-medium">Tạo báo cáo tháng {month}/{year}</div>
+          <div className="text-xs text-muted-foreground">
+            Báo cáo được tạo từ dữ liệu sản lượng và doanh thu kỳ này trong bảng Chỉ tiêu.
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={calculateTargets}
+              disabled={pending}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200"
+            >
+              <Calculator className="size-4" aria-hidden="true" />
+              Tính chỉ tiêu SL/DT
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => openReport("san-luong")}
+            disabled={pending}
+            className="inline-flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <BarChart3 className="size-4" aria-hidden="true" />
+            Tạo báo cáo sản lượng
+          </button>
+          <button
+            type="button"
+            onClick={() => openReport("doanh-thu")}
+            disabled={pending}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <FileText className="size-4" aria-hidden="true" />
+            Tạo báo cáo doanh thu
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border rounded">
       {pending && <div className="text-[11px] text-muted-foreground px-2 py-0.5">Đang lưu…</div>}
       <table className="text-xs border-collapse">
         <thead className="bg-muted/40 sticky top-0 z-10">
           <tr>
-            <th rowSpan={2} className="px-2 py-1 text-center sticky left-0 bg-muted/40 border-r w-10">STT</th>
+            <th rowSpan={2} className="px-2 py-1 text-center border-r w-10">STT</th>
             <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[160px]">Danh mục</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">Dự toán phần thô</th>
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">SL lũy kế đầu kỳ</th>
@@ -245,6 +323,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
             <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[120px] bg-blue-50 dark:bg-blue-500/15">DT cần thực hiện theo tiến độ</th>
             <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[160px]">Công việc cần hoàn thành theo DT lũy kế</th>
             <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[160px]">Tiến độ thực tế</th>
+            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[120px]">Hồ sơ QT</th>
             <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[140px] bg-blue-50 dark:bg-blue-500/15">Tình trạng thực hiện DT</th>
             <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[120px]">Tình trạng (settlement)</th>
             <th rowSpan={2} className="px-2 py-1 text-left min-w-[140px]">Ghi chú</th>
@@ -261,8 +340,8 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
             if (r.kind === "lot") stt++;
             const rowCls =
               r.kind === "grand" ? "border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold [&>td]:!bg-transparent [&>td]:py-2.5"
-              : r.kind === "phase" ? "border-t-2 border-slate-400 dark:border-slate-500 bg-slate-100 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 font-semibold [&>td]:!bg-transparent [&>td]:py-2"
-              : r.kind === "group" ? "border-t border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/40 text-slate-800 dark:text-slate-200 font-medium [&>td]:!bg-transparent"
+              : r.kind === "phase" ? "border-t-[3px] border-slate-500 dark:border-slate-400 bg-slate-200 dark:bg-slate-800 text-slate-950 dark:text-slate-50 font-bold [&>td]:!bg-transparent [&>td]:py-2.5"
+              : r.kind === "group" ? "border-t border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 text-slate-800 dark:text-slate-100 font-semibold [&>td]:!bg-transparent [&>td:first-child]:border-l-4 [&>td:first-child]:border-primary"
               : "border-t hover:bg-muted/20 transition-colors";
             const isEditing = editing === r.lotId && r.kind === "lot";
             const isLot = r.kind === "lot";
@@ -287,11 +366,11 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                 onBlur={isEditing ? handleRowBlur : undefined}
                 onKeyDown={isEditing ? handleRowKeyDown : undefined}
               >
-                <td className="px-2 py-1 text-center text-muted-foreground sticky left-0 bg-inherit border-r">{isLot ? stt : ""}</td>
+                <td className="px-2 py-1 text-center text-muted-foreground border-r">{isLot ? stt : ""}</td>
 
                 {/* Danh mục */}
                 <td
-                  className={`px-2 py-1 border-r ${isLot ? "pl-3" : ""} ${!isLot && isAdmin && subKey ? "cursor-pointer hover:bg-muted/30" : ""}`}
+                  className={`px-2 py-1 border-r ${r.kind === "phase" ? "pl-3" : r.kind === "group" ? "pl-5" : isLot ? "pl-8" : ""} ${!isLot && isAdmin && subKey ? "cursor-pointer hover:bg-muted/30" : ""}`}
                   onClick={!isLot && isAdmin && subKey && !isLabelEditing ? () => startLabelEdit(r) : undefined}
                   title={!isLot && isAdmin ? "Bấm để sửa nhãn" : undefined}
                 >
@@ -366,7 +445,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                     <div className="flex items-center gap-1">
                       <select
                         value={form.targetMilestone}
-                        onChange={(e) => setForm((f) => ({ ...f, targetMilestone: e.target.value }))}
+                        onChange={(e) => updateForm((f) => ({ ...f, targetMilestone: e.target.value }))}
                         className="border rounded px-1 py-0.5 text-xs flex-1"
                       >
                         <option value="">{r.suggestedTarget ? `— Tự động (${r.suggestedTarget}) —` : "— Tự động —"}</option>
@@ -376,7 +455,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                         <button
                           type="button"
                           title={`Áp dụng gợi ý: ${r.suggestedTarget}`}
-                          onClick={() => setForm((f) => ({ ...f, targetMilestone: r.suggestedTarget! }))}
+                          onClick={() => updateForm((f) => ({ ...f, targetMilestone: r.suggestedTarget! }))}
                           className="px-1.5 py-0.5 text-[10px] rounded bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 dark:text-blue-200 whitespace-nowrap"
                         >
                           ↳
@@ -401,7 +480,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                   {isEditing ? (
                     <select
                       value={form.milestoneText}
-                      onChange={(e) => setForm((f) => ({ ...f, milestoneText: e.target.value }))}
+                      onChange={(e) => updateForm((f) => ({ ...f, milestoneText: e.target.value }))}
                       className="border rounded px-1 py-0.5 text-xs w-full"
                     >
                       <option value="">— Chọn mốc —</option>
@@ -412,6 +491,22 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                   )}
                 </td>
 
+                {/* Hồ sơ QT */}
+                <td className="px-1 py-0.5 border-r" {...editClickProps}>
+                  {isEditing ? (
+                    <select
+                      value={form.hoSoQuyetToan}
+                      onChange={(e) => updateForm((f) => ({ ...f, hoSoQuyetToan: e.target.value }))}
+                      className="border rounded px-1 py-0.5 text-xs w-full"
+                    >
+                      <option value="">—</option>
+                      {QT_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <span>{r.hoSoQuyetToan ?? (isLot ? "—" : "")}</span>
+                  )}
+                </td>
+
                 <td className="px-2 py-1 border-r bg-blue-50/50 text-blue-900 dark:bg-blue-500/10 dark:text-blue-200 text-[11px]">{r.tinhTrang}</td>
 
                 {/* Settlement */}
@@ -419,7 +514,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                   {isEditing ? (
                     <select
                       value={form.settlementStatus}
-                      onChange={(e) => setForm((f) => ({ ...f, settlementStatus: e.target.value }))}
+                      onChange={(e) => updateForm((f) => ({ ...f, settlementStatus: e.target.value }))}
                       className="border rounded px-1 py-0.5 text-xs w-full"
                     >
                       <option value="">—</option>
@@ -436,7 +531,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
                     <input
                       type="text"
                       value={form.ghiChu}
-                      onChange={(e) => setForm((f) => ({ ...f, ghiChu: e.target.value }))}
+                      onChange={(e) => updateForm((f) => ({ ...f, ghiChu: e.target.value }))}
                       className={txtInputCls}
                       placeholder="ghi chú"
                     />
@@ -455,6 +550,7 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
       <div className="text-[11px] text-muted-foreground px-2 py-1 border-t bg-muted/20">
         Bấm vào ô bất kỳ để sửa. <kbd className="px-1 border rounded">Enter</kbd> để lưu, <kbd className="px-1 border rounded">Esc</kbd> để huỷ, click ra ngoài hàng cũng tự lưu.
         {isAdmin && " Admin có thể bấm vào cột Danh mục ở dòng tổng để đổi tên."}
+      </div>
       </div>
     </div>
   );

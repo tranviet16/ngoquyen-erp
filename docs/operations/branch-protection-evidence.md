@@ -2,7 +2,7 @@
 
 ## Active policy
 
-The `main` branch requires these exact checks:
+The `main` branch requires the PR branch to be up to date and these exact checks:
 
 - `baseline`
 - `security-contract`
@@ -17,4 +17,4 @@ Performance and coverage remain informational. The protection policy was updated
 3. Revert the fixture, confirm the green PR can merge, and link that PR in this document.
 4. Any break-glass change requires repository-admin approval and an incident record.
 
-The first remote PR evidence is pending because the workflow revision has not yet been published from this dirty workspace.
+GitHub PR [#1](https://github.com/tranviet16/ngoquyen-erp/pull/1) merged on 2026-07-15 after `baseline`, `security-contract` and `e2e-security` completed successfully. The `main` protection API was rechecked the same day and returned those exact three required contexts.

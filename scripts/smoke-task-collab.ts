@@ -7,7 +7,7 @@
  *
  * Run: npx tsx --env-file=.env scripts/smoke-task-collab.ts
  */
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prisma } from "../lib/prisma";

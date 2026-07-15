@@ -20,6 +20,12 @@ const projectPermFindMany = vi.fn();
 const grantAllFindUnique = vi.fn();
 const deptAccessFindMany = vi.fn();
 
+// Stateless seed-backed stub for rolePermission.findMany — drives the role
+// fallback path. Immune to vi.clearAllMocks().
+function mockRolePermissionFindMany(...args: unknown[]) {
+  return rolePermissionFindMany(args[0] as { where?: { roleId?: string } });
+}
+
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
@@ -27,10 +33,14 @@ vi.mock("@/lib/prisma", () => ({
     projectPermission: { findMany: (...a: unknown[]) => projectPermFindMany(...a) },
     projectGrantAll: { findUnique: (...a: unknown[]) => grantAllFindUnique(...a) },
     userDeptAccess: { findMany: (...a: unknown[]) => deptAccessFindMany(...a) },
+    rolePermission: {
+      findMany: (...a: unknown[]) => mockRolePermissionFindMany(...a),
+    },
   },
 }));
 
 import { canAccess, assertAccess } from "@/lib/acl/effective";
+import { rolePermissionFindMany } from "@/lib/acl/__tests__/_role-permission-fixture";
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -14,7 +14,8 @@ export function isoToDmy(iso: string | null | undefined): string {
 export function dmyToIso(s: string): string | null {
   const m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s.trim());
   if (!m) return null;
-  let [, d, mo, y] = m;
+  const [, d, mo, rawYear] = m;
+  let y = rawYear;
   if (y.length === 2) y = (Number(y) >= 70 ? "19" : "20") + y;
   const dd = d.padStart(2, "0");
   const mm = mo.padStart(2, "0");
@@ -40,7 +41,9 @@ export function DateInput({ value, onChange, className, disabled, name, ...rest 
   const pickerRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    setText(isoToDmy(value ?? ""));
+    let active = true;
+    queueMicrotask(() => { if (active) setText(isoToDmy(value ?? "")); });
+    return () => { active = false; };
   }, [value]);
 
   const commit = (raw: string) => {

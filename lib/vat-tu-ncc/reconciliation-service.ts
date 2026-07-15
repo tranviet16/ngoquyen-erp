@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { reconciliationSchema, type ReconciliationInput } from "./schemas";
@@ -27,7 +27,7 @@ export async function listReconciliations(supplierId: number) {
 
 export async function createReconciliation(input: ReconciliationInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
   const data = reconciliationSchema.parse(input);
   const closingBalance = new Prisma.Decimal(data.openingBalance)
     .add(new Prisma.Decimal(data.totalIn))
@@ -52,7 +52,7 @@ export async function createReconciliation(input: ReconciliationInput) {
 
 export async function updateReconciliation(id: number, input: ReconciliationInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
   const data = reconciliationSchema.parse(input);
   const closingBalance = new Prisma.Decimal(data.openingBalance)
     .add(new Prisma.Decimal(data.totalIn))
@@ -78,7 +78,7 @@ export async function updateReconciliation(id: number, input: ReconciliationInpu
 
 export async function softDeleteReconciliation(id: number, supplierId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "vat-tu-ncc", "admin");
   const record = await prisma.supplierReconciliation.update({
     where: { id },
     data: { deletedAt: new Date() },

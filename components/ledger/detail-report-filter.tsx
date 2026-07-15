@@ -74,7 +74,7 @@ export function DetailReportFilter({
 
   // Refetch projects whenever entity selection changes
   useEffect(() => {
-    fetchProjects(selectedEntityIds);
+    void Promise.resolve().then(() => fetchProjects(selectedEntityIds));
   }, [selectedEntityIds, fetchProjects]);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);

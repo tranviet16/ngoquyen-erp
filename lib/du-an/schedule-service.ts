@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { scheduleSchema, type ScheduleInput } from "./schemas";
 
@@ -26,7 +26,7 @@ export async function listSchedules(projectId: number) {
 
 export async function createSchedule(input: ScheduleInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = scheduleSchema.parse(input);
   const record = await prisma.projectSchedule.create({
     data: {
@@ -48,7 +48,7 @@ export async function createSchedule(input: ScheduleInput) {
 
 export async function updateSchedule(id: number, input: ScheduleInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = scheduleSchema.parse(input);
   const record = await prisma.projectSchedule.update({
     where: { id },
@@ -78,7 +78,7 @@ export async function adminPatchSchedule(
   projectId: number,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const data: Record<string, unknown> = {};
   if (patch.taskName !== undefined) data.taskName = patch.taskName;
   if (patch.planStart !== undefined) data.planStart = new Date(patch.planStart);
@@ -94,7 +94,7 @@ export async function adminPatchSchedule(
 
 export async function softDeleteSchedule(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectSchedule.update({
     where: { id },
     data: { deletedAt: new Date() },

@@ -3,11 +3,26 @@
 import { useState, useTransition } from "react";
 import { deleteRun, rollbackRun, getRunRollbackInfo } from "./import-actions";
 
-export function DeleteRunButton({ id, status }: { id: number; status: string }) {
+export function DeleteRunButton({
+  id,
+  status,
+  supportsRollback,
+}: {
+  id: number;
+  status: string;
+  supportsRollback: boolean;
+}) {
   const [pending, startTransition] = useTransition();
 
   if (status === "committed") {
-    return <RollbackButton id={id} pending={pending} startTransition={startTransition} />;
+    return (
+      <RollbackButton
+        id={id}
+        supportsRollback={supportsRollback}
+        pending={pending}
+        startTransition={startTransition}
+      />
+    );
   }
 
   return (
@@ -34,18 +49,29 @@ export function DeleteRunButton({ id, status }: { id: number; status: string }) 
 
 function RollbackButton({
   id,
+  supportsRollback,
   pending,
   startTransition,
 }: {
   id: number;
+  supportsRollback: boolean;
   pending: boolean;
   startTransition: (fn: () => void) => void;
 }) {
   const [checking, setChecking] = useState(false);
 
   const handleClick = async () => {
+    if (!supportsRollback) {
+      alert(
+        "Adapter của run này ghi dữ liệu bằng upsert idempotent — mỗi lần import ghi đè dữ liệu mới nhất, " +
+          "không gắn thẻ theo từng run nên không thể hoàn tác tự động.\n\n" +
+          "Để hoàn tác: import lại file nguồn đã sửa, hoặc reset thủ công các bảng của module trong cơ sở dữ liệu.",
+      );
+      return;
+    }
+
     setChecking(true);
-    let info: { total: number; ledgerTransactions: number; ledgerOpeningBalances: number };
+    let info: { total: number };
     try {
       info = await getRunRollbackInfo(id);
     } catch (e) {
@@ -64,9 +90,7 @@ function RollbackButton({
 
     const msg =
       `Hoàn tác run #${id}?\n\n` +
-      `Sẽ xóa:\n` +
-      `  • ${info.ledgerTransactions} giao dịch\n` +
-      `  • ${info.ledgerOpeningBalances} số dư đầu kỳ\n\n` +
+      `Sẽ xóa ${info.total} dòng dữ liệu đã import.\n\n` +
       `Master data (NCC, Chủ thể, Dự án) sẽ KHÔNG bị xóa.\nHành động không hoàn tác.`;
     if (!confirm(msg)) return;
     if (!confirm(`Xác nhận lần 2: Xóa ${info.total} dòng dữ liệu của run #${id}?`)) return;

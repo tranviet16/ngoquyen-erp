@@ -6,7 +6,6 @@
 
 import { cache } from "react";
 import { prisma } from "../prisma";
-import { type AppRole } from "../rbac";
 import { type ModuleKey, type AccessLevel, ACCESS_LEVELS } from "./modules";
 import { getDefaultModuleLevel } from "./role-defaults";
 import { loadUser } from "./_user";
@@ -58,5 +57,5 @@ export async function getEffectiveModuleLevel(
   if (explicit !== undefined) return explicit;
 
   // Fall back to role default
-  return getDefaultModuleLevel(user.role as AppRole, moduleKey);
+  return await getDefaultModuleLevel(user.role, moduleKey);
 }

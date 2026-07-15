@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { contractorSchema, type ContractorInput } from "./schemas";
 
@@ -41,7 +41,7 @@ export async function getContractorById(id: number) {
 
 export async function createContractor(input: ContractorInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = contractorSchema.parse(input);
   const contractor = await prisma.contractor.create({ data });
   revalidatePath("/master-data/contractors");
@@ -51,7 +51,7 @@ export async function createContractor(input: ContractorInput) {
 
 export async function updateContractor(id: number, input: ContractorInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = contractorSchema.parse(input);
   const contractor = await prisma.contractor.update({ where: { id }, data });
   revalidatePath("/master-data/contractors");
@@ -61,9 +61,39 @@ export async function updateContractor(id: number, input: ContractorInput) {
 
 export async function softDeleteContractor(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "master-data", "admin");
   const contractor = await prisma.contractor.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/master-data/contractors");
   revalidatePath("/master-data");
   return contractor;
+}
+
+// ─── Inline-edit patch ────────────────────────────────────────────────────────
+
+import { z } from "zod";
+
+// Contractor Prisma fields safe for inline edit (leader = trưởng nhóm, contact = liên hệ)
+const CONTRACTOR_PATCH_WHITELIST = ["name", "leader", "contact"] as const;
+
+const patchContractorSchema = z.object({
+  name: z.string().min(1, "Tên không được để trống").optional(),
+  leader: z.string().nullable().optional(),
+  contact: z.string().nullable().optional(),
+});
+
+export async function patchContractor(id: number, patch: Record<string, unknown>) {
+  const role = await getSessionRole();
+  await requireRoleModuleAccess(role, "master-data", "edit");
+
+  for (const k of Object.keys(patch)) {
+    if (!(CONTRACTOR_PATCH_WHITELIST as readonly string[]).includes(k)) {
+      throw new Error(`Field "${k}" không được phép inline edit`);
+    }
+  }
+
+  const data = patchContractorSchema.parse(patch);
+  const updated = await prisma.contractor.update({ where: { id }, data });
+  revalidatePath("/master-data/contractors");
+  revalidatePath("/master-data");
+  return updated;
 }

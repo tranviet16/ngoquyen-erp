@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { prisma } from "@/lib/prisma";
 import { LedgerService } from "@/lib/ledger/ledger-service";
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
@@ -36,7 +36,7 @@ export async function listMaterialTransactions(filter?: Parameters<typeof servic
 
 export async function createMaterialTransaction(input: TransactionInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const data = transactionSchema.parse(input);
   const tx = await service.create(data);
   revalidateAll();
@@ -45,7 +45,7 @@ export async function createMaterialTransaction(input: TransactionInput) {
 
 export async function updateMaterialTransaction(id: number, input: TransactionInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const data = transactionSchema.parse(input);
   const tx = await service.update(id, data);
   revalidateAll();
@@ -54,14 +54,14 @@ export async function updateMaterialTransaction(id: number, input: TransactionIn
 
 export async function softDeleteMaterialTransaction(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-vt", "admin");
   await service.softDelete(id);
   revalidateAll();
 }
 
 export async function softDeleteMaterialTransactions(ids: number[]) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-vt", "admin");
   for (const id of ids) await service.softDelete(id);
   revalidateAll();
 }
@@ -76,7 +76,7 @@ export async function patchMaterialTransaction(
   patch: Record<string, unknown>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const current = await prisma.ledgerTransaction.findUnique({ where: { id } });
   if (!current || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
 
@@ -114,7 +114,7 @@ export async function adminPatchMaterialTransaction(
   patch: Partial<{ vatTt: number | string; totalTt: number | string; vatHd: number | string; totalHd: number | string }>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-vt", "admin");
   const data: Record<string, unknown> = {};
   if (patch.vatTt !== undefined) data.vatTt = String(patch.vatTt ?? "0");
   if (patch.totalTt !== undefined) data.totalTt = String(patch.totalTt ?? "0");
@@ -138,7 +138,7 @@ export async function bulkUpsertMaterialTransactions(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const results: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;
@@ -162,7 +162,7 @@ export async function listMaterialOpeningBalances(filter?: Parameters<typeof ser
 
 export async function setMaterialOpeningBalance(input: OpeningBalanceInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const data = openingBalanceSchema.parse(input);
   const ob = await service.setOpeningBalance(data);
   revalidateAll();
@@ -171,14 +171,14 @@ export async function setMaterialOpeningBalance(input: OpeningBalanceInput) {
 
 export async function deleteMaterialOpeningBalance(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-vt", "admin");
   await service.deleteOpeningBalance(id);
   revalidateAll();
 }
 
 export async function deleteMaterialOpeningBalances(ids: number[]) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "cong-no-vt", "admin");
   for (const id of ids) await service.deleteOpeningBalance(id);
   revalidateAll();
 }
@@ -192,7 +192,7 @@ export async function patchMaterialOpeningBalance(
   patch: Record<string, unknown>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const current = await prisma.ledgerOpeningBalance.findUnique({ where: { id } });
   if (!current) throw new Error(`Số dư #${id} không tồn tại`);
 
@@ -216,7 +216,7 @@ export async function bulkUpsertMaterialOpeningBalances(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "cong-no-vt", "edit");
   const results: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;

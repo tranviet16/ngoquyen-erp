@@ -69,7 +69,7 @@ export async function getRunRollbackInfo(id: number) {
 }
 
 export async function doCommit(formData: FormData) {
-  const session = await requireAdminImportAccess();
+  await requireAdminImportAccess();
 
   const runIdRaw = formData.get("runId");
   const file = formData.get("file") as File | null;

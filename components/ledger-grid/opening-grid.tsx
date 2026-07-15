@@ -74,13 +74,14 @@ export function LedgerOpeningGrid({
 
   const columns = useMemo<DataGridColumn<OpeningRow>[]>(
     () => [
-      { id: "entityId", title: "Chủ thể", kind: "select", width: 160, options: entities },
-      { id: "partyId", title: partyLabel, kind: "select", width: 180, options: partyOptions },
-      { id: "projectId", title: "Dự án", kind: "select", width: 160, options: projects },
-      { id: "asOfDate", title: "Ngày đầu kỳ", kind: "date", width: 120 },
-      { id: "balanceTt", title: "Số dư TT", kind: "currency", width: 140 },
-      { id: "balanceHd", title: "Số dư HĐ", kind: "currency", width: 140 },
-      { id: "note", title: "Ghi chú", kind: "text", width: 200 },
+      // entityId/partyId/projectId: plain integer FKs (no Prisma join); sort by option name via kind:"select" + options
+      { id: "entityId", title: "Chủ thể", kind: "select", width: 160, options: entities, sortable: true, filterable: true, filterKind: "select" },
+      { id: "partyId", title: partyLabel, kind: "select", width: 180, options: partyOptions, sortable: true, filterable: true, filterKind: "select" },
+      { id: "projectId", title: "Dự án", kind: "select", width: 160, options: projects, sortable: true, filterable: true, filterKind: "select" },
+      { id: "asOfDate", title: "Ngày đầu kỳ", kind: "date", width: 120, sortable: true, filterable: true, filterKind: "date" },
+      { id: "balanceTt", title: "Số dư TT", kind: "currency", width: 140, sortable: true, filterable: true, filterKind: "number" },
+      { id: "balanceHd", title: "Số dư HĐ", kind: "currency", width: 140, sortable: true, filterable: true, filterKind: "number" },
+      { id: "note", title: "Ghi chú", kind: "text", width: 200, sortable: true, filterable: true, filterKind: "text" },
     ],
     [entities, partyOptions, projects, partyLabel],
   );

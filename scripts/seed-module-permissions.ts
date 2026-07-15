@@ -2,7 +2,7 @@
  * seed-module-permissions.ts
  *
  * Materialises explicit ModulePermission rows for every existing user based on
- * their AppRole and the role-defaults fallback table.
+ * their role and the role-defaults fallback table.
  *
  * Usage:
  *   npx tsx --env-file=.env scripts/seed-module-permissions.ts            # apply
@@ -17,7 +17,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { MODULE_KEYS } from "../lib/acl/modules";
 import { getDefaultModuleLevel } from "../lib/acl/role-defaults";
-import type { AppRole } from "../lib/rbac";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
@@ -46,7 +45,7 @@ async function main(): Promise<void> {
   for (const u of users) {
     for (const mk of MODULE_KEYS) {
       if (have.has(`${u.id}::${mk}`)) continue;
-      const level = getDefaultModuleLevel(u.role as AppRole, mk);
+      const level = await getDefaultModuleLevel(u.role, mk);
       if (level === null) continue;
       toCreate.push({ userId: u.id, moduleKey: mk, level });
     }

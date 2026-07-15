@@ -2,27 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { DataTable, type ColumnDef } from "@/components/data-table";
+import { DataTable } from "@/components/data-table";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { SupplierForm } from "@/components/master-data/supplier-form";
-import { createSupplier, updateSupplier, softDeleteSupplier } from "@/lib/master-data/supplier-service";
+import { createSupplier, updateSupplier, softDeleteSupplier, patchSupplier } from "@/lib/master-data/supplier-service";
 import { type SupplierInput } from "@/lib/master-data/schemas";
 import { useRouter } from "next/navigation";
-
-type SupplierRow = {
-  id: number;
-  name: string;
-  taxCode: string | null;
-  phone: string | null;
-  address: string | null;
-};
-
-const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "name", header: "Tên nhà cung cấp" },
-  { key: "taxCode", header: "MST" },
-  { key: "phone", header: "Điện thoại" },
-  { key: "address", header: "Địa chỉ" },
-];
+import { SUPPLIER_COLUMNS, SUPPLIER_SPEC, type SupplierRow } from "@/lib/master-data/suppliers/table-spec";
 
 interface SuppliersClientProps {
   data: SupplierRow[];
@@ -36,7 +22,7 @@ export function SuppliersClient({ data, total, page, pageSize, searchValue }: Su
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<SupplierRow | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function handleCreate(input: SupplierInput) {
     await createSupplier(input);
@@ -67,13 +53,18 @@ export function SuppliersClient({ data, total, page, pageSize, searchValue }: Su
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={SUPPLIER_COLUMNS}
         data={data as unknown as Record<string, unknown>[]}
         total={total}
         page={page}
         pageSize={pageSize}
         searchValue={searchValue}
         searchPlaceholder="Tìm theo tên..."
+        resourceSpec={SUPPLIER_SPEC}
+        onCellEdit={async (row, key, value) => {
+          const supplier = row as unknown as SupplierRow;
+          return patchSupplier(supplier.id, { [key]: value }) as Promise<Record<string, unknown>>;
+        }}
         actionColumn={(row) => {
           const supplier = row as unknown as SupplierRow;
           return (

@@ -6,7 +6,7 @@ This document describes the high-level architecture of the ngoquyyen-erp system,
 
 ## Access Control Architecture (ACL)
 
-The system implements a **2-axis ACL model** layered on top of the existing RBAC foundation (AppRole + UserDeptAccess):
+The system implements a **2-axis ACL model** layered on top of a **dynamic role foundation** (`Role` + `RolePermission` tables + UserDeptAccess). Roles are data-driven rows in the `roles` table — admins can create, edit, and delete roles and their per-module permission grants from the UI; there is no hardcoded role hierarchy or `rank` integer.
 
 ### Axis 1: Module Access (Trục 1 — Module Permissions)
 
@@ -16,7 +16,7 @@ Gating mechanism for per-user visibility and route access at the module level.
 - **Composite Key:** `(userId, moduleKey)`
 - **Levels:** `"read"`, `"comment"`, `"edit"`, `"admin"` (per-module valid sets; some modules have fewer options)
 - **Semantics:** Determines whether a user can see a module on the sidebar and access routes within that module
-- **Fallback:** If no `ModulePermission` row exists, system falls back to `AppRole` defaults (`role_defaults.ts`)
+- **Fallback:** If no `ModulePermission` row exists, the system falls back to the user's role grants in the `RolePermission` table, resolved by `lib/acl/role-permissions.ts`
 - **Admin Short-Circuit (D1):** Users with `role = "admin"` bypass all module-level checks and can always access
 
 ### Axis 2: Resource Access (Trục 2 — Per-Module Axis Dispatch)
@@ -52,6 +52,80 @@ canAccess(userId, moduleKey, options) =
 3. Else → deny access
 
 This enables granular exceptions: e.g., "edit all projects except P5 (read-only)".
+
+## Nghĩa vụ với Nhà nước (State Obligations)
+
+The State Obligations module provides tracking of Vietnamese tax and social insurance obligations with period-by-period reporting.
+
+### Data Model
+
+**StateObligationType (Catalog)**
+- Company-wide obligation types (e.g., GTGT, BHXH)
+- 8 seeded standard VN obligations (code, category, opening balance)
+- Soft-deletable; supports custom additions
+
+**StateObligationTxn (Ledger)**
+- Per-obligation transaction log (date, kind, amount)
+- `kind: "phai_tra"` (accrual) — ledger-only
+- `kind: "da_nop"` (payment) — auto-creates linked JournalEntry (refModule="state_obligation", type="chi")
+- journalEntryId field FK to JournalEntry (populated for da_nop only)
+
+### JournalEntry Sync Strategy
+
+**Decision: Single Source of Truth = StateObligationTxn**
+
+- **da_nop (paid) txns:** Generate derived read-only JournalEntry (refModule="state_obligation")
+  - JournalEntry cannot be edited/deleted independently (journal-service rejects with access check)
+  - Deleting the StateObligationTxn cascades to JournalEntry
+  - Cash account debit sourced from cashAccountId field
+
+- **phai_tra (accrual) txns:** No JournalEntry created (accrual-only, no cash movement)
+
+**Journal Integration (journal-service.ts):**
+- Edit/delete of refModule="state_obligation" entries rejected upfront (user guided to update StateObligationTxn instead)
+- Query filters include these entries in reports but mark as derived/read-only
+
+### Routes
+
+```
+GET /tai-chinh/nghia-vu-nha-nuoc               Landing (navigation to sub-pages)
+GET /tai-chinh/nghia-vu-nha-nuoc/danh-muc      Catalog grid (edit opening balances per obligation type)
+GET /tai-chinh/nghia-vu-nha-nuoc/so-theo-doi   Ledger grid (CRUD transactions)
+GET /tai-chinh/nghia-vu-nha-nuoc/bao-cao       Period report (opening + period accrue/pay + closing)
+
+POST/PATCH /api/tai-chinh/state-obligation/txn  Server actions (create, update, delete with sync)
+GET /api/tai-chinh/state-obligation/report       Period aggregation
+```
+
+### ACL
+
+**Module Key:** `tai-chinh` (admin-only)
+- All sub-pages protected by parent layout guard: `requireModuleAccess("tai-chinh", { scope: "module" })`
+- No granular submodule keys (unlike payment or debt modules)
+
+### Implementation Details
+
+**lib/tai-chinh/state-obligation-service.ts (217 LOC)**
+- `createTxn()`, `updateTxn()`, `deleteTxn()` — CRUD with JournalEntry sync
+- `useServerAction` hooks for form integration
+- Error handling + audit logging
+
+**lib/tai-chinh/state-obligation-internal.ts (159 LOC)**
+- `createTxnWithSync()`, `updateTxnWithSync()`, `deleteTxnWithSync()`
+- Internal transaction helpers (used by service + tests)
+- JournalEntry creation/deletion logic
+
+**lib/tai-chinh/state-obligation-report.ts (104 LOC)**
+- `getObligationReport(year, month)` — SQL aggregation
+- Opens opening_balances balance by type + period transactions
+- Returns: id, name, code, category, opening, period_inc, period_dec, closing per type
+
+**lib/tai-chinh/__tests__/state-obligation-service.test.ts (14 tests)**
+- Mocked Prisma $queryRaw for report aggregation
+- JournalEntry sync helpers tested with fake tx client
+- CRUD operation coverage
+
+---
 
 ## Module Structure: Vận Hành (Operations)
 
@@ -150,7 +224,7 @@ Related audit tables: `AuditLog` (existing) captures writes to `ModulePermission
 
 ## Dependencies & Constraints
 
-- **Extends:** `lib/dept-access.ts` (existing UserDeptAccess), `lib/rbac.ts` (existing AppRole)
+- **Extends:** `lib/dept-access.ts` (UserDeptAccess), `lib/acl/role-permissions.ts` (dynamic `Role`/`RolePermission` resolution), `lib/rbac.ts` (`isAdmin` helper)
 - **Non-Interfering:** ACL helpers are additive; no replacement of existing systems
 - **Route Guards:** All 28 segment routes in `(app)` directory protected via `requireModuleAccess(moduleKey, opts)` from `lib/acl/guards.ts`
 - **Type Safety:** Module keys and valid level sets are constants in `lib/acl/modules.ts`; invalid (moduleKey, level) pairs rejected at type-check time

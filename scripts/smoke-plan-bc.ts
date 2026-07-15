@@ -213,7 +213,7 @@ async function testUniqueSourceForm(fx: Fixture) {
         sourceFormId: form.id,
       },
     });
-  } catch (e) {
+  } catch {
     threw = true;
   }
   check("second task with same sourceFormId rejected", threw);

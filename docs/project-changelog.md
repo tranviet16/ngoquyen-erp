@@ -4,9 +4,113 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 
 ## [Unreleased]
 
+### Added
+- Deployed private HTTPS hosting through Tailscale Serve, self-hosted GlitchTip error tracking, and Uptime Kuma availability monitoring with DPAPI-protected credentials and 30-day observability retention.
+- Added strict CSP nonces, HSTS, browser isolation/security headers, versioned ZAP classifications, and repeatable active/passive DAST evidence with zero final warnings.
+- Added validated GlitchTip backups and local monitoring runbooks covering ownership, secret access, retention, and alert severity.
+- Applied all 45 migrations to the local production database, added reproducible DPAPI bootstrap-admin provisioning, verified authenticated dashboard access, and completed a disposable restore drill matching 60 tables, 4 views and the admin row.
+- Removed hard-coded production seed passwords, corrected Better Auth admin provisioning, added a tested load-target production guard, and added a pinned Gitleaks scan with zero final findings.
+- Added a Công nợ Nhân công import adapter that parses labor ledger transaction/opening-balance sheets and registers it in the import adapter list.
+- Added controlled finance payable/receivable sync snapshots with admin override preservation, SL-DT receivable sync, payable exclusions, and clearer Excel export formatting.
+
+### Fixed
+- Synced Finance overview Phải thu/Phải trả totals from the consolidated tab source and added row/all-row delete handling for PR lines.
+- Aggregated duplicate Công nợ Nhân công opening-balance rows during import so repeated entity/contractor/project tuples no longer drop source amounts.
+- Reworked browser PDF printing with page size/orientation controls and print CSS that prevents wide tables from being cropped.
+- Simplified payable/receivable view to always show latest synced data and shortened duplicated SL-DT lot labels.
+- Changed payable sync exclusions to be selected at sync time instead of auto-applying persisted exclusion rules.
+- Added SOP-pattern auto labeling for finance journal entries, with a manual button for selected or unlabeled rows in the transaction ledger.
+- Added SL-DT per-report visibility controls and hierarchy sort orders; revenue-only import rows now enter the lot catalog while appearing only in revenue reports.
+- Hid placeholder `?` SL-DT hierarchy labels, reordered grouped reports as major category → minor category → lot, and strengthened visual separation between hierarchy levels.
+- Added SL-DT lot catalog management with effective-from periods, blocked deletion for lots with dependent data, and grouped XD/payment-plan views by major/minor category.
+- Added report creation actions to the SL-DT Chỉ tiêu table so production and revenue month reports are opened from the current target-entry period.
+- Replaced the project-only topbar search fallback with a global search page scoped by module access.
+- Added user account activation status with admin deactivate/reactivate controls and inactive-user app access blocking.
+- Updated ERP shell copy, removed the unused duty badge, made topbar search navigate to matching modules, and added explicit department edit/activate controls.
+- Passed `TRUSTED_ORIGINS` into the Docker-managed ERP 3001 service so Tailscale/IP login origins are trusted by Better Auth.
+- Added `scripts/ensure-erp-port-3001.ps1` to keep the local production server reachable on `127.0.0.1:3001`.
+- Registered `NgoQuyen ERP 3001 Watchdog` Scheduled Task to check every minute and restart the ERP server when port 3001 is down.
+- Added Docker-based ERP service for port 3001 with `restart: unless-stopped`, matching the boot behavior of existing Docker-managed services.
+- Fixed `docker/Dockerfile` so Prisma schema/config are available before `npm ci` runs `postinstall`.
+- Added `.dockerignore` to keep Docker build context small and exclude local dotenv/log/build artifacts.
+
+### Notes
+- `NgoQuyen ERP 3001 Watchdog` Scheduled Task is now disabled. Docker container `ngoquyen-erp-3001` is the active supervisor for port 3001.
+
 ### Planned
 - Plan B: Task Swimlane — swimlane view for tasks with role-based column filtering
 - Plan C: Performance MVP — performance dashboard with role/director-based access
+
+---
+
+## [2026-05-21] — State Obligations Tracking (Nghĩa vụ với Nhà nước)
+
+### Added
+
+**New Module: State Obligations**
+- Dedicated ledger for tracking Vietnamese tax and social insurance obligations
+- 8 seeded standard obligation types: GTGT, TNDN, TNCN, Môn bài, BHXH, BHYT, BHTN, KPCĐ
+- Full CRUD lifecycle: catalog (danh-muc), ledger (so-theo-doi), period reporting (bao-cao)
+
+**Schema Models**
+- `StateObligationType` — Obligation catalog (name, code, category, opening balance, soft-delete)
+- `StateObligationTxn` — Obligation transaction ledger (type FK, date, kind phai_tra|da_nop, amount, cash account, journal entry FK)
+- Migration: `prisma/migrations/20260521000000_state_obligations`
+
+**Service Layer (lib/tai-chinh/)**
+- `state-obligation-service.ts` — Server actions (CRUD with JournalEntry sync)
+- `state-obligation-internal.ts` — JournalEntry sync helpers; internal transaction logic
+- `state-obligation-report.ts` — Period aggregation (opening + phát sinh + đã nộp + cuối kỳ per type)
+
+**UI Layer (app/(app)/tai-chinh/nghia-vu-nha-nuoc/)**
+- `/danh-muc` — Obligation type catalog (edit opening balances, soft-delete, sort)
+- `/so-theo-doi` — Ledger grid (create/edit/delete transactions per type and kind)
+- `/bao-cao` — Period report (read-only aggregates with year/month filter)
+- Integrated nav into Tài chính dashboard with link to report page
+
+**JournalEntry Integration**
+- `da_nop` (paid) transactions auto-create derived "chi" JournalEntry (refModule="state_obligation")
+- JournalEntry entries are read-only in Nhật ký giao dịch; edits must go through StateObligationTxn UI
+- `phai_tra` (accrual) transactions are ledger-only; no JournalEntry created
+
+**Testing**
+- 14 unit tests: CRUD operation coverage, JournalEntry sync, period aggregation
+- Mocked Prisma fixtures; covers all path branches
+- All tests PASS
+
+**Seed Script**
+- `prisma/seed-state-obligations.ts` — Idempotent seeder for 8 standard obligations
+- Preserves user-entered opening balances on re-run (only updates code, category, sortOrder)
+- npm script: `db:seed:obligations`
+
+**ACL**
+- Module key: `tai-chinh` (admin-only)
+- All sub-pages inherit parent layout guard
+- No granular submodule keys
+
+### Technical Details
+
+**JournalEntry Sync Decision:**
+- StateObligationTxn is single source of truth (SSOT)
+- Read-only JournalEntry entries derived from da_nop txns prevent double-entry confusion
+- Cascade delete on StateObligationTxn → JournalEntry ensures consistency
+- Journal-service rejects edits to refModule="state_obligation" entries (access check + user message)
+
+**Period Report Formula:**
+```
+opening_balance (from StateObligationType.openingBalance as-of openingDate)
++ sum(txn.amount where txn.kind="phai_tra" AND txn.date <= period_end) [period accrual increase]
+- sum(txn.amount where txn.kind="da_nop" AND txn.date <= period_end) [period payment decrease]
+= closing_balance
+```
+
+### Build Status
+
+- `next build` — PASS
+- `tsc --noEmit` — PASS (clean)
+- `npm run test` — All state-obligation tests PASS (included in 339 unit test count)
+- `npm run test:integration` — All integration tests PASS
+- No type errors; fully TypeScript-compatible
 
 ---
 

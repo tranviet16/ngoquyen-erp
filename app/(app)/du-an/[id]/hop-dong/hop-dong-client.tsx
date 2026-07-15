@@ -91,6 +91,7 @@ interface Props {
 export function HopDongClient({ projectId, initialData, warningDays = 90 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
+  const [currentTime] = useState(Date.now);
   const [, startTransition] = useTransition();
 
   const rows: ContractGridRow[] = initialData.map((r) => ({
@@ -109,13 +110,13 @@ export function HopDongClient({ projectId, initialData, warningDays = 90 }: Prop
   const expiringSoon = initialData.filter((r) => {
     if (!r.expiryDate) return false;
     const days = Math.ceil(
-      (new Date(r.expiryDate).getTime() - Date.now()) / 86400000,
+      (new Date(r.expiryDate).getTime() - currentTime) / 86400000,
     );
     return days > 0 && days <= warningDays;
   }).length;
   const expired = initialData.filter((r) => {
     if (!r.expiryDate) return false;
-    return new Date(r.expiryDate).getTime() <= Date.now();
+    return new Date(r.expiryDate).getTime() <= currentTime;
   }).length;
 
   const columns: DataGridColumn<ContractGridRow>[] = [

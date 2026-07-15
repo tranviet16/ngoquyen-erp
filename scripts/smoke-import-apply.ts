@@ -23,6 +23,7 @@ import {
   rollbackImportRun,
 } from "@/lib/import/import-engine";
 import type { ResolvedMapping } from "@/lib/import/adapters/adapter-types";
+import { getAdapter } from "@/lib/import/adapters/adapter-registry";
 
 interface Case {
   adapter: string;
@@ -37,7 +38,7 @@ const CASES: Case[] = [
   { adapter: "gach-nam-huong",  file: "Gạch Nam Hương.xlsx",                minRows: 1 },
   { adapter: "quang-minh",      file: "Quang Minh cát,gạch.xlsx",            minRows: 1 },
   { adapter: "du-an-xay-dung",  file: "Quản Lý Dự Án Xây Dựng.xlsx",         minRows: 10 },
-  { adapter: "sl-dt",           file: "SL - DT 2025.xlsx",                   minRows: 50 },
+  { adapter: "sl-dt",           file: "SL - DT.xlsx",                        minRows: 50 },
   { adapter: "tai-chinh-nq",    file: "Hệ thống quản lý tài chính NQ.xlsx",  minRows: 50 },
 ];
 
@@ -120,6 +121,14 @@ async function runCase(c: Case): Promise<void> {
     for (const e of commit.errors.slice(0, 3)) {
       console.log(`    row ${e.rowIndex}: ${e.message}`);
     }
+  }
+
+  // Adapters with idempotent upserts (e.g. SL-DT) intentionally don't tag rows
+  // with importRunId — per-run rollback does not apply to them.
+  if (getAdapter(c.adapter)?.supportsRollback === false) {
+    console.log(`  rollback: skipped — adapter does not support per-run rollback`);
+    console.log(`  ✓ ${c.adapter} OK`);
+    return;
   }
 
   const info = await getRollbackInfo(preview.runId);

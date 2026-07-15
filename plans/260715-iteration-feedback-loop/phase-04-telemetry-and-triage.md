@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Telemetry và triage sau phát hành"
-status: pending
+status: completed
 priority: P1
 effort: "14h"
 dependencies: [1, 3]
@@ -44,9 +44,9 @@ Structured application logs → error tracker/alert channel → incident templat
 
 ## Todo list
 
-- [ ] Error tracking nhận test exception đã redacted.
-- [ ] Mọi alert có severity, owner, runbook.
-- [ ] Diễn tập P0 tạo regression ticket/test.
+- [x] Error tracking nhận test exception đã redacted.
+- [x] Mọi alert có severity, owner, runbook.
+- [x] Diễn tập P0 tạo regression ticket/test.
 
 ## Success criteria
 

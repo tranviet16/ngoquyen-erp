@@ -236,6 +236,10 @@ export class LedgerService {
   }
 
   async deleteOpeningBalance(id: number) {
-    await prisma.ledgerOpeningBalance.delete({ where: { id } });
+    try {
+      await prisma.ledgerOpeningBalance.delete({ where: { id } });
+    } catch (e) {
+      if ((e as { code?: string })?.code !== "P2025") throw e;
+    }
   }
 }

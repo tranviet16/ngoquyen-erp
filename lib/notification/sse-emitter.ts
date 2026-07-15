@@ -7,7 +7,6 @@
 import { EventEmitter } from "node:events";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __nq_notification_emitter: EventEmitter | undefined;
 }
 

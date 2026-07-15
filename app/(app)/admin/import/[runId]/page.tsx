@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/rbac";
+import { hasRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { getRun } from "../import-actions";
 import { CommitPanel } from "./commit-panel";
 
@@ -12,7 +13,7 @@ interface Props {
 export default async function ImportRunDetailPage({ params }: Props) {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
-  if (!session?.user || !hasRole(session.user.role, "admin")) {
+  if (!session?.user || !(await hasRoleModuleAccess(session.user.role, "admin.import", "admin"))) {
     redirect("/dashboard");
   }
 
@@ -98,7 +99,9 @@ export default async function ImportRunDetailPage({ params }: Props) {
       )}
 
       <div className="text-sm">
-        <a href="/admin/import" className="text-blue-600 hover:underline">&larr; Quay lại danh sách import</a>
+        <Link href="/admin/import" className="text-blue-600 hover:underline">
+          &larr; Quay lại danh sách import
+        </Link>
       </div>
     </div>
   );

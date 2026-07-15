@@ -45,12 +45,12 @@ const dtLot = (over: Partial<DoanhThuRow>): DoanhThuRow => ({
 });
 
 describe("rollupSanLuong", () => {
-  it("emits lot rows then group/phase/grand subtotals", () => {
+  it("emits phase, group, then lot rows", () => {
     const out = rollupSanLuong([
       slLot({ estimateValue: 100, slLuyKeTho: 40, slTrat: 5, sortOrder: 1 }),
       slLot({ estimateValue: 50, slLuyKeTho: 10, slTrat: 5, sortOrder: 2 }),
     ]);
-    expect(out.map((r) => r.kind)).toEqual(["lot", "lot", "group", "phase", "grand"]);
+    expect(out.map((r) => r.kind)).toEqual(["phase", "group", "lot", "lot", "grand"]);
     const grand = out.find((r) => r.kind === "grand")!;
     expect(grand.estimateValue).toBe(150);
     expect(grand.slLuyKeTho).toBe(50);
@@ -74,6 +74,14 @@ describe("rollupSanLuong", () => {
     ]);
     expect(out.filter((r) => r.kind === "phase")).toHaveLength(2);
     expect(out.find((r) => r.kind === "grand")!.estimateValue).toBe(30);
+  });
+
+  it("does not emit placeholder question-mark group headers", () => {
+    const out = rollupSanLuong([
+      slLot({ phaseCode: "?", groupCode: "?", estimateValue: 10 }),
+    ]);
+    expect(out.map((r) => r.kind)).toEqual(["lot", "grand"]);
+    expect(out.some((r) => r.lotName === "?")).toBe(false);
   });
 });
 

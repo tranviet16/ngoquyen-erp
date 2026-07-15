@@ -38,6 +38,7 @@ export default async function Page({
   const parsed = parsePeriod(sp);
   const prevRange = previousPeriod(parsed);
   const qs = buildQs(sp);
+  const referenceTime = new Date();
 
   let now, prev, tasks, target;
   try {
@@ -124,7 +125,7 @@ export default async function Page({
         ) : (
           <div className="space-y-1.5">
             {tasks.active.map((t) => (
-              <ActiveTaskRow key={t.id} {...t} />
+              <ActiveTaskRow key={t.id} {...t} referenceTime={referenceTime} />
             ))}
           </div>
         )}

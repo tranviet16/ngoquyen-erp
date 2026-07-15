@@ -14,7 +14,10 @@ export function useAutoSave<T>(
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRef = useRef<T>(value);
   const saverRef = useRef(saver);
-  saverRef.current = saver;
+
+  useEffect(() => {
+    saverRef.current = saver;
+  }, [saver]);
 
   const doSave = useCallback(async (v: T) => {
     setStatus("saving");

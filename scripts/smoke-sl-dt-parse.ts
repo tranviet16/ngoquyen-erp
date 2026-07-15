@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { SlDtAdapter } from "../lib/import/adapters/sl-dt.adapter";
 
 async function main() {
-  const buf = readFileSync("SOP/SL - DT 2025.xlsx");
+  const buf = readFileSync("SOP/SL - DT.xlsx");
   const data = await SlDtAdapter.parse(buf);
   console.log("meta:", data.meta);
   const counts: Record<string, number> = {};

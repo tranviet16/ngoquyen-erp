@@ -17,7 +17,6 @@ import { Pool } from "pg";
 import { canAccess } from "../lib/acl/effective";
 import { bypassAudit } from "../lib/async-context";
 import type { CanAccessOpts } from "../lib/acl/effective";
-import type { AppRole } from "../lib/rbac";
 import type { ModuleKey } from "../lib/acl/modules";
 
 // Plain client for creating / cleaning temp users
@@ -29,7 +28,7 @@ const rawPrisma = new PrismaClient({
 
 interface Fixture {
   label: string;
-  role: AppRole;
+  role: string;
   isLeader?: boolean;
   isDirector?: boolean;
   moduleKey: ModuleKey;
@@ -294,7 +293,7 @@ const FIXTURES: Fixture[] = [
 const TEMP_USER_IDS: string[] = [];
 
 async function createTempUser(opts: {
-  role: AppRole;
+  role: string;
   isLeader?: boolean;
   isDirector?: boolean;
 }): Promise<string> {
@@ -331,7 +330,7 @@ async function main(): Promise<void> {
   console.log(`Running ${FIXTURES.length} golden ACL fixtures...\n`);
 
   // Pre-create one temp user per unique (role, isLeader, isDirector) combination
-  interface UserKey { role: AppRole; isLeader: boolean; isDirector: boolean }
+  interface UserKey { role: string; isLeader: boolean; isDirector: boolean }
   const userMap = new Map<string, string>(); // key → userId
 
   const uniqueKeys = new Map<string, UserKey>();

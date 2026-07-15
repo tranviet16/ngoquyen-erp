@@ -7,17 +7,21 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
-  image         String?
-  role          String   @default("viewer")
-  departmentId  Int?
-  isLeader      Boolean  @default(false)
-  isDirector    Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  emailVerified   Boolean  @default(false)
+  image           String?
+  username        String?  @unique
+  displayUsername String?
+  role            String   @default("viewer")
+  title           String?
+  departmentId    Int?
+  isLeader        Boolean  @default(false)
+  isDirector      Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   sessions   Session[]
   accounts   Account[]
@@ -48,6 +52,7 @@ model User {
   paymentRoundsCreated  PaymentRound[]     @relation("PaymentRoundCreator")
   paymentRoundsApproved PaymentRound[]     @relation("PaymentRoundApprover")
   paymentItemsApproved  PaymentRoundItem[] @relation("PaymentItemApprover")
+  financePrSyncBatches FinancePrSyncBatch[] @relation("FinancePrSyncBatchCreator")
 
   @@index([departmentId])
   @@map("users")
@@ -87,6 +92,7 @@ model UserDeptAccess {
   @@unique([userId, deptId])
   @@index([userId])
   @@index([deptId])
+  @@index([grantedBy])
   @@map("user_dept_access")
 }
 
@@ -116,6 +122,8 @@ model CoordinationForm {
 
   @@index([executorDeptId, status])
   @@index([creatorId])
+  @@index([creatorDeptId])
+  @@index([escalatedFromUserId])
   @@index([status])
   @@index([status, submittedAt])
   @@index([escalatedAt])
@@ -151,6 +159,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -171,6 +180,7 @@ model Account {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -580,6 +590,8 @@ model PaymentRound {
 
   @@unique([month, sequence])
   @@index([status, month])
+  @@index([createdById])
+  @@index([approvedById])
   @@map("payment_rounds")
 }
 
@@ -609,6 +621,8 @@ model PaymentRoundItem {
 
   @@index([roundId])
   @@index([supplierId])
+  @@index([projectId])
+  @@index([approvedById])
   @@index([roundId, category])
   @@index([roundId, entityId])
   @@map("payment_round_items")
@@ -778,6 +792,8 @@ model JournalEntry {
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
+  stateObligationTxn StateObligationTxn?
+
   @@index([date, entryType])
   @@index([costBehavior, date])
   @@index([expenseCategoryId])
@@ -798,6 +814,8 @@ model CashAccount {
 
   jeFrom JournalEntry[] @relation("JeFromAccount")
   jeTo   JournalEntry[] @relation("JeToAccount")
+
+  stateObligationTxns StateObligationTxn[]
 
   @@map("cash_accounts")
 }
@@ -853,6 +871,11 @@ model ImportRun {
   payableReceivableAdjustments PayableReceivableAdjustment[]
   expenseClassifications       ExpenseClassification[]
   projectSupplierDebtSnapshots ProjectSupplierDebtSnapshot[]
+  slDtLots                     SlDtLot[]
+  slDtMilestoneScores          SlDtMilestoneScore[]
+  slDtPaymentPlans             SlDtPaymentPlan[]
+  slDtMonthlyInputs            SlDtMonthlyInput[]
+  slDtProgressStatuses         SlDtProgressStatus[]
 
   @@index([adapter, status])
   @@index([createdAt])
@@ -881,6 +904,75 @@ model PayableReceivableAdjustment {
   @@index([projectId])
   @@index([importRunId])
   @@map("payable_receivable_adjustments")
+}
+
+model FinancePrSyncBatch {
+  id              Int       @id @default(autoincrement())
+  sourceModule    String
+  periodYear      Int
+  periodMonth     Int
+  status          String    @default("completed")
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  summaryJson     Json?
+  errorMessage    String?
+  createdByUserId String?
+  createdByUser   User?     @relation("FinancePrSyncBatchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lines           FinancePrLine[]
+
+  @@index([sourceModule, periodYear, periodMonth])
+  @@index([createdByUserId])
+  @@map("finance_pr_sync_batches")
+}
+
+model FinancePrLine {
+  id                Int       @id @default(autoincrement())
+  type              String
+  sourceModule      String
+  sourceKey         String
+  partyType         String
+  partyId           Int?
+  partyName         String
+  entityId          Int?
+  entityName        String?
+  projectId         Int?
+  periodYear        Int?
+  periodMonth       Int?
+  sourceAmountVnd   Decimal   @db.Decimal(18, 2)
+  overrideAmountVnd Decimal?  @db.Decimal(18, 2)
+  dueDate           DateTime?
+  status            String    @default("active")
+  isExcluded        Boolean   @default(false)
+  isStale           Boolean   @default(false)
+  note              String?
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  syncBatchId       Int?
+  syncBatch         FinancePrSyncBatch? @relation(fields: [syncBatchId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceModule, sourceKey])
+  @@index([type, status])
+  @@index([sourceModule, periodYear, periodMonth])
+  @@index([partyType, partyId])
+  @@index([entityId])
+  @@index([syncBatchId])
+  @@map("finance_pr_lines")
+}
+
+model FinanceSyncExclusion {
+  id           Int      @id @default(autoincrement())
+  sourceModule String
+  partyType    String
+  partyId      Int?
+  partyName    String?
+  active       Boolean  @default(true)
+  reason       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([sourceModule, partyType, partyId, active])
+  @@map("finance_sync_exclusions")
 }
 
 // ─── Phân loại chi phí (separate from JournalEntry — line items per category) ──
@@ -947,78 +1039,99 @@ model SlDtLot {
   phaseCode     String    @default("?")
   groupCode     String    @default("?")
   sortOrder     Int       @default(0)
+  activeFromYear  Int?
+  activeFromMonth Int?
+  showInSanLuong  Boolean   @default(true)
+  showInDoanhThu  Boolean   @default(true)
+  showInChiTieu   Boolean   @default(true)
+  showInTienDoXd  Boolean   @default(true)
+  showInNopTien   Boolean   @default(true)
   estimateValue Decimal   @default(0) @db.Decimal(18, 2)
   contractValue Decimal?  @db.Decimal(18, 2)
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  importRunId Int?
+  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+
   paymentPlan    SlDtPaymentPlan?
   monthlyInputs  SlDtMonthlyInput[]
   progressStatus SlDtProgressStatus[]
 
   @@index([phaseCode, groupCode, sortOrder])
+  @@index([activeFromYear, activeFromMonth])
+  @@index([importRunId])
   @@map("sl_dt_lots")
 }
 
 model SlDtMilestoneScore {
-  id            Int      @id @default(autoincrement())
-  milestoneText String   @unique
+  id            Int        @id @default(autoincrement())
+  milestoneText String     @unique
   score         Int
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  sortOrder     Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  importRunId   Int?
+  importRun     ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
+  @@index([importRunId])
   @@map("sl_dt_milestone_scores")
 }
 
 model SlDtPaymentPlan {
-  id            Int      @id @default(autoincrement())
-  lotId         Int      @unique
-  dot1Amount    Decimal  @default(0) @db.Decimal(18, 2)
+  id            Int        @id @default(autoincrement())
+  lotId         Int        @unique
+  dot1Amount    Decimal    @default(0) @db.Decimal(18, 2)
   dot1Milestone String?
-  dot2Amount    Decimal  @default(0) @db.Decimal(18, 2)
+  dot2Amount    Decimal    @default(0) @db.Decimal(18, 2)
   dot2Milestone String?
-  dot3Amount    Decimal  @default(0) @db.Decimal(18, 2)
+  dot3Amount    Decimal    @default(0) @db.Decimal(18, 2)
   dot3Milestone String?
-  dot4Amount    Decimal  @default(0) @db.Decimal(18, 2)
+  dot4Amount    Decimal    @default(0) @db.Decimal(18, 2)
   dot4Milestone String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  lot           SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  importRunId   Int?
+  importRun     ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  lot           SlDtLot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
+  @@index([importRunId])
   @@map("sl_dt_payment_plans")
 }
 
 model SlDtMonthlyInput {
-  id            Int      @id @default(autoincrement())
+  id            Int        @id @default(autoincrement())
   lotId         Int
   year          Int
   month         Int
-  slKeHoachKy   Decimal  @default(0) @db.Decimal(18, 2)
-  slThucKyTho   Decimal  @default(0) @db.Decimal(18, 2)
-  slLuyKeTho    Decimal  @default(0) @db.Decimal(18, 2)
-  slTrat        Decimal  @default(0) @db.Decimal(18, 2)
-  dtKeHoachKy   Decimal  @default(0) @db.Decimal(18, 2)
-  dtThoKy       Decimal  @default(0) @db.Decimal(18, 2)
-  dtThoLuyKe    Decimal  @default(0) @db.Decimal(18, 2)
-  qtTratChua    Decimal  @default(0) @db.Decimal(18, 2)
-  dtTratKy      Decimal  @default(0) @db.Decimal(18, 2)
-  dtTratLuyKe   Decimal  @default(0) @db.Decimal(18, 2)
-  estimateValue Decimal? @db.Decimal(18, 2)
-  contractValue Decimal? @db.Decimal(18, 2)
+  slKeHoachKy   Decimal    @default(0) @db.Decimal(18, 2)
+  slThucKyTho   Decimal    @default(0) @db.Decimal(18, 2)
+  slLuyKeTho    Decimal    @default(0) @db.Decimal(18, 2)
+  slTrat        Decimal    @default(0) @db.Decimal(18, 2)
+  dtKeHoachKy   Decimal    @default(0) @db.Decimal(18, 2)
+  dtThoKy       Decimal    @default(0) @db.Decimal(18, 2)
+  dtThoLuyKe    Decimal    @default(0) @db.Decimal(18, 2)
+  qtTratChua    Decimal    @default(0) @db.Decimal(18, 2)
+  dtTratKy      Decimal    @default(0) @db.Decimal(18, 2)
+  dtTratLuyKe   Decimal    @default(0) @db.Decimal(18, 2)
+  estimateValue Decimal?   @db.Decimal(18, 2)
+  contractValue Decimal?   @db.Decimal(18, 2)
   ghiChu        String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  lot           SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  importRunId   Int?
+  importRun     ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  lot           SlDtLot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
   @@unique([lotId, year, month])
   @@index([year, month])
+  @@index([importRunId])
   @@map("sl_dt_monthly_inputs")
 }
 
 model SlDtProgressStatus {
-  id               Int      @id @default(autoincrement())
+  id               Int        @id @default(autoincrement())
   lotId            Int
   year             Int
   month            Int
@@ -1032,12 +1145,15 @@ model SlDtProgressStatus {
   tratHoanThien    String?
   hoSoQuyetToan    String?
   ghiChu           String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  lot              SlDtLot  @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  importRunId      Int?
+  importRun        ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  lot              SlDtLot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
   @@unique([lotId, year, month])
   @@index([year, month])
+  @@index([importRunId])
   @@map("sl_dt_progress_statuses")
 }
 
@@ -1046,6 +1162,7 @@ model SlDtSubtotalLabel {
   scope     String
   key       String
   label     String
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1117,6 +1234,7 @@ model TaskAttachment {
   uploader User @relation("TaskAttachmentUploader", fields: [uploaderId], references: [id])
 
   @@index([taskId, createdAt])
+  @@index([uploaderId])
   @@map("task_attachments")
 }
 
@@ -1151,6 +1269,7 @@ model ModulePermission {
 
   @@id([userId, moduleKey])
   @@index([userId])
+  @@index([grantedBy])
   @@map("module_permissions")
 }
 
@@ -1168,6 +1287,7 @@ model ProjectPermission {
   @@id([userId, projectId])
   @@index([userId])
   @@index([projectId])
+  @@index([grantedBy])
   @@map("project_permissions")
 }
 
@@ -1180,5 +1300,78 @@ model ProjectGrantAll {
   user    User  @relation("ProjectGrantAllUser", fields: [userId], references: [id], onDelete: Cascade)
   granter User? @relation("ProjectGrantAllGranter", fields: [grantedBy], references: [id])
 
+  @@index([grantedBy])
   @@map("project_grant_all")
+}
+
+// Dynamic role definitions. `User.role` is a soft reference to `Role.id` (slug).
+model Role {
+  id          String   @id // slug — "admin", "ketoan", or custom
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+// Per-role module access level. Absence of a row = no access for that module.
+model RolePermission {
+  roleId    String
+  moduleKey String
+  level     String // "read" | "comment" | "edit" | "admin"
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, moduleKey])
+  @@index([roleId])
+  @@map("role_permissions")
+}
+
+// ─── Nghĩa vụ với Nhà nước (thuế, BHXH) — company-wide obligation tracking ─────
+
+// Danh mục nghĩa vụ — seeded with VN standard types, editable.
+model StateObligationType {
+  id             Int       @id @default(autoincrement())
+  name           String    @unique // "Thuế GTGT"
+  code           String? // mã TK kế toán optional, vd "3331"
+  category       String // "thue" | "bao_hiem" | "khac"
+  openingBalance Decimal   @default(0) @db.Decimal(18, 2)
+  openingDate    DateTime // mốc số dư đầu kỳ
+  sortOrder      Int       @default(0)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  txns StateObligationTxn[]
+
+  @@index([category, sortOrder])
+  @@map("state_obligation_types")
+}
+
+// Sổ phát sinh — accrual ("phai_tra") and payment ("da_nop") rows.
+model StateObligationTxn {
+  id             Int       @id @default(autoincrement())
+  typeId         Int
+  date           DateTime // ngày ghi nhận
+  kind           String // "phai_tra" | "da_nop"
+  amount         Decimal   @db.Decimal(18, 2)
+  cashAccountId  Int? // chỉ với da_nop
+  journalEntryId Int?      @unique // bút toán liên kết, chỉ với da_nop
+  refNo          String?
+  description    String?
+  note           String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  type         StateObligationType @relation(fields: [typeId], references: [id])
+  cashAccount  CashAccount?        @relation(fields: [cashAccountId], references: [id])
+  journalEntry JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+
+  @@index([typeId, date])
+  @@index([kind, date])
+  @@map("state_obligation_txns")
 }

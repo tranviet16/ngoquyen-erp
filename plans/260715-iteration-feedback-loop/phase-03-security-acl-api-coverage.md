@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Kiểm thử security, ACL và API P0"
-status: pending
+status: completed
 priority: P1
 effort: "24h"
 dependencies: [1, 2]
@@ -48,9 +48,9 @@ Data-driven contract tables sinh test matrix cho HTTP routes và server actions.
 
 ## Todo list
 
-- [ ] P0 allow/deny/IDOR matrix xanh.
-- [ ] P0 mutation có audit + transaction invariant tests.
-- [ ] Manual review có owner và date.
+- [x] P0 allow/deny/IDOR matrix xanh.
+- [x] P0 mutation có audit + transaction invariant tests.
+- [x] Manual review có owner và date.
 
 ## Success criteria
 

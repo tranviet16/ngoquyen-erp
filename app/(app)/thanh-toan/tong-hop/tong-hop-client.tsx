@@ -137,13 +137,13 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
               <tr>
                 <th
                   rowSpan={2}
-                  className="sticky left-0 border bg-muted/50 px-2 py-2 text-left"
+                  className="border px-2 py-2 text-left"
                 >
                   STT
                 </th>
                 <th
                   rowSpan={2}
-                  className="sticky left-8 border bg-muted/50 px-2 py-2 text-left"
+                  className="sticky left-0 border bg-muted/50 px-2 py-2 text-left"
                 >
                   Đơn vị TT
                 </th>
@@ -181,8 +181,8 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
             <tbody>
               {pivot.map((p, i) => (
                 <tr key={p.supplierId} className="border-t">
-                  <td className="sticky left-0 border bg-background px-2 py-2">{i + 1}</td>
-                  <td className="sticky left-8 border bg-background px-2 py-2 whitespace-nowrap">
+                  <td className="border px-2 py-2">{i + 1}</td>
+                  <td className="sticky left-0 border bg-background px-2 py-2 whitespace-nowrap">
                     {p.supplierName}
                   </td>
                   {CATEGORIES.map((cat) =>

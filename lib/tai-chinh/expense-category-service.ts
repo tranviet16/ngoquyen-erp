@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 
 async function getRole(): Promise<string | null> {
@@ -31,7 +31,7 @@ export async function listExpenseCategories() {
 
 export async function createExpenseCategory(input: ExpenseCategoryInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   let level = 0;
   if (input.parentId) {
@@ -54,7 +54,7 @@ export async function createExpenseCategory(input: ExpenseCategoryInput) {
 
 export async function updateExpenseCategory(id: number, input: ExpenseCategoryInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const record = await prisma.expenseCategory.update({
     where: { id },
@@ -67,7 +67,7 @@ export async function updateExpenseCategory(id: number, input: ExpenseCategoryIn
 
 export async function softDeleteExpenseCategory(id: number) {
   const role = await getRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "tai-chinh", "admin");
 
   // Guard: cannot delete if journal entries reference it
   const refCount = await prisma.journalEntry.count({ where: { expenseCategoryId: id, deletedAt: null } });

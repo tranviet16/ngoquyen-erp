@@ -65,14 +65,16 @@ export function ActiveTaskRow({
   status,
   deadline,
   deptCode,
+  referenceTime,
 }: {
   id: number;
   title: string;
   status: string;
   deadline: Date | null;
   deptCode: string;
+  referenceTime: Date;
 }) {
-  const overdue = deadline ? deadline.getTime() < Date.now() : false;
+  const overdue = deadline ? deadline.getTime() < referenceTime.getTime() : false;
   return (
     <a
       href={`/van-hanh/cong-viec?taskId=${id}`}

@@ -2,25 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { DataTable, type ColumnDef } from "@/components/data-table";
+import { DataTable } from "@/components/data-table";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { ContractorForm } from "@/components/master-data/contractor-form";
-import { createContractor, updateContractor, softDeleteContractor } from "@/lib/master-data/contractor-service";
+import { createContractor, updateContractor, softDeleteContractor, patchContractor } from "@/lib/master-data/contractor-service";
 import { type ContractorInput } from "@/lib/master-data/schemas";
 import { useRouter } from "next/navigation";
-
-type ContractorRow = {
-  id: number;
-  name: string;
-  leader: string | null;
-  contact: string | null;
-};
-
-const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "name", header: "Tên đội thi công" },
-  { key: "leader", header: "Trưởng nhóm" },
-  { key: "contact", header: "Liên hệ" },
-];
+import { CONTRACTOR_COLUMNS, CONTRACTOR_SPEC, type ContractorRow } from "@/lib/master-data/contractors/table-spec";
 
 interface ContractorsClientProps {
   data: ContractorRow[];
@@ -34,7 +22,7 @@ export function ContractorsClient({ data, total, page, pageSize, searchValue }: 
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ContractorRow | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function handleCreate(input: ContractorInput) {
     await createContractor(input);
@@ -65,13 +53,18 @@ export function ContractorsClient({ data, total, page, pageSize, searchValue }: 
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={CONTRACTOR_COLUMNS}
         data={data as unknown as Record<string, unknown>[]}
         total={total}
         page={page}
         pageSize={pageSize}
         searchValue={searchValue}
         searchPlaceholder="Tìm theo tên..."
+        resourceSpec={CONTRACTOR_SPEC}
+        onCellEdit={async (row, key, value) => {
+          const contractor = row as unknown as ContractorRow;
+          return patchContractor(contractor.id, { [key]: value }) as Promise<Record<string, unknown>>;
+        }}
         actionColumn={(row) => {
           const contractor = row as unknown as ContractorRow;
           return (

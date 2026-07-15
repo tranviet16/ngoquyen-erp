@@ -5,10 +5,11 @@ import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import type { MonthRef } from "./helpers";
 import { prevMonth } from "./helpers";
 import { refreshAutoTarget } from "@/lib/sl-dt/recompute";
+import { activeLotWhere } from "@/lib/sl-dt/lot-effective";
 
 async function getSessionRole(): Promise<string | null> {
   try {
@@ -128,7 +129,7 @@ export async function adminPatchMonthlyInputCell(
   patch: Record<string, unknown>,
 ): Promise<void> {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "sl-dt", "admin");
   const data: Record<string, Prisma.Decimal | null> = {};
   for (const k of Object.keys(patch)) {
     if (ADMIN_RAW_INPUT_FIELDS.has(k)) {
@@ -262,7 +263,7 @@ export async function cloneFromPreviousMonth(year: number, month: number): Promi
   const [prevInputs, prevProgress, lots, existing] = await Promise.all([
     prisma.slDtMonthlyInput.findMany({ where: { year: source.year, month: source.month } }),
     prisma.slDtProgressStatus.findMany({ where: { year: source.year, month: source.month } }),
-    prisma.slDtLot.findMany({ where: { deletedAt: null } }),
+    prisma.slDtLot.findMany({ where: activeLotWhere(year, month) }),
     prisma.slDtMonthlyInput.findMany({
       where: { year, month },
       select: { lotId: true },

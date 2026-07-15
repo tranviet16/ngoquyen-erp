@@ -2,39 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { DataTable, type ColumnDef } from "@/components/data-table";
+import { DataTable } from "@/components/data-table";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { ItemForm } from "@/components/master-data/item-form";
-import { createItem, updateItem, softDeleteItem } from "@/lib/master-data/item-service";
+import { createItem, updateItem, softDeleteItem, patchItem } from "@/lib/master-data/item-service";
 import { type ItemInput } from "@/lib/master-data/schemas";
 import { useRouter } from "next/navigation";
-
-type ItemRow = {
-  id: number;
-  code: string;
-  name: string;
-  unit: string;
-  type: string;
-  note: string | null;
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  material: "Vật liệu",
-  labor: "Nhân công",
-  machine: "Máy móc",
-};
-
-const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "code", header: "Mã", className: "w-[120px]" },
-  { key: "name", header: "Tên vật tư / hạng mục" },
-  { key: "unit", header: "ĐVT", className: "w-[80px]" },
-  {
-    key: "type",
-    header: "Loại",
-    className: "w-[100px]",
-    render: (row) => TYPE_LABELS[row.type as string] ?? String(row.type),
-  },
-];
+import { ITEM_COLUMNS, ITEM_SPEC, type ItemRow } from "@/lib/master-data/items/table-spec";
 
 interface ItemsClientProps {
   data: ItemRow[];
@@ -48,7 +22,7 @@ export function ItemsClient({ data, total, page, pageSize, searchValue }: ItemsC
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ItemRow | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function handleCreate(input: ItemInput) {
     await createItem(input);
@@ -79,13 +53,18 @@ export function ItemsClient({ data, total, page, pageSize, searchValue }: ItemsC
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={ITEM_COLUMNS}
         data={data as unknown as Record<string, unknown>[]}
         total={total}
         page={page}
         pageSize={pageSize}
         searchValue={searchValue}
         searchPlaceholder="Tìm theo mã hoặc tên..."
+        resourceSpec={ITEM_SPEC}
+        onCellEdit={async (row, key, value) => {
+          const item = row as unknown as ItemRow;
+          return patchItem(item.id, { [key]: value }) as Promise<Record<string, unknown>>;
+        }}
         actionColumn={(row) => {
           const item = row as unknown as ItemRow;
           return (

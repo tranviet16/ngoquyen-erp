@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ngô Quyền ERP — Redesign</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --bg: #0B0E16;
+    --surface: #131826;
+    --surface-2: #1B2236;
+    --border: #232C44;
+    --fg: #F1F4FB;
+    --fg-muted: #94A0BF;
+    --fg-subtle: #5F6B89;
+    --accent: #4F8AF8;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+
+  .topbar {
+    height: 64px;
+    padding: 0 22px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; background: rgba(11, 14, 22, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 7px;
+    background: linear-gradient(135deg, #2A6FFF, #4F8AF8);
+    color: white;
+    display: grid; place-items: center;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-weight: 700; font-size: 13px;
+  }
+  .brand-text { line-height: 1.2; }
+  .brand-name { font-weight: 600; font-size: 15px; font-family: 'Be Vietnam Pro', sans-serif; }
+  .brand-sub { font-size: 11px; color: var(--fg-subtle); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  .spacer { flex: 1; }
+
+  .seg {
+    display: inline-flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 0;
+  }
+  .seg button {
+    border: 0; background: transparent;
+    padding: 6px 14px; font-size: 12.5px; font-weight: 500;
+    color: var(--fg-muted); cursor: pointer; border-radius: 6px;
+    font-family: inherit;
+    transition: all 120ms;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .seg button.active {
+    background: var(--surface-2); color: var(--fg);
+    box-shadow: 0 1px 2px rgba(0,0,0,.3);
+  }
+  .seg button:not(.active):hover { color: var(--fg); }
+  .seg-label {
+    font-size: 10.5px; color: var(--fg-subtle); font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-right: 8px;
+  }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--fg); font-family: inherit; font-size: 12.5px; font-weight: 500;
+    padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: all 120ms;
+  }
+  .btn:hover { border-color: #2E3A5C; background: var(--surface-2); }
+
+  .stage {
+    padding: 28px 20px 60px;
+    min-height: calc(100vh - 64px);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    max-width: 1880px;
+    margin: 0 auto;
+  }
+  .stage.single .grid { grid-template-columns: 1fr; max-width: 1480px; }
+
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.2);
+    display: flex; flex-direction: column;
+  }
+  .frame-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .frame-letter {
+    width: 24px; height: 24px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 5px; display: grid; place-items: center;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-weight: 700; font-size: 12px;
+  }
+  .frame-title { font-weight: 600; font-size: 13.5px; }
+  .frame-sub { font-size: 11.5px; color: var(--fg-muted); }
+  .frame-head-actions { margin-left: auto; display: flex; gap: 4px; }
+
+  .frame-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/10;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+  .frame-stage iframe {
+    position: absolute; top: 0; left: 0;
+    width: 1440px; height: 900px;
+    border: 0;
+    transform-origin: top left;
+    background: white;
+  }
+  /* Note: scale is set inline per-frame to fit the container */
+
+  .stage.single .frame-stage { aspect-ratio: 1440 / 900; }
+
+  .info-card {
+    max-width: 1880px;
+    margin: 0 auto 22px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 22px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 20px;
+    align-items: center;
+  }
+  .info-title { font-family: 'Be Vietnam Pro'; font-weight: 600; font-size: 17px; }
+  .info-sub { font-size: 13px; color: var(--fg-muted); margin-top: 4px; line-height: 1.55; max-width: 760px; }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 5px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-size: 11px; color: var(--fg-muted); font-weight: 500;
+  }
+  .chip .k { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: var(--fg-subtle); }
+
+  .icon-btn {
+    width: 28px; height: 28px;
+    border: 0; background: transparent;
+    color: var(--fg-muted); cursor: pointer;
+    border-radius: 5px;
+    display: grid; place-items: center;
+    transition: all 120ms;
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">NQ</div>
+    <div class="brand-text">
+      <div class="brand-name">Ngô Quyền ERP — Redesign</div>
+      <div class="brand-sub">Hi-fi prototype · 2 phương án visual</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+
+  <span class="seg-label">Hiển thị</span>
+  <div class="seg" id="seg-mode">
+    <button data-mode="both" class="active">So sánh A | B</button>
+    <button data-mode="A">Chỉ A</button>
+    <button data-mode="B">Chỉ B</button>
+  </div>
+
+  <span class="seg-label">Theme</span>
+  <div class="seg" id="seg-theme">
+    <button data-theme="light" class="active">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      Light
+    </button>
+    <button data-theme="dark">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+      Dark
+    </button>
+  </div>
+</div>
+
+<div class="stage" id="stage">
+  <div class="info-card">
+    <div>
+      <div class="info-title">Đề xuất thiết kế cho hệ thống ERP Ngô Quyền</div>
+      <div class="info-sub">
+        Hai phương án visual cho ERP xây dựng, tập trung vào Dashboard tài chính,
+        Dự án, Công nợ NCC, Công việc và Nhật ký giao dịch. Mỗi prototype có sidebar nav,
+        topbar tìm kiếm, dark mode, command palette, drawer và modal — bấm vào bất kỳ
+        artboard nào để tương tác trực tiếp.
+      </div>
+    </div>
+    <div class="chips">
+      <div class="chip"><span class="k">⌘K</span> Command palette</div>
+      <div class="chip">6 màn hình</div>
+      <div class="chip">Light + Dark</div>
+      <div class="chip">Be Vietnam Pro · Inter</div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid">
+    <div class="frame" data-variant="A">
+      <div class="frame-head">
+        <div class="frame-letter">A</div>
+        <div>
+          <div class="frame-title">Navy Enterprise</div>
+          <div class="frame-sub">Refined SAP/Stripe · navy #1D4ED8 + cam #EA580C · density vừa</div>
+        </div>
+        <div class="frame-head-actions">
+          <button class="icon-btn" title="Mở fullscreen" onclick="window.open('prototype.html?variant=A&theme=' + currentTheme, '_blank')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="frame-stage" id="stage-A">
+        <iframe id="if-A" src="prototype.html?variant=A&theme=light" title="Variant A"></iframe>
+      </div>
+    </div>
+
+    <div class="frame" data-variant="B">
+      <div class="frame-head">
+        <div class="frame-letter">B</div>
+        <div>
+          <div class="frame-title">Mono Premium</div>
+          <div class="frame-sub">Vercel/Linear · mono + accent xanh #2563EB · whitespace nhiều</div>
+        </div>
+        <div class="frame-head-actions">
+          <button class="icon-btn" title="Mở fullscreen" onclick="window.open('prototype.html?variant=B&theme=' + currentTheme, '_blank')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="frame-stage" id="stage-B">
+        <iframe id="if-B" src="prototype.html?variant=B&theme=light" title="Variant B"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentTheme = 'light';
+  let currentMode = 'both';
+
+  // Scale iframes to fit their stage containers (1440 ARTBOARD → variable px).
+  function rescale() {
+    document.querySelectorAll('.frame-stage').forEach(stage => {
+      const iframe = stage.querySelector('iframe');
+      if (!iframe) return;
+      const sw = stage.clientWidth;
+      const scale = sw / 1440;
+      iframe.style.transform = `scale(${scale})`;
+      // height of scaled iframe = 900 * scale — stage uses aspect-ratio so this matches.
+    });
+  }
+  window.addEventListener('resize', rescale);
+
+  // Wait for iframes to load then scale.
+  Promise.all([...document.querySelectorAll('iframe')].map(f =>
+    new Promise(r => f.addEventListener('load', r, { once: true }))
+  )).then(rescale);
+  rescale();
+
+  function setMode(mode) {
+    currentMode = mode;
+    const stage = document.getElementById('stage');
+    const grid = document.getElementById('grid');
+    stage.classList.toggle('single', mode !== 'both');
+    document.querySelectorAll('#grid .frame').forEach(f => {
+      f.style.display = (mode === 'both' || f.dataset.variant === mode) ? '' : 'none';
+    });
+    document.querySelectorAll('#seg-mode button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode));
+    requestAnimationFrame(rescale);
+  }
+
+  function setTheme(theme) {
+    currentTheme = theme;
+    document.getElementById('if-A').src = `prototype.html?variant=A&theme=${theme}`;
+    document.getElementById('if-B').src = `prototype.html?variant=B&theme=${theme}`;
+    document.querySelectorAll('#seg-theme button').forEach(b =>
+      b.classList.toggle('active', b.dataset.theme === theme));
+  }
+
+  document.getElementById('seg-mode').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (btn) setMode(btn.dataset.mode);
+  });
+  document.getElementById('seg-theme').addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (btn) setTheme(btn.dataset.theme);
+  });
+</script>
+</body>
+</html>

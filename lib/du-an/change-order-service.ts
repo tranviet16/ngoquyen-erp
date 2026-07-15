@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { changeOrderSchema, type ChangeOrderInput } from "./schemas";
 
@@ -26,7 +26,7 @@ export async function listChangeOrders(projectId: number) {
 
 export async function createChangeOrder(input: ChangeOrderInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = changeOrderSchema.parse(input);
   const record = await prisma.projectChangeOrder.create({
     data: {
@@ -55,7 +55,7 @@ export async function createChangeOrder(input: ChangeOrderInput) {
 
 export async function updateChangeOrder(id: number, input: ChangeOrderInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = changeOrderSchema.parse(input);
   const record = await prisma.projectChangeOrder.update({
     where: { id },
@@ -92,7 +92,7 @@ export async function adminPatchChangeOrder(
   projectId: number,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectChangeOrder.update({ where: { id }, data: patch });
   revalidatePath(`/du-an/${projectId}/phat-sinh`);
   revalidatePath(`/du-an/${projectId}/du-toan-dieu-chinh`);
@@ -101,7 +101,7 @@ export async function adminPatchChangeOrder(
 
 export async function softDeleteChangeOrder(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectChangeOrder.update({
     where: { id },
     data: { deletedAt: new Date() },

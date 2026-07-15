@@ -1,5 +1,5 @@
 /**
- * Adapter: SL - DT 2025.xlsx → sl_dt_lots + sl_dt_monthly_inputs +
+ * Adapter: SL - DT.xlsx → sl_dt_lots + sl_dt_monthly_inputs +
  *  sl_dt_progress_statuses + sl_dt_payment_plans + sl_dt_milestone_scores.
  *
  * Phase 3 rewrite — independent SL-DT module. Only INPUTS are imported;
@@ -8,6 +8,11 @@
  *
  * Idempotent: re-import overwrites monthly_inputs / progress_statuses /
  * payment_plans by their unique keys; lots are upserted by `code`.
+ *
+ * Rollback: every row is tagged with importRunId (set on insert AND on
+ * conflict-update, so the last writer owns the row). rollbackImportRun deletes
+ * sl_dt_* rows by importRunId. Master data has no SL-DT analogue — all five
+ * tables are import-owned, so a delete-by-run is a faithful undo.
  */
 
 import * as XLSX from "xlsx";
@@ -20,20 +25,22 @@ import type {
 } from "./adapter-types";
 import {
   classifySheet,
+  latestResolvedMonth,
   normalizeLotCode,
   parseCauHinh,
   parseChiTieu,
   parseDoanhThu,
-  parseMonthSheetName,
   parseSanLuong,
   parseTienDoNopTien,
   parseTienDoXd,
   readMatrix,
+  resolveSheetMonths,
 } from "./sl-dt-sheet-parsers";
 
 export const SlDtAdapter: ImportAdapter = {
   name: "sl-dt",
-  label: "SL - DT 2025",
+  label: "SL - DT",
+  supportsRollback: true,
 
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
@@ -42,6 +49,10 @@ export const SlDtAdapter: ImportAdapter = {
       san_luong: 0, doanh_thu: 0, chi_tieu: 0, tien_do_xd: 0,
       tien_do_nop_tien: 0, cau_hinh: 0,
     };
+
+    // Excel truncates sheet names, so the year is inferred from workbook order.
+    const monthBySheet = resolveSheetMonths(wb.SheetNames);
+    const latest = latestResolvedMonth(monthBySheet);
 
     for (const sheetName of wb.SheetNames) {
       const cat = classifySheet(sheetName);
@@ -55,11 +66,13 @@ export const SlDtAdapter: ImportAdapter = {
       } else if (cat === "tien_do_nop_tien") {
         parsed = parseTienDoNopTien(matrix);
       } else if (cat === "tien_do_xd") {
-        const ym = parseMonthSheetName(sheetName);
+        // The undated "TIẾN ĐỘ XÂY DỰNG" sheet holds the current state — map it
+        // to the workbook's latest month so its rows are not silently dropped.
+        const ym = monthBySheet.get(sheetName) ?? latest;
         if (!ym) continue;
         parsed = parseTienDoXd(matrix, ym.year, ym.month);
       } else {
-        const ym = parseMonthSheetName(sheetName);
+        const ym = monthBySheet.get(sheetName);
         if (!ym) continue;
         if (cat === "san_luong") parsed = parseSanLuong(matrix, ym.year, ym.month);
         else if (cat === "doanh_thu") parsed = parseDoanhThu(matrix, ym.year, ym.month);
@@ -105,20 +118,27 @@ export const SlDtAdapter: ImportAdapter = {
         const score = Number(row.data.score);
         const order = Number(row.data.sortOrder);
         await db.$executeRaw`
-          INSERT INTO sl_dt_milestone_scores ("milestoneText", score, "sortOrder", "createdAt", "updatedAt")
-          VALUES (${text}, ${score}, ${order}, NOW(), NOW())
+          INSERT INTO sl_dt_milestone_scores ("milestoneText", score, "sortOrder", "importRunId", "createdAt", "updatedAt")
+          VALUES (${text}, ${score}, ${order}, ${importRunId || null}, NOW(), NOW())
           ON CONFLICT ("milestoneText") DO UPDATE
-            SET score = EXCLUDED.score, "sortOrder" = EXCLUDED."sortOrder", "updatedAt" = NOW()
+            SET score = EXCLUDED.score, "sortOrder" = EXCLUDED."sortOrder",
+                "importRunId" = EXCLUDED."importRunId", "updatedAt" = NOW()
         `;
         imported++;
       } catch (e) { errors.push({ rowIndex: row.rowIndex, message: String(e) }); }
     }
 
-    // 2. Lot meta — collapse by lotName, prefer sản_luong source for hierarchy/estimate
+    // 2. Lot meta — collapse by lotName, prefer sản_luong source for hierarchy/estimate.
+    // Counting model: `imported`/`skipped` track INPUT rows, not output records, so
+    // imported + skipped reconciles with rowsTotal. Many source rows merge into one
+    // lot / monthly_input / progress_status — every consumed row still counts.
     const lotMetaByName = new Map<string, Record<string, unknown>>();
     for (const row of data.rows.filter((r) => r.data.kind === "lot_meta")) {
       const name = normalizeLotCode(row.data.lotName);
-      if (!name) continue;
+      if (!name) {
+        skipped++;
+        continue;
+      }
       const cur = lotMetaByName.get(name) ?? {};
       // sản_luong wins for phaseCode/groupCode/sortOrder/estimateValue
       if (row.data.source === "san_luong") {
@@ -126,6 +146,10 @@ export const SlDtAdapter: ImportAdapter = {
         cur.groupCode = row.data.groupCode;
         cur.sortOrder = row.data.sortOrder;
         cur.estimateValue = row.data.estimateValue;
+        cur.showInSanLuong = true;
+        cur.showInChiTieu = true;
+        cur.showInTienDoXd = true;
+        cur.showInNopTien = true;
       }
       // doanh_thu: provides contractValue, plus phase/group fallback for lots
       // that don't appear in sản_luong sheets (commercial-only entries).
@@ -134,8 +158,10 @@ export const SlDtAdapter: ImportAdapter = {
         if (cur.phaseCode == null && row.data.phaseCode) cur.phaseCode = row.data.phaseCode;
         if (cur.groupCode == null && row.data.groupCode) cur.groupCode = row.data.groupCode;
         if (cur.sortOrder == null && row.data.sortOrder != null) cur.sortOrder = row.data.sortOrder;
+        cur.showInDoanhThu = true;
       }
       lotMetaByName.set(name, cur);
+      imported++;
     }
 
     const lotIdByName = new Map<string, number>();
@@ -146,20 +172,30 @@ export const SlDtAdapter: ImportAdapter = {
         const sortOrder = Number(m.sortOrder ?? 0);
         const estimateValue = Number(m.estimateValue ?? 0);
         const contractValue = m.contractValue != null ? Number(m.contractValue) : null;
+        const showInSanLuong = Boolean(m.showInSanLuong);
+        const showInDoanhThu = Boolean(m.showInDoanhThu);
+        const showInChiTieu = m.showInChiTieu == null ? showInSanLuong : Boolean(m.showInChiTieu);
+        const showInTienDoXd = m.showInTienDoXd == null ? showInSanLuong : Boolean(m.showInTienDoXd);
+        const showInNopTien = m.showInNopTien == null ? showInSanLuong : Boolean(m.showInNopTien);
         const result = await db.$queryRaw<{ id: number }[]>`
-          INSERT INTO sl_dt_lots (code, "lotName", "phaseCode", "groupCode", "sortOrder", "estimateValue", "contractValue", "createdAt", "updatedAt")
-          VALUES (${name}, ${name}, ${phaseCode}, ${groupCode}, ${sortOrder}, ${estimateValue}, ${contractValue}, NOW(), NOW())
+          INSERT INTO sl_dt_lots (code, "lotName", "phaseCode", "groupCode", "sortOrder", "estimateValue", "contractValue", "showInSanLuong", "showInDoanhThu", "showInChiTieu", "showInTienDoXd", "showInNopTien", "importRunId", "createdAt", "updatedAt")
+          VALUES (${name}, ${name}, ${phaseCode}, ${groupCode}, ${sortOrder}, ${estimateValue}, ${contractValue}, ${showInSanLuong}, ${showInDoanhThu}, ${showInChiTieu}, ${showInTienDoXd}, ${showInNopTien}, ${importRunId || null}, NOW(), NOW())
           ON CONFLICT (code) DO UPDATE
             SET "phaseCode" = EXCLUDED."phaseCode",
                 "groupCode" = EXCLUDED."groupCode",
                 "sortOrder" = EXCLUDED."sortOrder",
                 "estimateValue" = EXCLUDED."estimateValue",
                 "contractValue" = COALESCE(EXCLUDED."contractValue", sl_dt_lots."contractValue"),
+                "showInSanLuong" = sl_dt_lots."showInSanLuong" OR EXCLUDED."showInSanLuong",
+                "showInDoanhThu" = sl_dt_lots."showInDoanhThu" OR EXCLUDED."showInDoanhThu",
+                "showInChiTieu" = sl_dt_lots."showInChiTieu" OR EXCLUDED."showInChiTieu",
+                "showInTienDoXd" = sl_dt_lots."showInTienDoXd" OR EXCLUDED."showInTienDoXd",
+                "showInNopTien" = sl_dt_lots."showInNopTien" OR EXCLUDED."showInNopTien",
+                "importRunId" = EXCLUDED."importRunId",
                 "updatedAt" = NOW()
           RETURNING id
         `;
         lotIdByName.set(name, result[0].id);
-        imported++;
       } catch (e) { errors.push({ rowIndex: 0, message: `lot ${name}: ${e}` }); }
     }
 
@@ -174,18 +210,19 @@ export const SlDtAdapter: ImportAdapter = {
         const lotId = resolveLotId(row.data.lotName);
         if (!lotId) { skipped++; continue; }
         await db.$executeRaw`
-          INSERT INTO sl_dt_payment_plans ("lotId", "dot1Amount", "dot1Milestone", "dot2Amount", "dot2Milestone", "dot3Amount", "dot3Milestone", "dot4Amount", "dot4Milestone", "createdAt", "updatedAt")
+          INSERT INTO sl_dt_payment_plans ("lotId", "dot1Amount", "dot1Milestone", "dot2Amount", "dot2Milestone", "dot3Amount", "dot3Milestone", "dot4Amount", "dot4Milestone", "importRunId", "createdAt", "updatedAt")
           VALUES (${lotId},
             ${Number(row.data.dot1Amount ?? 0)}, ${row.data.dot1Milestone as string | null},
             ${Number(row.data.dot2Amount ?? 0)}, ${row.data.dot2Milestone as string | null},
             ${Number(row.data.dot3Amount ?? 0)}, ${row.data.dot3Milestone as string | null},
             ${Number(row.data.dot4Amount ?? 0)}, ${row.data.dot4Milestone as string | null},
-            NOW(), NOW())
+            ${importRunId || null}, NOW(), NOW())
           ON CONFLICT ("lotId") DO UPDATE
             SET "dot1Amount" = EXCLUDED."dot1Amount", "dot1Milestone" = EXCLUDED."dot1Milestone",
                 "dot2Amount" = EXCLUDED."dot2Amount", "dot2Milestone" = EXCLUDED."dot2Milestone",
                 "dot3Amount" = EXCLUDED."dot3Amount", "dot3Milestone" = EXCLUDED."dot3Milestone",
                 "dot4Amount" = EXCLUDED."dot4Amount", "dot4Milestone" = EXCLUDED."dot4Milestone",
+                "importRunId" = EXCLUDED."importRunId",
                 "updatedAt" = NOW()
         `;
         imported++;
@@ -219,6 +256,7 @@ export const SlDtAdapter: ImportAdapter = {
         cur.contractValue = row.data.contractValue != null ? Number(row.data.contractValue) : null;
       }
       inputs.set(key, cur);
+      imported++;
     }
     for (const cur of inputs.values()) {
       try {
@@ -226,13 +264,13 @@ export const SlDtAdapter: ImportAdapter = {
           INSERT INTO sl_dt_monthly_inputs ("lotId", year, month,
             "slKeHoachKy", "slThucKyTho", "slLuyKeTho", "slTrat",
             "dtKeHoachKy", "dtThoKy", "dtThoLuyKe", "qtTratChua", "dtTratKy", "dtTratLuyKe",
-            "estimateValue", "contractValue",
+            "estimateValue", "contractValue", "importRunId",
             "createdAt", "updatedAt")
           VALUES (${cur.lotId}, ${cur.year}, ${cur.month},
             ${cur.slKeHoachKy ?? 0}, ${cur.slThucKyTho ?? 0}, ${cur.slLuyKeTho ?? 0}, ${cur.slTrat ?? 0},
             ${cur.dtKeHoachKy ?? 0}, ${cur.dtThoKy ?? 0}, ${cur.dtThoLuyKe ?? 0},
             ${cur.qtTratChua ?? 0}, ${cur.dtTratKy ?? 0}, ${cur.dtTratLuyKe ?? 0},
-            ${cur.estimateValue ?? null}, ${cur.contractValue ?? null},
+            ${cur.estimateValue ?? null}, ${cur.contractValue ?? null}, ${importRunId || null},
             NOW(), NOW())
           ON CONFLICT ("lotId", year, month) DO UPDATE
             SET "slKeHoachKy" = EXCLUDED."slKeHoachKy", "slThucKyTho" = EXCLUDED."slThucKyTho",
@@ -241,9 +279,9 @@ export const SlDtAdapter: ImportAdapter = {
                 "dtThoLuyKe" = EXCLUDED."dtThoLuyKe", "qtTratChua" = EXCLUDED."qtTratChua",
                 "dtTratKy" = EXCLUDED."dtTratKy", "dtTratLuyKe" = EXCLUDED."dtTratLuyKe",
                 "estimateValue" = EXCLUDED."estimateValue", "contractValue" = EXCLUDED."contractValue",
+                "importRunId" = EXCLUDED."importRunId",
                 "updatedAt" = NOW()
         `;
-        imported++;
       } catch (e) { errors.push({ rowIndex: 0, message: `monthly_input ${cur.lotId}/${cur.year}/${cur.month}: ${e}` }); }
     }
 
@@ -260,6 +298,7 @@ export const SlDtAdapter: ImportAdapter = {
         if (row.data[k] != null) cur[k] = row.data[k];
       }
       statuses.set(key, cur);
+      imported++;
     }
     for (const cur of statuses.values()) {
       try {
@@ -267,7 +306,7 @@ export const SlDtAdapter: ImportAdapter = {
           INSERT INTO sl_dt_progress_statuses ("lotId", year, month,
             "milestoneText", "targetMilestone", "settlementStatus", "ghiChu",
             "khungBtct", "xayTuong", "tratNgoai", "xayTho", "tratHoanThien", "hoSoQuyetToan",
-            "createdAt", "updatedAt")
+            "importRunId", "createdAt", "updatedAt")
           VALUES (${cur.lotId as number}, ${cur.year as number}, ${cur.month as number},
             ${(cur.milestoneText as string) ?? null},
             ${(cur.targetMilestone as string) ?? null},
@@ -276,9 +315,10 @@ export const SlDtAdapter: ImportAdapter = {
             ${(cur.khungBtct as string) ?? null}, ${(cur.xayTuong as string) ?? null},
             ${(cur.tratNgoai as string) ?? null}, ${(cur.xayTho as string) ?? null},
             ${(cur.tratHoanThien as string) ?? null}, ${(cur.hoSoQuyetToan as string) ?? null},
-            NOW(), NOW())
+            ${importRunId || null}, NOW(), NOW())
           ON CONFLICT ("lotId", year, month) DO UPDATE
             SET "milestoneText" = COALESCE(EXCLUDED."milestoneText", sl_dt_progress_statuses."milestoneText"),
+                "importRunId" = EXCLUDED."importRunId",
                 "targetMilestone" = COALESCE(EXCLUDED."targetMilestone", sl_dt_progress_statuses."targetMilestone"),
                 "settlementStatus" = COALESCE(EXCLUDED."settlementStatus", sl_dt_progress_statuses."settlementStatus"),
                 "ghiChu" = COALESCE(EXCLUDED."ghiChu", sl_dt_progress_statuses."ghiChu"),
@@ -290,11 +330,9 @@ export const SlDtAdapter: ImportAdapter = {
                 "hoSoQuyetToan" = COALESCE(EXCLUDED."hoSoQuyetToan", sl_dt_progress_statuses."hoSoQuyetToan"),
                 "updatedAt" = NOW()
         `;
-        imported++;
       } catch (e) { errors.push({ rowIndex: 0, message: `progress ${(cur.lotId as number)}/${cur.year}/${cur.month}: ${e}` }); }
     }
 
-    void importRunId; // SL-DT idempotent upserts — no per-run rollback (overwrites latest)
     return { rowsTotal: data.rows.length, rowsImported: imported, rowsSkipped: skipped, errors };
   },
 };

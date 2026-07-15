@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { canAccess } from "@/lib/acl";
+import { canAccess, getModuleAvailability, shouldShowModuleInMenu } from "@/lib/acl";
 import type { ModuleKey } from "@/lib/acl";
 import { AppSidebarClient, type NavGroupData, type NavItemData } from "./app-sidebar-client";
 
@@ -73,10 +73,19 @@ export async function AppSidebar() {
     groupMap.set(group.label, []);
   }
   for (let i = 0; i < allItems.length; i++) {
-    if (accessResults[i]) {
-      const { group, item } = allItems[i];
-      groupMap.get(group.label)!.push({ label: item.label, href: item.href, icon: item.icon });
-    }
+    const { group, item } = allItems[i];
+    const availability = getModuleAvailability(item.moduleKey);
+    const isVisible = availability.enabled
+      ? accessResults[i]
+      : shouldShowModuleInMenu(item.moduleKey);
+    if (!isVisible) continue;
+
+    groupMap.get(group.label)!.push({
+      label: item.label,
+      href: item.href,
+      icon: item.icon,
+      status: availability.status,
+    });
   }
 
   const filteredGroups: NavGroupData[] = NAV_GROUPS

@@ -9,7 +9,7 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const buf = readFileSync("SOP/SL - DT 2025.xlsx");
+  const buf = readFileSync("SOP/SL - DT.xlsx");
   const data = await SlDtAdapter.parse(buf);
   console.log("parsed", data.rows.length, "rows");
 

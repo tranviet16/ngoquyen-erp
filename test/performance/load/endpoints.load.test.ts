@@ -10,14 +10,28 @@
  * baseline is observed over several runs.
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { runLoad, serverReachable } from "./autocannon-runner";
+import { assertLoadTargetAllowed, runLoad, serverReachable } from "./autocannon-runner";
 import baseline from "../baseline.json";
 
 const BASE_URL = process.env.LOAD_BASE_URL ?? "http://localhost:3000";
+const AUTH_COOKIE = process.env.LOAD_COOKIE;
 
 let reachable = false;
 beforeAll(async () => {
   reachable = await serverReachable(BASE_URL);
+});
+
+describe("load target safety guard", () => {
+  it("allows loopback targets without production acknowledgement", () => {
+    expect(() => assertLoadTargetAllowed("http://127.0.0.1:3000", false)).not.toThrow();
+  });
+
+  it("rejects non-local targets unless explicitly acknowledged", () => {
+    expect(() => assertLoadTargetAllowed("https://erp.example.com", false)).toThrow(
+      "ALLOW_PRODUCTION_LOAD=yes",
+    );
+    expect(() => assertLoadTargetAllowed("https://erp.example.com", true)).not.toThrow();
+  });
 });
 
 const targets = Object.keys(baseline.load).filter((k) => k !== "_comment");
@@ -29,8 +43,15 @@ describe.skipIf(!process.env.RUN_LOAD)("endpoint load (on-demand)", () => {
         console.warn(`[load] ${BASE_URL} unreachable — skipping ${path}`);
         return;
       }
+      if (path !== "/api/health" && !AUTH_COOKIE) {
+        throw new Error("LOAD_COOKIE is required for protected load-test endpoints");
+      }
       const ceiling = (baseline.load as Record<string, number | string>)[path] as number;
-      const r = await runLoad(`${BASE_URL}${path}`, { connections: 10, duration: 15 });
+      const r = await runLoad(`${BASE_URL}${path}`, {
+        connections: 10,
+        duration: 15,
+        headers: AUTH_COOKIE ? { cookie: AUTH_COOKIE } : undefined,
+      });
       expect(r.non2xx, `${path} returned ${r.non2xx} non-2xx responses`).toBe(0);
       expect(r.p95, `${path} p95 ${r.p95}ms exceeds ${ceiling}ms`).toBeLessThanOrEqual(ceiling);
     }, 30_000);

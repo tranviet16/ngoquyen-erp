@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canAccess } from "./effective";
 import type { CanAccessOpts } from "./effective";
+import { isModuleInDevelopment } from "./modules";
 import type { AccessLevel, ModuleKey } from "./modules";
 
 export type GuardOpts =
@@ -34,6 +35,11 @@ export async function requireModuleAccess(
 
   const { id: userId, role } = session.user;
   const minLevel: AccessLevel = opts.minLevel ?? "read";
+
+  if (isModuleInDevelopment(moduleKey)) {
+    const params = new URLSearchParams({ m: moduleKey });
+    redirect(`/dang-phat-trien?${params.toString()}`);
+  }
 
   // Build CanAccessOpts from GuardOpts
   let aclOpts: CanAccessOpts;

@@ -2,9 +2,14 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import type { ReactElement } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { Button } from "@/components/ui/button";
 import {
+  autoLabelJournalEntries,
   patchJournalEntry,
   bulkUpsertJournalEntries,
   softDeleteJournalEntries,
@@ -19,6 +24,7 @@ const DataGrid = dynamic(
   handlers: DataGridHandlers<T>;
   height?: number | string;
   newRowTemplate?: Partial<T>;
+  onSelectionChange?: (ids: number[]) => void;
 }) => ReactElement;
 
 interface CategoryOption { id: number; name: string; code: string }
@@ -71,9 +77,11 @@ const COST_BEHAVIORS: SelectOption[] = [
 
 export function JournalGridClient({ rows: initial, categories, cashAccounts }: Props) {
   const router = useRouter();
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isPending, startTransition] = useTransition();
   const categoryOptions: SelectOption[] = categories.map((c) => ({
     id: c.id,
-    name: `${c.code} - ${c.name}`,
+    name: c.name,
   }));
   const accountOptions: SelectOption[] = cashAccounts.map((a) => ({ id: a.id, name: a.name }));
 
@@ -90,6 +98,42 @@ export function JournalGridClient({ rows: initial, categories, cashAccounts }: P
     note: r.note,
   }));
 
+  const autoLabelTargetIds = useMemo(() => {
+    if (selectedIds.length) return selectedIds;
+    return rows.map((row) => row.id);
+  }, [rows, selectedIds]);
+
+  const handleAutoLabel = () => {
+    if (!autoLabelTargetIds.length) {
+      toast.info("Không có dòng cần gắn nhãn");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const result = await autoLabelJournalEntries(autoLabelTargetIds);
+        const createdCategories = result.createdCategories ?? [];
+        if (result.updated > 0) {
+          toast.success(`Đã gắn nhãn ${result.updated}/${result.total} dòng`);
+        } else if (!result.missingCategories.length) {
+          toast.info("Chưa có dòng nào khớp rule tự gắn nhãn");
+        }
+        if (createdCategories.length) {
+          toast.success(`Đã tạo danh mục: ${createdCategories.join(", ")}`);
+        }
+        if (result.skipped > 0) {
+          toast.warning(`${result.skipped} dòng cần kiểm tra thủ công`);
+        }
+        if (result.missingCategories.length) {
+          toast.warning(`Thiếu danh mục: ${result.missingCategories.join(", ")}`);
+        }
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Tự gắn nhãn thất bại");
+      }
+    });
+  };
+
   const columns: DataGridColumn<JournalRow>[] = [
     { id: "date", title: "Ngày", kind: "date", width: 120 },
     { id: "entryType", title: "Loại", kind: "select", width: 130, options: ENTRY_TYPES },
@@ -98,7 +142,7 @@ export function JournalGridClient({ rows: initial, categories, cashAccounts }: P
     { id: "amountVnd", title: "Số tiền (VND)", kind: "currency", width: 140 },
     { id: "fromAccountId", title: "Nguồn chi", kind: "select", width: 150, options: accountOptions },
     { id: "toAccountId", title: "Nguồn thu", kind: "select", width: 150, options: accountOptions },
-    { id: "expenseCategoryId", title: "Phân loại", kind: "select", width: 180, options: categoryOptions },
+    { id: "expenseCategoryId", title: "Loại cụ thể", kind: "select", width: 180, options: categoryOptions },
     { id: "note", title: "Ghi chú", kind: "text", width: 180 },
   ];
 
@@ -134,13 +178,33 @@ export function JournalGridClient({ rows: initial, categories, cashAccounts }: P
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold">Nhật ký giao dịch</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Nhật ký giao dịch</h1>
+          <p className="text-sm text-muted-foreground">
+            {selectedIds.length
+              ? `Tự gắn nhãn và ghi đè ${selectedIds.length} dòng đã chọn`
+              : `Tự gắn nhãn và ghi đè ${autoLabelTargetIds.length} dòng đang hiển thị`}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          className="gap-1.5"
+          disabled={isPending || autoLabelTargetIds.length === 0}
+          onClick={handleAutoLabel}
+        >
+          <Sparkles className="size-4" />
+          {isPending ? "Đang gắn nhãn..." : "Tự gắn nhãn"}
+        </Button>
+      </div>
       <DataGrid<JournalRow>
         columns={columns}
         rows={rows}
         handlers={handlers}
         height={600}
         newRowTemplate={{ entryType: "chi", costBehavior: "variable", amountVnd: 0, description: "" } as Partial<JournalRow>}
+        onSelectionChange={setSelectedIds}
       />
     </div>
   );

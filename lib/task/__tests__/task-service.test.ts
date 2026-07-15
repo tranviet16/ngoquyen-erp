@@ -31,6 +31,7 @@ import {
   deleteTask,
   getTaskById,
   listDeptMembers,
+  assertCanCreateTask,
 } from "@/lib/task/task-service";
 
 const baseCtx = {
@@ -49,37 +50,103 @@ beforeEach(() => {
   mockDb.$transaction.mockImplementation((fn) => fn(mockDb));
 });
 
+describe("assertCanCreateTask", () => {
+  const member = { userId: "u1", departmentId: 10, isLeader: false, isDirector: false };
+  const leader = { ...member, isLeader: true };
+  const director = { ...member, isDirector: true };
+
+  it("allows admin for any dept and assignee", () => {
+    expect(() => assertCanCreateTask(member, "admin", 99, "anyone")).not.toThrow();
+  });
+
+  it("allows a director for any dept and assignee", () => {
+    expect(() => assertCanCreateTask(director, "viewer", 99, "anyone")).not.toThrow();
+  });
+
+  it("allows a leader within their own department", () => {
+    expect(() => assertCanCreateTask(leader, "viewer", 10, "u2")).not.toThrow();
+  });
+
+  it("rejects a leader for another department", () => {
+    expect(() => assertCanCreateTask(leader, "viewer", 11, "u2")).toThrow(/Phiếu phối hợp/);
+  });
+
+  it("allows a plain member self-task in their own department", () => {
+    expect(() => assertCanCreateTask(member, "viewer", 10, "u1")).not.toThrow();
+  });
+
+  it("rejects a plain member assigning to someone else", () => {
+    expect(() => assertCanCreateTask(member, "viewer", 10, "u2")).toThrow(/Phiếu phối hợp/);
+  });
+
+  it("rejects a plain member self-task in another department", () => {
+    expect(() => assertCanCreateTask(member, "viewer", 11, "u1")).toThrow(/Phiếu phối hợp/);
+  });
+
+  it("rejects any task for a user with no department", () => {
+    const noDept = { ...member, departmentId: null };
+    expect(() => assertCanCreateTask(noDept, "viewer", 10, "u1")).toThrow(/Phiếu phối hợp/);
+  });
+});
+
 describe("createTaskManual", () => {
   it("rejects an invalid title via schema validation", async () => {
     await expect(
-      createTaskManual({ title: "ab", deptId: 10 } as never),
+      createTaskManual({ title: "ab", deptId: 10, assigneeId: "u1" } as never),
     ).rejects.toThrow();
   });
 
-  it("rejects a viewer with no department membership", async () => {
-    mockCtx.getUserContext.mockResolvedValue({ ...baseCtx, departmentId: 99 });
+  it("rejects a missing assigneeId via schema validation", async () => {
     await expect(
       createTaskManual({ title: "Task hợp lệ", deptId: 10 } as never),
-    ).rejects.toThrow(/không có quyền tạo task/);
+    ).rejects.toThrow();
+  });
+
+  it("rejects a plain member assigning the task to someone else", async () => {
+    await expect(
+      createTaskManual({ title: "Task hợp lệ", deptId: 10, assigneeId: "u2" } as never),
+    ).rejects.toThrow(/Phiếu phối hợp/);
   });
 
   it("rejects an inactive department", async () => {
     mockDb.department.findUnique.mockResolvedValue({ id: 10, isActive: false });
     await expect(
-      createTaskManual({ title: "Task hợp lệ", deptId: 10 } as never),
+      createTaskManual({ title: "Task hợp lệ", deptId: 10, assigneeId: "u1" } as never),
     ).rejects.toThrow(/Phòng ban không hợp lệ/);
   });
 
-  it("creates the task and writes an audit log for a dept member", async () => {
+  it("creates a self-task and writes an audit log for a plain member", async () => {
     mockDb.department.findUnique.mockResolvedValue({ id: 10, isActive: true });
+    mockDb.user.findUnique.mockResolvedValue({ departmentId: 10 });
     mockDb.task.create.mockResolvedValue({ id: 5, title: "Task hợp lệ", deptId: 10 });
-    const task = await createTaskManual({ title: "Task hợp lệ", deptId: 10 } as never);
+    const task = await createTaskManual(
+      { title: "Task hợp lệ", deptId: 10, assigneeId: "u1" } as never,
+    );
     expect(task.id).toBe(5);
     expect(mockDb.task.create).toHaveBeenCalledOnce();
     expect(mockDb.auditLog.create).toHaveBeenCalledOnce();
   });
 
+  it("lets a department leader create a task for a member", async () => {
+    mockCtx.getUserContext.mockResolvedValue({ ...baseCtx, isLeader: true, departmentId: 10 });
+    mockDb.department.findUnique.mockResolvedValue({ id: 10, isActive: true });
+    mockDb.user.findUnique.mockResolvedValue({ departmentId: 10 });
+    mockDb.task.create.mockResolvedValue({ id: 6, title: "Task hợp lệ", deptId: 10 });
+    const task = await createTaskManual(
+      { title: "Task hợp lệ", deptId: 10, assigneeId: "u2" } as never,
+    );
+    expect(task.id).toBe(6);
+  });
+
+  it("rejects a leader creating a task in another department", async () => {
+    mockCtx.getUserContext.mockResolvedValue({ ...baseCtx, isLeader: true, departmentId: 99 });
+    await expect(
+      createTaskManual({ title: "Task hợp lệ", deptId: 10, assigneeId: "u2" } as never),
+    ).rejects.toThrow(/Phiếu phối hợp/);
+  });
+
   it("rejects an assignee outside the task department", async () => {
+    mockCtx.getUserContext.mockResolvedValue({ ...baseCtx, isLeader: true, departmentId: 10 });
     mockDb.department.findUnique.mockResolvedValue({ id: 10, isActive: true });
     mockDb.user.findUnique.mockResolvedValue({ departmentId: 99 });
     await expect(

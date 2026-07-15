@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+vi.mock("react", () => ({
+  cache: <T extends (...args: unknown[]) => unknown>(fn: T): T => fn,
+}));
+
 const mockDb = vi.hoisted(() => ({
   projectEstimate: { findMany: vi.fn(), update: vi.fn() },
+  rolePermission: { findMany: vi.fn() },
 }));
 const mockAuth = vi.hoisted(() => ({ getSession: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
@@ -15,8 +20,12 @@ import {
   adminPatchEstimate,
   softDeleteEstimate,
 } from "@/lib/du-an/estimate-service";
+import { rolePermissionFindMany } from "@/lib/acl/__tests__/_role-permission-fixture";
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
+});
 
 describe("listEstimates", () => {
   it("queries non-deleted estimates for the project", async () => {

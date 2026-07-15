@@ -9,7 +9,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - D:/docker-data/ngoquyyen-erp/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nqerp -d ngoquyyen_erp"]
       interval: 10s
@@ -42,5 +42,3 @@ services:
     depends_on:
       - web
 
-volumes:
-  postgres_data:

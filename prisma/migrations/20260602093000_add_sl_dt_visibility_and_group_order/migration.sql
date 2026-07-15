@@ -1,0 +1,10 @@
+ALTER TABLE "sl_dt_lots"
+  ADD COLUMN "showInSanLuong" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "showInDoanhThu" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "showInChiTieu" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "showInTienDoXd" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "showInNopTien" BOOLEAN NOT NULL DEFAULT true;
+
+ALTER TABLE "sl_dt_subtotal_labels"
+  ADD COLUMN "sortOrder" INTEGER NOT NULL DEFAULT 0;
+

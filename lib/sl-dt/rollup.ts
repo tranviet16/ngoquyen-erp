@@ -4,6 +4,7 @@
  */
 
 import { computeSanLuong, computeDoanhThu } from "./compute";
+import { cleanHierarchyLabel, hasHierarchyLabel } from "./hierarchy";
 
 export type RowKind = "lot" | "group" | "phase" | "grand";
 
@@ -83,10 +84,13 @@ function sumDoanhThu(rows: DoanhThuRow[]): Omit<DoanhThuRow, "kind" | "code" | "
   return { ...s, ...c };
 }
 
-export function rollupSanLuong(lotRows: SanLuongRow[]): SanLuongRow[] {
+function orderValue(orderMap: Map<string, number>, key: string) {
+  return orderMap.get(key) ?? 999999;
+}
+
+export function rollupSanLuong(lotRows: SanLuongRow[], orderMap: Map<string, number> = new Map()): SanLuongRow[] {
   const result: SanLuongRow[] = [];
 
-  // Group by phaseCode then groupCode
   const byPhase = new Map<string, Map<string, SanLuongRow[]>>();
   for (const r of lotRows) {
     if (!byPhase.has(r.phaseCode)) byPhase.set(r.phaseCode, new Map());
@@ -97,42 +101,49 @@ export function rollupSanLuong(lotRows: SanLuongRow[]): SanLuongRow[] {
 
   const phaseSums: SanLuongRow[] = [];
 
-  for (const [phaseCode, byGroup] of byPhase) {
+  const phaseEntries = [...byPhase.entries()].sort((a, b) =>
+    orderValue(orderMap, `phase:${a[0]}`) - orderValue(orderMap, `phase:${b[0]}`) || a[0].localeCompare(b[0], "vi"),
+  );
+
+  for (const [phaseCode, byGroup] of phaseEntries) {
     const groupSums: SanLuongRow[] = [];
+    const pendingGroups: Array<{ row: SanLuongRow; lots: SanLuongRow[] }> = [];
 
-    for (const [groupCode, lots] of byGroup) {
-      // Emit lots sorted by sortOrder
+    const groupEntries = [...byGroup.entries()].sort((a, b) =>
+      orderValue(orderMap, `group:${phaseCode}/${a[0]}`) - orderValue(orderMap, `group:${phaseCode}/${b[0]}`) || a[0].localeCompare(b[0], "vi"),
+    );
+    for (const [groupCode, lots] of groupEntries) {
       const sorted = [...lots].sort((a, b) => a.sortOrder - b.sortOrder);
-      result.push(...sorted);
-
-      // Group subtotal
       const gs = sumSanLuong(sorted);
       const groupRow: SanLuongRow = {
         kind: "group",
         code: "",
-        lotName: `Tổng nhóm ${groupCode}`,
+        lotName: cleanHierarchyLabel(groupCode),
         phaseCode,
         groupCode,
         sortOrder: 9999,
         ...gs,
       };
-      result.push(groupRow);
       groupSums.push(groupRow);
+      pendingGroups.push({ row: groupRow, lots: sorted });
     }
 
-    // Phase subtotal
     const ps = sumSanLuong(groupSums);
     const phaseRow: SanLuongRow = {
       kind: "phase",
       code: "",
-      lotName: `Tổng giai đoạn ${phaseCode}`,
+      lotName: cleanHierarchyLabel(phaseCode),
       phaseCode,
       groupCode: "",
       sortOrder: 99999,
       ...ps,
     };
-    result.push(phaseRow);
     phaseSums.push(phaseRow);
+    if (hasHierarchyLabel(phaseCode)) result.push(phaseRow);
+    for (const item of pendingGroups) {
+      if (hasHierarchyLabel(item.row.groupCode)) result.push(item.row);
+      result.push(...item.lots);
+    }
   }
 
   // Grand total
@@ -150,7 +161,7 @@ export function rollupSanLuong(lotRows: SanLuongRow[]): SanLuongRow[] {
   return result;
 }
 
-export function rollupDoanhThu(lotRows: DoanhThuRow[]): DoanhThuRow[] {
+export function rollupDoanhThu(lotRows: DoanhThuRow[], orderMap: Map<string, number> = new Map()): DoanhThuRow[] {
   const result: DoanhThuRow[] = [];
 
   const byPhase = new Map<string, Map<string, DoanhThuRow[]>>();
@@ -163,39 +174,49 @@ export function rollupDoanhThu(lotRows: DoanhThuRow[]): DoanhThuRow[] {
 
   const phaseSums: DoanhThuRow[] = [];
 
-  for (const [phaseCode, byGroup] of byPhase) {
+  const phaseEntries = [...byPhase.entries()].sort((a, b) =>
+    orderValue(orderMap, `phase:${a[0]}`) - orderValue(orderMap, `phase:${b[0]}`) || a[0].localeCompare(b[0], "vi"),
+  );
+
+  for (const [phaseCode, byGroup] of phaseEntries) {
     const groupSums: DoanhThuRow[] = [];
+    const pendingGroups: Array<{ row: DoanhThuRow; lots: DoanhThuRow[] }> = [];
 
-    for (const [groupCode, lots] of byGroup) {
+    const groupEntries = [...byGroup.entries()].sort((a, b) =>
+      orderValue(orderMap, `group:${phaseCode}/${a[0]}`) - orderValue(orderMap, `group:${phaseCode}/${b[0]}`) || a[0].localeCompare(b[0], "vi"),
+    );
+    for (const [groupCode, lots] of groupEntries) {
       const sorted = [...lots].sort((a, b) => a.sortOrder - b.sortOrder);
-      result.push(...sorted);
-
       const gs = sumDoanhThu(sorted);
       const groupRow: DoanhThuRow = {
         kind: "group",
         code: "",
-        lotName: `Tổng nhóm ${groupCode}`,
+        lotName: cleanHierarchyLabel(groupCode),
         phaseCode,
         groupCode,
         sortOrder: 9999,
         ...gs,
       };
-      result.push(groupRow);
       groupSums.push(groupRow);
+      pendingGroups.push({ row: groupRow, lots: sorted });
     }
 
     const ps = sumDoanhThu(groupSums);
     const phaseRow: DoanhThuRow = {
       kind: "phase",
       code: "",
-      lotName: `Tổng giai đoạn ${phaseCode}`,
+      lotName: cleanHierarchyLabel(phaseCode),
       phaseCode,
       groupCode: "",
       sortOrder: 99999,
       ...ps,
     };
-    result.push(phaseRow);
     phaseSums.push(phaseRow);
+    if (hasHierarchyLabel(phaseCode)) result.push(phaseRow);
+    for (const item of pendingGroups) {
+      if (hasHierarchyLabel(item.row.groupCode)) result.push(item.row);
+      result.push(...item.lots);
+    }
   }
 
   const grand = sumDoanhThu(phaseSums);

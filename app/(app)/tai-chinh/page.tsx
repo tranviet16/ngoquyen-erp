@@ -1,135 +1,129 @@
 import Link from "next/link";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
+  BookOpenCheck,
+  CircleDollarSign,
+  FileSpreadsheet,
+  Landmark,
+  ReceiptText,
+  WalletCards,
+} from "lucide-react";
+import { CashflowBarChart, DonutChart } from "@/components/tai-chinh/cashflow-chart";
+import { FinanceKpiCard } from "@/components/tai-chinh/finance-kpi-card";
+import { FinanceSectionCard } from "@/components/tai-chinh/finance-section-card";
+import { LoanDueListCard } from "@/components/tai-chinh/loan-due-list-card";
+import { SourceOfFundsCard } from "@/components/tai-chinh/source-of-funds-card";
 import { getDashboardData } from "@/lib/tai-chinh/dashboard-service";
-import { DashboardCard } from "@/components/tai-chinh/dashboard-card";
-import { CashflowBarChart, DebtPieChart } from "@/components/tai-chinh/cashflow-chart";
-import { formatVND, formatDate } from "@/lib/utils/format";
-import { serializeDecimals } from "@/lib/serialize";
-import { AlertTriangle } from "lucide-react";
+import { formatVND, formatVNDCompact } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
 
+const navItems = [
+  { href: "/tai-chinh/nhat-ky", label: "Nhật ký", icon: ReceiptText },
+  { href: "/tai-chinh/nguon-tien", label: "Nguồn tiền", icon: WalletCards },
+  { href: "/tai-chinh/vay", label: "Vay", icon: Landmark },
+  { href: "/tai-chinh/phai-thu-tra", label: "Phải thu/trả", icon: BookOpenCheck },
+  { href: "/tai-chinh/bao-cao-thanh-khoan", label: "Báo cáo", icon: FileSpreadsheet },
+];
+
 export default async function TaiChinhDashboardPage() {
   const data = await getDashboardData();
-  const { kpi, cashflowTrend, debtByCategory, loansDueSoon } = data;
-
-  const navItems = [
-    { href: "/tai-chinh/vay", label: "Hợp đồng vay" },
-    { href: "/tai-chinh/nguon-tien", label: "Nguồn tiền" },
-    { href: "/tai-chinh/nhat-ky", label: "Nhật ký giao dịch" },
-    { href: "/tai-chinh/phan-loai-chi-phi", label: "Phân loại chi phí" },
-    { href: "/tai-chinh/phan-loai-giao-dich", label: "Phân loại giao dịch" },
-    { href: "/tai-chinh/phai-thu-tra", label: "Phải thu / Phải trả" },
-    { href: "/tai-chinh/bao-cao-thanh-khoan", label: "Báo cáo thanh khoản" },
-  ];
+  const { kpi, cashflowTrend, debtByCategory, sourceOfFunds, loansDueSoon } = data;
+  const cashPosition = Number(kpi.cashPositionVnd);
+  const payableTotal = Number(kpi.payableVnd);
+  const netWorkingCapital = cashPosition + Number(kpi.receivableVnd) - payableTotal;
+  const latestMonth = cashflowTrend.at(-1);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tổng quan Tài chính</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Vị thế dòng tiền, công nợ và lịch trả nợ vay theo thời gian thực.
-          </p>
-        </div>
-        <nav className="flex flex-wrap gap-1.5" aria-label="Điều hướng tài chính">
-          {navItems.map(n => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className="inline-flex items-center rounded-md border bg-background px-3 py-1.5 text-sm font-medium hover:bg-muted hover:border-primary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      {/* 6 KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <DashboardCard
-          title="Vị thế tiền mặt"
-          value={formatVND(Number(kpi.cashPositionVnd))}
-          trend={kpi.cashPositionVnd.gte(0) ? "up" : "down"}
-          subtitle="Tổng số dư hiện tại các nguồn tiền"
-        />
-        <DashboardCard
-          title="Nợ vật tư (TT)"
-          value={formatVND(Number(kpi.materialDebtVnd))}
-          trend="down"
-          subtitle="Tổng công nợ NCC vật tư"
-        />
-        <DashboardCard
-          title="Nợ nhân công (TT)"
-          value={formatVND(Number(kpi.laborDebtVnd))}
-          trend="down"
-          subtitle="Tổng công nợ nhân công"
-        />
-        <DashboardCard
-          title="Dư nợ vay còn lại"
-          value={formatVND(Number(kpi.totalLoanPrincipalVnd))}
-          trend="down"
-          subtitle="Tổng gốc chưa trả (hợp đồng active)"
-        />
-        <DashboardCard
-          title="Phải thu (điều chỉnh)"
-          value={formatVND(Number(kpi.receivableVnd))}
-          trend="up"
-          subtitle="Tổng phải thu chưa thu"
-        />
-        <DashboardCard
-          title="Phải trả (điều chỉnh)"
-          value={formatVND(Number(kpi.payableVnd))}
-          highlight
-          subtitle="Tổng phải trả chưa thanh toán"
-        />
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="rounded-lg border p-4">
-          <h2 className="text-sm font-semibold mb-3">Dòng tiền 6 tháng (Thu / Chi)</h2>
-          <CashflowBarChart data={serializeDecimals(cashflowTrend)} />
-        </div>
-        <div className="rounded-lg border p-4">
-          <h2 className="text-sm font-semibold mb-3">Cơ cấu công nợ</h2>
-          <DebtPieChart data={serializeDecimals(debtByCategory)} />
-        </div>
-      </div>
-
-      {/* Loans due soon */}
-      {loansDueSoon.length > 0 && (
-        <div className="rounded-lg border bg-card p-4 shadow-sm">
-          <h2 className="flex items-center gap-2 text-sm font-semibold mb-3 text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="size-4" aria-hidden="true" />
-            Cảnh báo: Kỳ vay đến hạn trong 30 ngày
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40">
-                <tr>
-                  <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bên cho vay</th>
-                  <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ngày đến hạn</th>
-                  <th className="border-b px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Gốc</th>
-                  <th className="border-b px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lãi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loansDueSoon.map(loan => (
-                  <tr key={loan.id} className="even:bg-muted/20 hover:bg-muted/40 transition-colors">
-                    <td className="border-b px-3 py-2 font-medium">{loan.lenderName}</td>
-                    <td className="border-b px-3 py-2 text-amber-700 dark:text-amber-300 font-medium">
-                      {formatDate(loan.dueDate)}
-                    </td>
-                    <td className="border-b px-3 py-2 text-right tabular-nums">{formatVND(Number(loan.principalDue))}</td>
-                    <td className="border-b px-3 py-2 text-right tabular-nums">{formatVND(Number(loan.interestDue))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="nq-panel p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Finance cockpit</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight">Tổng quan Tài chính</h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Theo dõi vị thế tiền, nghĩa vụ phải trả, dòng tiền gần đây và cơ cấu nguồn tiền để admin quyết định nhanh.
+            </p>
           </div>
+          <nav className="flex flex-wrap gap-2" aria-label="Điều hướng tài chính">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium transition-colors hover:border-primary/40 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
-      )}
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <FinanceKpiCard
+          title="Vị thế tiền"
+          value={formatVND(cashPosition)}
+          subtitle="Tổng số dư cuối kỳ của các nguồn tiền"
+          tone={cashPosition >= 0 ? "positive" : "danger"}
+          icon={<Banknote className="size-5" aria-hidden="true" />}
+        />
+        <FinanceKpiCard
+          title="Phải thu"
+          value={formatVND(Number(kpi.receivableVnd))}
+          subtitle="Các khoản điều chỉnh đang chờ thu"
+          tone="positive"
+          icon={<ArrowDownRight className="size-5" aria-hidden="true" />}
+        />
+        <FinanceKpiCard
+          title="Phải trả"
+          value={formatVND(payableTotal)}
+          subtitle="NCC vật tư, nhân công và khoản phải trả khác"
+          tone="warning"
+          icon={<ArrowUpRight className="size-5" aria-hidden="true" />}
+        />
+        <FinanceKpiCard
+          title="Vốn lưu động ròng"
+          value={formatVND(netWorkingCapital)}
+          subtitle="Tiền + phải thu - phải trả đang mở"
+          tone={netWorkingCapital >= 0 ? "neutral" : "danger"}
+          icon={<CircleDollarSign className="size-5" aria-hidden="true" />}
+        />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
+        <FinanceSectionCard
+          title="Dòng tiền 6 tháng"
+          description="Thu/chi thực tế từ nhật ký giao dịch, kèm dòng tiền ròng từng tháng."
+          aside={
+            latestMonth ? (
+              <div className="rounded-md border bg-background px-3 py-2 text-right">
+                <p className="text-xs text-muted-foreground">Tháng gần nhất</p>
+                <p className="text-sm font-semibold tabular-nums">{formatVNDCompact(latestMonth.netVnd)}</p>
+              </div>
+            ) : null
+          }
+        >
+          <CashflowBarChart data={cashflowTrend} />
+        </FinanceSectionCard>
+
+        <FinanceSectionCard
+          title="Cơ cấu công nợ"
+          description="Tỷ trọng công nợ cần theo dõi, không chỉ dựa vào màu sắc."
+        >
+          <DonutChart data={debtByCategory} emptyLabel="Chưa có dữ liệu công nợ" />
+        </FinanceSectionCard>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(360px,0.85fr)_minmax(0,1.15fr)]">
+        <SourceOfFundsCard data={sourceOfFunds} />
+        <LoanDueListCard loans={loansDueSoon} />
+      </div>
     </div>
   );
 }
-

@@ -31,9 +31,6 @@ const REPORT_PATH = join(REPORT_DIR, "route-guard-audit.md");
 // Internal/demo segments to skip entirely
 const SKIP_DIRS = new Set(["__demo"]);
 
-// Guard patterns
-const GUARD_RE = /requireModuleAccess\(|requireRole\(/;
-
 interface LayoutInfo {
   absPath: string;
   hasGuard: boolean;

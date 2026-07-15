@@ -1,0 +1,74 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: glitchtip
+      POSTGRES_USER: glitchtip
+      POSTGRES_PASSWORD: ${GLITCHTIP_POSTGRES_PASSWORD:?set GLITCHTIP_POSTGRES_PASSWORD}
+    volumes:
+      - glitchtip-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U glitchtip -d glitchtip"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    volumes:
+      - glitchtip-valkey:/data
+
+  glitchtip:
+    image: glitchtip/glitchtip:6.2.0@sha256:a1208e3c696b9d96d20f44026f73b8a15af863a9aa149a603ff3bda8600d259c
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    command: ./bin/run-all-in-one.sh
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY:?set GLITCHTIP_SECRET_KEY}
+      DATABASE_URL: postgresql://glitchtip:${GLITCHTIP_POSTGRES_PASSWORD}@postgres:5432/glitchtip
+      DATABASE_CONN_MAX_AGE: "60"
+      VALKEY_URL: redis://valkey:6379/0
+      GLITCHTIP_DOMAIN: https://admin-pc.tail8998df.ts.net:8444
+      ALLOWED_HOSTS: 127.0.0.1,localhost,admin-pc.tail8998df.ts.net
+      CSRF_TRUSTED_ORIGINS: http://127.0.0.1:8001,http://localhost:8001,https://admin-pc.tail8998df.ts.net:8444
+      EMAIL_URL: consolemail://
+      DEFAULT_FROM_EMAIL: glitchtip@localhost
+      ENABLE_USER_REGISTRATION: "false"
+      ENABLE_ORGANIZATION_CREATION: "false"
+      GLITCHTIP_ENABLE_UPTIME: "false"
+      GLITCHTIP_ENABLE_LOGS: "false"
+      GLITCHTIP_RETENTION_DAYS: "30"
+      GLITCHTIP_EVENT_RETENTION_DAYS: "30"
+      GLITCHTIP_TRANSACTION_RETENTION_DAYS: "30"
+      GLITCHTIP_FILE_RETENTION_DAYS: "30"
+      GLITCHTIP_LOG_RETENTION_DAYS: "30"
+      GLITCHTIP_INSTANCE_NAME: "Ngo Quyen ERP Error Tracking"
+      CSP_STYLE_SRC: "'self'"
+      CSP_CONNECT_SRC: "'self'"
+      CSP_SCRIPT_SRC: "'self','sha256-iRcDQ27XiXX4k+jbJ8nGeQFBnBOjmII7FdMlixb6QE4='"
+      CSP_IMG_SRC: "'self',data:"
+      CSP_FRAME_SRC: "'none'"
+      CSP_WORKER_SRC: "'self'"
+      CSP_REPORT_ONLY: "false"
+
+  headers-proxy:
+    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+    restart: unless-stopped
+    depends_on:
+      - glitchtip
+    ports:
+      - "127.0.0.1:8003:8080"
+    volumes:
+      - ./glitchtip-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  glitchtip-postgres:
+  glitchtip-valkey:

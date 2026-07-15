@@ -23,12 +23,20 @@ export interface LoadOpts {
   headers?: Record<string, string>;
 }
 
-export async function runLoad(url: string, opts: LoadOpts = {}): Promise<LoadResult> {
+export function assertLoadTargetAllowed(
+  url: string,
+  allowProduction = process.env.ALLOW_PRODUCTION_LOAD === "yes",
+): URL {
   const target = new URL(url);
   const localTarget = target.hostname === "localhost" || target.hostname === "127.0.0.1";
-  if (!localTarget && process.env.ALLOW_PRODUCTION_LOAD !== "yes") {
+  if (!localTarget && !allowProduction) {
     throw new Error("Refusing non-local load target without ALLOW_PRODUCTION_LOAD=yes");
   }
+  return target;
+}
+
+export async function runLoad(url: string, opts: LoadOpts = {}): Promise<LoadResult> {
+  assertLoadTargetAllowed(url);
   const result = await autocannon({
     url,
     connections: opts.connections ?? 10,

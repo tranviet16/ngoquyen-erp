@@ -13,6 +13,8 @@ test.describe("excel import", () => {
       .setInputFiles(path.join(__dirname, "fixtures", "sample-import.xlsx"));
     await page.getByRole("button", { name: "Tải lên và phân tích" }).click();
 
-    await expect(page).toHaveURL(/\/admin\/import\/\d+/);
+    // router.push to the run-detail route; in dev the [runId] route compiles
+    // on first hit, so allow well beyond the 5s default assertion timeout.
+    await expect(page).toHaveURL(/\/admin\/import\/\d+/, { timeout: 30_000 });
   });
 });

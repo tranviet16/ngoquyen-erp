@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { prisma } from "@/lib/prisma";
+import { getChiTieuReport } from "@/lib/sl-dt/report-service";
+import { suggestMonthlySlDtTargets } from "@/lib/sl-dt/compute";
 import { progressStatusSchema, type ProgressStatusInput } from "@/lib/sl-dt/schemas";
 import {
   recomputeLuyKeForRow,
@@ -58,7 +60,7 @@ export async function adminPatchChiTieuRow(
   patch: Record<string, unknown>,
 ): Promise<{ futureMonthsCount: number }> {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "sl-dt", "admin");
 
   const curData: Record<string, Prisma.Decimal | null> = {};
   const prevData: Record<string, Prisma.Decimal | null> = {};
@@ -154,7 +156,7 @@ export async function cascadeRecomputeLuyKe(
   month: number,
 ): Promise<{ cascaded: number }> {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "sl-dt", "admin");
 
   const cascaded = await prisma.$transaction(async (tx) => {
     return cascadeFutureMonths(tx, lotId, year, month);
@@ -166,6 +168,84 @@ export async function cascadeRecomputeLuyKe(
   revalidatePath("/sl-dt/bao-cao-dt");
 
   return { cascaded };
+}
+
+export async function calculateMonthlyTargets(
+  year: number,
+  month: number,
+): Promise<{ updated: number; skipped: number }> {
+  const role = await getSessionRole();
+  await requireRoleModuleAccess(role, "sl-dt", "admin");
+
+  const reportRows = (await getChiTieuReport(year, month)).filter((r) => r.kind === "lot" && r.lotId != null);
+  const lots = await prisma.slDtLot.findMany({
+    where: { id: { in: reportRows.map((r) => r.lotId!) } },
+    include: { paymentPlan: true },
+  });
+  const planByLotId = new Map(lots.map((lot) => [lot.id, lot.paymentPlan]));
+
+  let updated = 0;
+  let skipped = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const row of reportRows) {
+      const plan = planByLotId.get(row.lotId!);
+      if (!plan) {
+        skipped += 1;
+        continue;
+      }
+      const targetMilestone = row.targetMilestone ?? row.suggestedTarget;
+      const suggestion = suggestMonthlySlDtTargets({
+        estimateValue: row.estimateValue,
+        slStartCumulative: row.prevSlLuyKeTho,
+        dtStartCumulative: row.prevDtThoLuyKe,
+        targetMilestone,
+        hoSoQuyetToan: row.hoSoQuyetToan,
+        plan: {
+          dot1Amount: toN(plan.dot1Amount), dot1Milestone: plan.dot1Milestone,
+          dot2Amount: toN(plan.dot2Amount), dot2Milestone: plan.dot2Milestone,
+          dot3Amount: toN(plan.dot3Amount), dot3Milestone: plan.dot3Milestone,
+          dot4Amount: toN(plan.dot4Amount), dot4Milestone: plan.dot4Milestone,
+        },
+      });
+      if (suggestion.reasonCode === "target_not_in_plan") {
+        skipped += 1;
+        continue;
+      }
+      const existing = await tx.slDtMonthlyInput.findUnique({
+        where: { lotId_year_month: { lotId: row.lotId!, year, month } },
+      });
+      const data = {
+        slKeHoachKy: new Prisma.Decimal(suggestion.slTargetKy),
+        dtKeHoachKy: new Prisma.Decimal(suggestion.dtTargetKy),
+      };
+      if (existing) {
+        await tx.slDtMonthlyInput.update({ where: { id: existing.id }, data });
+      } else {
+        await tx.slDtMonthlyInput.create({
+          data: {
+            lotId: row.lotId!, year, month,
+            ...data,
+            slThucKyTho: new Prisma.Decimal(0),
+            slLuyKeTho: new Prisma.Decimal(row.prevSlLuyKeTho),
+            slTrat: new Prisma.Decimal(0),
+            dtThoKy: new Prisma.Decimal(0),
+            dtThoLuyKe: new Prisma.Decimal(row.prevDtThoLuyKe),
+            qtTratChua: new Prisma.Decimal(0),
+            dtTratKy: new Prisma.Decimal(0),
+            dtTratLuyKe: new Prisma.Decimal(0),
+            estimateValue: null,
+            contractValue: null,
+          },
+        });
+      }
+      updated += 1;
+    }
+  });
+
+  revalidatePath("/sl-dt/chi-tieu");
+  revalidatePath("/sl-dt/bao-cao-sl");
+  revalidatePath("/sl-dt/bao-cao-dt");
+  return { updated, skipped };
 }
 
 /**
@@ -180,7 +260,7 @@ export async function setSubtotalLabel(
   label: string,
 ): Promise<void> {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "sl-dt", "admin");
   const trimmed = label.trim();
   const existing = await prisma.slDtSubtotalLabel.findUnique({
     where: { scope_key: { scope, key } },
@@ -212,18 +292,23 @@ export async function updateProgressStatus(
   input: ProgressStatusInput,
 ): Promise<{ resolvedTargetMilestone: string | null; futureMonthsCount: number }> {
   const data = progressStatusSchema.parse(input);
-  const fields = {
-    milestoneText: data.milestoneText ?? null,
-    targetMilestone: data.targetMilestone ?? null,
-    settlementStatus: data.settlementStatus ?? null,
-    khungBtct: data.khungBtct ?? null,
-    xayTuong: data.xayTuong ?? null,
-    tratNgoai: data.tratNgoai ?? null,
-    xayTho: data.xayTho ?? null,
-    tratHoanThien: data.tratHoanThien ?? null,
-    hoSoQuyetToan: data.hoSoQuyetToan ?? null,
-    ghiChu: data.ghiChu ?? null,
-  };
+  const fields: Partial<Omit<ProgressStatusInput, "lotId" | "year" | "month">> = {};
+  const progressKeys = [
+    "milestoneText",
+    "targetMilestone",
+    "settlementStatus",
+    "khungBtct",
+    "xayTuong",
+    "tratNgoai",
+    "xayTho",
+    "tratHoanThien",
+    "hoSoQuyetToan",
+    "ghiChu",
+  ] as const;
+
+  for (const key of progressKeys) {
+    if (key in data) fields[key] = data[key] ?? null;
+  }
 
   const resolved = await prisma.$transaction(async (tx) => {
     const existing = await tx.slDtProgressStatus.findUnique({
@@ -242,7 +327,7 @@ export async function updateProgressStatus(
 
     // milestoneText (Tiến độ thực tế) drives dtCanThucHien — no lũy kế impact, but
     // targetMilestone === null means "user wants auto" → fill from current DT lũy kế.
-    if (fields.targetMilestone == null) {
+    if ("targetMilestone" in fields && fields.targetMilestone == null) {
       await refreshAutoTarget(tx, data.lotId, data.year, data.month);
     }
 

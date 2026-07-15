@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { reconciliationSchema, type ReconciliationInput } from "@/lib/vat-tu-ncc/schemas";
 
@@ -27,9 +27,10 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
     },
   });
 
-  const openingBalance = form.watch("openingBalance") ?? 0;
-  const totalIn = form.watch("totalIn") ?? 0;
-  const totalPaid = form.watch("totalPaid") ?? 0;
+  const [openingBalance = 0, totalIn = 0, totalPaid = 0] = useWatch({
+    control: form.control,
+    name: ["openingBalance", "totalIn", "totalPaid"],
+  });
   const closingBalance = Number(openingBalance) + Number(totalIn) - Number(totalPaid);
 
   return (

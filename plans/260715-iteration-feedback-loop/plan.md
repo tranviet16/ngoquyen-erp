@@ -1,7 +1,7 @@
 ---
 title: "Vòng lặp phản hồi kiểm thử toàn product"
 description: "Thiết lập quality loop theo rủi ro cho bảo mật, ACL, API, nghiệp vụ, vận hành và hiệu năng của ERP."
-status: in_progress
+status: completed
 priority: P1
 effort: "90h"
 tags: [infra, security, auth, api, tech-debt]
@@ -14,7 +14,7 @@ created: 2026-07-15
 
 ## Mục tiêu
 
-Tạo vòng lặp có thể lặp lại: phân loại thay đổi → chạy gate theo rủi ro → quan sát sau phát hành → triage → sửa lỗi kèm regression test → cải thiện baseline. Security, ACL và API là hard gate; performance chỉ cảnh báo.
+Tạo vòng lặp có thể lặp lại: phân loại thay đổi → chạy gate theo rủi ro → quan sát sau phát hành → triage → sửa lỗi kèm regression test → cải thiện baseline. Security, ACL và API là hard gate; performance là non-blocking gate nhưng mọi cảnh báo phải được xử lý trước khi đóng kế hoạch.
 
 ## Quyết định đã chốt
 
@@ -32,8 +32,8 @@ Tạo vòng lặp có thể lặp lại: phân loại thay đổi → chạy gat
 | 1 | [Inventory rủi ro và baseline an toàn](phase-01-risk-inventory-and-safe-baseline.md) | 10h | completed |
 | 2 | [Bootstrap CI và quality lane](phase-02-pr-quality-gates.md) | 12h | completed |
 | 3 | [Kiểm thử security, ACL và API P0](phase-03-security-acl-api-coverage.md) | 24h | completed |
-| 8 | [Bật required security gates](phase-08-enforce-required-security-gates.md) | 4h | in_progress |
-| 4 | [Telemetry và triage sau phát hành](phase-04-telemetry-and-triage.md) | 14h | in_progress |
+| 8 | [Bật required security gates](phase-08-enforce-required-security-gates.md) | 4h | completed |
+| 4 | [Telemetry và triage sau phát hành](phase-04-telemetry-and-triage.md) | 14h | completed |
 | 5 | [An toàn release, migration và phục hồi](phase-05-release-safety-and-recovery.md) | 10h | completed |
 | 6 | [Baseline hiệu năng và cảnh báo](phase-06-performance-baseline-and-alerts.md) | 8h | completed |
 | 7 | [Nhịp vận hành, KPI và cải tiến liên tục](phase-07-operating-cadence-and-kpis.md) | 8h | completed |
