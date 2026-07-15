@@ -23,13 +23,22 @@ export function TaskListCard({
   now: Date;
 }) {
   return (
-    <div className="flex flex-col rounded-xl bg-card ring-1 ring-foreground/10">
-      <div className="px-4 pt-3 pb-2 border-b">
-        <h3 className="text-sm font-semibold">{title}</h3>
+    <div className="nq-card flex flex-col overflow-hidden">
+      <div className="nq-card-head">
+        <div>
+          <h3 className="nq-card-title">{title}</h3>
+          <p className="nq-card-sub">{tasks.length} mục cần theo dõi</p>
+        </div>
+        <Link
+          href={viewAllHref}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Tất cả <ArrowRight className="size-3" />
+        </Link>
       </div>
-      <div className="flex-1 p-3 space-y-1.5">
+      <div className="flex-1 bg-card">
         {tasks.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">{emptyText}</p>
+          <p className="px-5 py-5 text-sm text-muted-foreground">{emptyText}</p>
         ) : (
           tasks.map((t) => {
             const d = t.deadline ? daysDiff(t.deadline, now) : null;
@@ -45,14 +54,14 @@ export function TaskListCard({
               <Link
                 key={t.id}
                 href={`/van-hanh/cong-viec?taskId=${t.id}`}
-                className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-accent text-sm"
+                className="grid grid-cols-[1fr_auto] items-center gap-3 border-b px-5 py-3 text-sm transition-colors last:border-b-0 hover:bg-secondary/45"
               >
-                <span className="truncate flex-1">{t.title}</span>
+                <span className="min-w-0 truncate font-medium">{t.title}</span>
                 <span
                   className={
                     mode === "overdue"
-                      ? "shrink-0 text-xs text-destructive font-medium"
-                      : "shrink-0 text-xs text-muted-foreground"
+                      ? "shrink-0 rounded border border-destructive/20 bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive"
+                      : "shrink-0 rounded border bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground"
                   }
                 >
                   {diffLabel}
@@ -62,12 +71,6 @@ export function TaskListCard({
           })
         )}
       </div>
-      <Link
-        href={viewAllHref}
-        className="flex items-center justify-end gap-1 px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t"
-      >
-        Xem tất cả <ArrowRight className="h-3 w-3" />
-      </Link>
     </div>
   );
 }

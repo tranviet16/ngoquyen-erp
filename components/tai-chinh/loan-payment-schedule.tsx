@@ -54,7 +54,7 @@ interface PaymentGridRow extends RowWithId {
   note: string;
 }
 
-export function LoanPaymentSchedule({ payments, contractId: _contractId }: Props) {
+export function LoanPaymentSchedule({ payments }: Props) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [paidDate, setPaidDate] = useState(new Date().toISOString().slice(0, 10));

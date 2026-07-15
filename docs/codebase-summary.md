@@ -43,7 +43,7 @@ ngoquyyen-erp/
 │   │   ├── _user.ts                    # User context utilities
 │   │   └── __tests__/                  # 40+ resolver tests + 32+ golden fixtures
 │   ├── dept-access.ts                  # UserDeptAccess checks (existing)
-│   ├── rbac.ts                         # AppRole + user role logic (existing)
+│   ├── rbac.ts                         # isAdmin helper (dynamic roles via acl/role-permissions.ts)
 │   ├── du-an/                          # Project-related queries
 │   ├── task/                           # Task-related queries
 │   ├── coordination-form/              # Coordination form queries
@@ -73,7 +73,33 @@ ngoquyyen-erp/
 
 ## Core Systems
 
-### 1. Access Control (lib/acl/)
+### 1. State Obligations Tracking (tai-chinh/nghia-vu-nha-nuoc)
+
+**Purpose:** Track Vietnamese tax and social insurance obligations with opening/closing balances and period accruals.
+
+**Key Features:**
+- **Catalog (Danh mục):** 8 seeded VN obligation types (GTGT, TNDN, TNCN, Môn bài, BHXH, BHYT, BHTN, KPCĐ) with editable opening balances
+- **Ledger (Sổ theo dõi):** Period-by-period accrual (`phai_tra`) and payment (`da_nop`) transactions
+- **JournalEntry Sync:** Paid transactions auto-create read-only "chi" entries (refModule="state_obligation") in Nhật ký giao dịch; accrual transactions are ledger-only
+- **Period Report:** Aggregated opening/period-increase/period-decrease/closing per obligation type
+
+**Models:** `StateObligationType` (catalog), `StateObligationTxn` (ledger)
+
+**Service Layer:**
+- `lib/tai-chinh/state-obligation-service.ts` — CRUD server actions
+- `lib/tai-chinh/state-obligation-internal.ts` — JournalEntry sync helpers
+- `lib/tai-chinh/state-obligation-report.ts` — SQL aggregation (period reporting)
+
+**Routes:**
+- `/tai-chinh/nghia-vu-nha-nuoc/danh-muc` — Obligation type catalog grid (edit opening balances)
+- `/tai-chinh/nghia-vu-nha-nuoc/so-theo-doi` — Ledger grid (create/edit/delete transactions)
+- `/tai-chinh/nghia-vu-nha-nuoc/bao-cao` — Period report (read-only aggregates)
+
+**ACL:** Admin-only module (`tai-chinh`); all sub-pages inherit parent access gate
+
+**Seed:** `prisma/seed-state-obligations.ts` — Idempotent seeder for 8 standard obligations (run before prod cutover)
+
+### 2. Access Control (lib/acl/)
 
 **Purpose:** Enforce granular per-module and per-resource access rules.
 
@@ -226,14 +252,16 @@ ngoquyyen-erp/
 | `User` | System users | id, email, role, isLeader, isDirector |
 | `AppRole` | Role definitions | id, name, description |
 | `UserDeptAccess` | Dept visibility | userId, deptId |
-| **ModulePermission** | **NEW: Module access** | userId, moduleKey, level |
-| **ProjectPermission** | **NEW: Project override** | userId, projectId, level |
-| **ProjectGrantAll** | **NEW: All-projects grant** | userId, level |
+| **ModulePermission** | **Module access** | userId, moduleKey, level |
+| **ProjectPermission** | **Project override** | userId, projectId, level |
+| **ProjectGrantAll** | **All-projects grant** | userId, level |
 | Project | Projects | id, name, status, startDate, endDate |
 | Task | Tasks | id, projectId, title, status, assigneeId |
 | CoordinationForm | Approval forms | id, projectId, status, createdBy |
 | PaymentRound | Payment planning rounds | id, month, sequence, status, createdBy, approvedBy |
 | **PaymentRoundItem** | **Payment line items** | id, roundId, entityId, supplierId, projectId, category, congNo, luyKe, soDeNghi, soDuyet, approvedBy |
+| **StateObligationType** | **NEW: Obligation catalog** | id, name, code, category (thue\|bao_hiem\|khac), openingBalance, openingDate, sortOrder, deletedAt |
+| **StateObligationTxn** | **NEW: Obligation ledger** | id, typeId (FK), date, kind (phai_tra\|da_nop), amount, cashAccountId?, journalEntryId?, refNo, description, note, deletedAt |
 | AuditLog | Change tracking | id, action, userId, details, timestamp |
 
 ### Postgres Constraints
@@ -272,6 +300,17 @@ Constraints prevent invalid values at DB layer (eliminates silent denials from t
   /modules                Module permission matrix editor
   /projects               Project permission + super-grant manager
   /import                 Data import tools
+```
+
+### Finance Routes (tai-chinh/*)
+
+```
+/tai-chinh
+  /nghia-vu-nha-nuoc           Module: tai-chinh (admin-only)
+    /danh-muc                 Obligation type catalog
+    /so-theo-doi              Obligation ledger
+    /bao-cao                  Period report
+  /[other finance sub-routes]
 ```
 
 ### Other Protected Routes
@@ -369,6 +408,7 @@ await writeAuditLog({
 - **339 unit tests** covering ~30 named `lib/` services (payment, ACL, import, ledger)
 - **Hotspots covered:** Payment round, ACL resolver, import engine, balance-service, dept-access
 - **Line coverage (lib/):** 30.93% achieved (1303/4212 lines) — 60% project threshold is a known shortfall (out-of-scope services documented)
+  - **State Obligations Service (NEW):** 14 unit tests covering CRUD operations, JournalEntry sync, period aggregation (mocked Prisma + $queryRaw)
 - **Test status:** All 339 tests PASS
 
 ### E2E Tests (Phase 4)
@@ -530,5 +570,5 @@ Both can execute in parallel; no code conflicts.
 
 ---
 
-**Last Updated:** 2026-05-15  
+**Last Updated:** 2026-05-21  
 **Next Update Trigger:** Plan B or C completion, or major payment/ledger changes

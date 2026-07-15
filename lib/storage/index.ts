@@ -1,7 +1,6 @@
 import { LocalDiskStore, type FileStore } from "./local-disk";
 
 declare global {
-  // eslint-disable-next-line no-var
   var __nq_file_store: FileStore | undefined;
 }
 

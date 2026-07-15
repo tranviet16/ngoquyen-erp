@@ -8,8 +8,8 @@ services:
       POSTGRES_USER: nqerp
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backups:/backups
+      - D:/docker-data/ngoquyyen-erp/postgres:/var/lib/postgresql/data
+      - D:/docker-data/ngoquyyen-erp/backups:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U nqerp -d ngoquyyen_erp"]
       interval: 10s
@@ -70,15 +70,10 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - uptime_kuma_data:/app/data
+      - D:/docker-data/ngoquyyen-erp/uptime-kuma:/app/data
     networks:
       - external
 
-volumes:
-  postgres_data:
-    name: ngoquyyen_postgres_data
-  uptime_kuma_data:
-    name: ngoquyyen_uptime_data
 
 networks:
   internal:

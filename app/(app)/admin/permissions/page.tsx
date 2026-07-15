@@ -17,7 +17,24 @@ export default function PermissionsPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Link href="/admin/permissions/roles" className="block">
+          <Card className="h-full transition-shadow hover:shadow-md">
+            <CardHeader>
+              <CardTitle>Vai trò</CardTitle>
+              <CardDescription>
+                Tạo, sửa, xóa vai trò và ma trận quyền 18 module cho từng vai
+                trò.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <span className="text-sm text-muted-foreground">
+                Vai trò động · gán cho người dùng
+              </span>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/admin/permissions/modules" className="block">
           <Card className="h-full transition-shadow hover:shadow-md">
             <CardHeader>

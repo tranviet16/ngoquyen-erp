@@ -53,6 +53,7 @@ const TX_TYPE_MAP: Record<string, string> = {
 export const DuAnXayDungAdapter: ImportAdapter = {
   name: "du-an-xay-dung",
   label: "Quản lý Dự án Xây dựng",
+  supportsRollback: true,
 
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
@@ -524,10 +525,11 @@ export const DuAnXayDungAdapter: ImportAdapter = {
             : undefined,
         },
       });
-      imported++;
-    } else {
-      skipped++;
     }
+    // The project-header row is processed whether the project was newly created
+    // or reconciled to an existing one — both fulfil the row's intent. Reusing a
+    // master entity is resolution, not a dropped row, so it must not count as skipped.
+    imported++;
     const projectId = project.id;
 
     const catCache = new Map<string, number>();

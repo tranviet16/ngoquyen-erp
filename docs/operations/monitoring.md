@@ -1,105 +1,53 @@
-# Monitoring Setup
+# Monitoring and Error Tracking
 
-**Tools:** Uptime Kuma (uptime + alerting) + GlitchTip (error tracking, self-hosted)
+## Production endpoints
 
----
+| Service | Private URL | Local binding | Purpose |
+|---|---|---|---|
+| ERP | `https://admin-pc.tail8998df.ts.net` | `127.0.0.1:3001` | Application and `/api/health` |
+| Uptime Kuma | `https://admin-pc.tail8998df.ts.net:8443` | `127.0.0.1:8002` | Availability and TLS monitoring |
+| GlitchTip | `https://admin-pc.tail8998df.ts.net:8444` | `127.0.0.1:8003` security-header proxy (`8001` upstream) | Sentry-compatible error tracking |
 
-## Uptime Kuma
+Tailscale Serve terminates TLS for ERP and Kuma. Both are tailnet-only; Docker ports are not exposed on LAN/public interfaces.
 
-Uptime Kuma runs as a Docker service on port 3001 (see `docker-compose.prod.yml`).
+## Ownership and access
 
-### Initial Setup
+| Area | Owner | Access rule | Retention |
+|---|---|---|---|
+| Docker, Tailscale, backup, DSN rotation | Platform owner | Windows administrator on the host | Operational logs 30 days |
+| GlitchTip P0 security/ACL triage | Security triager | GlitchTip admin, least privilege | Events 30 days |
+| Import, payment and domain errors | Domain owner | Project member only | Events 30 days |
+| Incident record and evidence | Incident commander | Repository/incident tracker | 12 months |
 
-1. Open `http://<VPS_IP>:3001` (first time only — before nginx proxy)
-2. Create admin account
-3. Configure notifications (Telegram / Email recommended)
+GlitchTip and Uptime Kuma credentials are DPAPI-encrypted for the current Windows user under `%LOCALAPPDATA%\NgoQuyenERP`. They are outside Git and must never be copied into dotenv, Compose files, reports, screenshots, or tickets. Client and server error events use the private GlitchTip HTTPS endpoint on port 8444. Application secrets enter Docker only through process environment or BuildKit secrets and are cleared from the deployment shell afterward.
 
-### Monitors to Configure
+## Operations
 
-| Monitor | Type | URL / Target | Interval | Alert after |
-|---------|------|-------------|----------|-------------|
-| ERP App | HTTP Keyword | `https://erp.ngoquyyen.vn/api/health` | 60s | 2 failures |
-| DB Health | HTTP Keyword | `https://erp.ngoquyyen.vn/api/health` — check `"db":"ok"` | 60s | 1 failure |
-| Backup Cron | Push | (push URL — copy from Kuma UI) | N/A | miss 1 push |
-| Postgres Direct | TCP Port | `localhost:5432` | 60s | 2 failures |
-
-### Configure Telegram Notification
-
-1. Settings → Notifications → Add
-2. Type: Telegram
-3. Bot Token: (create via @BotFather)
-4. Chat ID: (get from @userinfobot)
-5. Test → Save
-6. Assign notification to all monitors
-
-### Access Kuma via nginx
-
-Add to `nginx.conf` (optional — proxy port 3001 under `/status`):
-```nginx
-location /kuma/ {
-    proxy_pass http://uptime-kuma:3001/;
-}
+```powershell
+powershell -File scripts/manage-glitchtip-local.ps1 up
+powershell -File scripts/manage-glitchtip-local.ps1 status
+powershell -File scripts/manage-glitchtip-local.ps1 backup
+docker compose -p ngoquyen-uptime -f docker/uptime-kuma-compose.yml ps
+docker ps --filter name=ngoquyen-erp-3001
+tailscale serve status
+Invoke-RestMethod https://admin-pc.tail8998df.ts.net/api/health
 ```
 
----
+Kuma monitor `NgoQuyen ERP HTTPS` checks health every 60 seconds with one retry. GlitchTip receives sanitized server/client exceptions; telemetry excludes request bodies, cookies, tokens, full email addresses, monetary values and audit JSON.
 
-## GlitchTip (Self-hosted Sentry alternative)
+## Alert classification
 
-GlitchTip self-hosted is required for production error tracking. Its DSN is stored only in the production secret store.
+- P0: suspected tenant/ACL bypass, exposed secret, destructive mutation or integrity loss; triage immediately and block release.
+- P1: repeated 5xx, unavailable health endpoint, backup failure, import/payment failure; triage the same day.
+- P2: isolated recoverable error; assign an owner and review date.
+- Expected 401/403 responses are security signals, not outages. Investigate a spike; do not send a single denial as an exception.
 
-### Quick Setup with Docker
+Close an alert only after reproduction, containment, regression coverage, deployed verification and a clean follow-up scan. ZAP classifications live in `test/security/zap-rules.conf`; only informational cache behavior and modern-app detection are ignored.
 
-```bash
-# Add GlitchTip service to docker-compose.prod.yml (see commented block)
-docker compose -f docker/docker-compose.prod.yml up -d glitchtip
+## Verification evidence
 
-# Open http://<VPS_IP>:8000
-# Create organization + project "ngoquyyen-erp"
-# Copy DSN from project settings
-```
-
-### Configure Next.js to send errors
-
-Add to `.env.production`:
-```env
-SENTRY_DSN=https://xxx@glitchtip.yourdomain.com/1
-```
-
-Install Sentry SDK (compatible with GlitchTip):
-```bash
-npm install @sentry/nextjs
-```
-
-Follow `@sentry/nextjs` setup wizard — GlitchTip accepts the same protocol.
-
----
-
-## Log Monitoring
-
-Application logs available via Docker:
-
-```bash
-# Stream live logs
-docker compose -f docker/docker-compose.prod.yml logs -f nextjs
-
-# Last 100 lines
-docker compose -f docker/docker-compose.prod.yml logs --tail=100 nextjs
-
-# Filter for errors
-docker compose -f docker/docker-compose.prod.yml logs nextjs | grep -i error
-```
-
-Nginx access logs:
-```bash
-docker compose -f docker/docker-compose.prod.yml logs nginx
-```
-
----
-
-## Alerting Checklist
-
-- [ ] Uptime Kuma installed and running
-- [ ] ERP health endpoint monitor active
-- [ ] Telegram/Email notification configured and tested
-- [ ] Backup push monitor configured
-- [ ] GlitchTip DSN added through the production secret store
+- GlitchTip synthetic event received with redaction verified.
+- Validated GlitchTip backup stored under `%LOCALAPPDATA%\NgoQuyenERP\backups\glitchtip`.
+- Final GlitchTip HTTPS baseline: `FAIL=0`, `WARN=0` (`plans/260715-iteration-feedback-loop/reports/zap-glitchtip-baseline-clean-v2-20260715.md`).
+- Final post-migration ERP HTTPS full active scan: `FAIL=0`, `WARN=0`; informational scan telemetry was retained and triaged (`plans/260715-iteration-feedback-loop/reports/zap-full-post-migration-clean-20260716.md`).
+- Uptime Kuma reports the ERP monitor `Up`, HTTP 200, and validates its TLS certificate.

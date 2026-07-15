@@ -1,0 +1,38 @@
+services:
+  erp-3001:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3001}"
+        NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:3001}"
+        TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-}"
+        NEXT_PUBLIC_SENTRY_DSN: "${SENTRY_DSN:-}"
+      secrets:
+        - database_url
+        - better_auth_secret
+    container_name: ngoquyen-erp-3001
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://nqerp:${POSTGRES_PASSWORD}@postgres:5432/ngoquyyen_erp?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3001}"
+      NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:3001}"
+      TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3001:3000"
+    networks:
+      - docker_default
+
+networks:
+  docker_default:
+    external: true
+    name: docker_default
+
+secrets:
+  database_url:
+    environment: DATABASE_URL
+  better_auth_secret:
+    environment: BETTER_AUTH_SECRET

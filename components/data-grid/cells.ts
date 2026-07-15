@@ -14,7 +14,8 @@ function isoToDmy(iso: string): string {
 function dmyToIso(s: string): string | null {
   const m = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s.trim());
   if (!m) return null;
-  let [, d, mo, y] = m;
+  const [, d, mo, rawYear] = m;
+  let y = rawYear;
   if (y.length === 2) y = (Number(y) >= 70 ? "19" : "20") + y;
   const dd = d.padStart(2, "0");
   const mm = mo.padStart(2, "0");
@@ -95,13 +96,16 @@ export function buildCell<T>(
         readonly,
       };
     }
-    case "select": {
+    case "select":
+    case "fk": {
       const value = raw == null ? "" : String(raw);
-      const allowedValues = (col.options ?? []).map((o) => ({
+      // For "fk" kind, options come from col.fk.options or col.options
+      const opts = col.kind === "fk" ? (col.fk?.options ?? col.options ?? []) : (col.options ?? []);
+      const allowedValues = opts.map((o) => ({
         value: String(o.id),
         label: o.name,
       }));
-      const display = findOptionName(col.options, raw);
+      const display = findOptionName(opts, raw);
       const cell: DropdownCellType = {
         kind: GridCellKind.Custom,
         allowOverlay,
@@ -138,7 +142,8 @@ export function parseCellValue<T>(col: DataGridColumn<T>, raw: unknown): unknown
     }
     case "boolean":
       return Boolean(raw);
-    case "select": {
+    case "select":
+    case "fk": {
       if (raw == null || raw === "") return null;
       // raw may be the dropdown's `{ value, allowedValues }` payload, a plain value, or a label.
       const candidate =
@@ -146,7 +151,8 @@ export function parseCellValue<T>(col: DataGridColumn<T>, raw: unknown): unknown
           ? (raw as { value: unknown }).value
           : raw;
       if (candidate == null || candidate === "") return null;
-      const opt = col.options?.find(
+      const opts = col.kind === "fk" ? (col.fk?.options ?? col.options) : col.options;
+      const opt = opts?.find(
         (o) => String(o.id) === String(candidate) || o.name === String(candidate),
       );
       if (opt) return opt.id;

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { acceptanceSchema, type AcceptanceInput } from "./schemas";
 
@@ -26,7 +26,7 @@ export async function listAcceptances(projectId: number) {
 
 export async function createAcceptance(input: AcceptanceInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = acceptanceSchema.parse(input);
   const record = await prisma.projectAcceptance.create({
     data: {
@@ -52,7 +52,7 @@ export async function createAcceptance(input: AcceptanceInput) {
 
 export async function updateAcceptance(id: number, input: AcceptanceInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = acceptanceSchema.parse(input);
   const record = await prisma.projectAcceptance.update({
     where: { id },
@@ -85,7 +85,7 @@ export async function adminPatchAcceptance(
   projectId: number,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const data: Record<string, unknown> = {};
   if (patch.planEnd !== undefined) data.planEnd = patch.planEnd ? new Date(patch.planEnd) : null;
   if (patch.actualEnd !== undefined) data.actualEnd = patch.actualEnd ? new Date(patch.actualEnd) : null;
@@ -96,7 +96,7 @@ export async function adminPatchAcceptance(
 
 export async function softDeleteAcceptance(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectAcceptance.update({
     where: { id },
     data: { deletedAt: new Date() },

@@ -9,7 +9,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 
@@ -126,7 +126,7 @@ export async function getLoanContract(id: number) {
 
 export async function createLoanContract(input: LoanContractInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const principal = new Prisma.Decimal(input.principalVnd);
   const annualRate = new Prisma.Decimal(input.interestRatePct);
@@ -159,7 +159,7 @@ export async function createLoanContract(input: LoanContractInput) {
 
 export async function updateLoanContract(id: number, input: Partial<LoanContractInput>) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const contract = await prisma.loanContract.update({
     where: { id },
@@ -178,10 +178,41 @@ export async function updateLoanContract(id: number, input: Partial<LoanContract
 
 export async function softDeleteLoanContract(id: number) {
   const role = await getRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "tai-chinh", "admin");
   await prisma.loanContract.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/tai-chinh/vay");
   revalidatePath("/tai-chinh");
+}
+
+// ─── Inline-edit patch ────────────────────────────────────────────────────────
+
+import { z } from "zod";
+
+// Amounts (principalVnd, interestRatePct) are Decimal — excluded, must use form
+// startDate/endDate change schedule — excluded, use form
+const LOAN_PATCH_WHITELIST = ["lenderName", "note", "status"] as const;
+
+const patchLoanSchema = z.object({
+  lenderName: z.string().min(1, "Tên bên cho vay không được để trống").optional(),
+  note: z.string().nullable().optional(),
+  status: z.enum(["active", "paid_off", "terminated"]).optional(),
+});
+
+export async function patchLoan(id: number, patch: Record<string, unknown>) {
+  const role = await getRole();
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+
+  for (const k of Object.keys(patch)) {
+    if (!(LOAN_PATCH_WHITELIST as readonly string[]).includes(k)) {
+      throw new Error(`Field "${k}" không được phép inline edit`);
+    }
+  }
+
+  const data = patchLoanSchema.parse(patch);
+  const updated = await prisma.loanContract.update({ where: { id }, data });
+  revalidatePath("/tai-chinh/vay");
+  revalidatePath("/tai-chinh");
+  return updated;
 }
 
 export async function recordLoanPayment(
@@ -191,7 +222,7 @@ export async function recordLoanPayment(
   interestPaid: string
 ) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const payment = await prisma.loanPayment.update({
     where: { id: paymentId },

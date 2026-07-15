@@ -112,7 +112,7 @@ Admin quản lý tài khoản người dùng qua trang quản trị.
 | Công Nợ Vật Tư | `Quản Lý Công Nợ Vật Tư.xlsx` |
 | Dự Án Xây Dựng | `Quản Lý Dự Án Xây Dựng.xlsx` |
 | Tài Chính NQ | `Hệ thống quản lý tài chính NQ.xlsx` |
-| SL/DT | `SL - DT 2025.xlsx` |
+| SL/DT | `SL - DT.xlsx` |
 
 > **Lưu ý:** Import cùng file 2 lần hệ thống sẽ phát hiện trùng (idempotent) và không tạo bản ghi trùng lặp.
 

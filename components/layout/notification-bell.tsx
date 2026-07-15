@@ -36,7 +36,9 @@ export function NotificationBell() {
   }
 
   useEffect(() => {
-    fetchData();
+    const initialFetch = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
 
     // SSE for live push; EventSource auto-reconnects on transient drops.
     const es = new EventSource("/api/notifications/stream");
@@ -67,6 +69,7 @@ export function NotificationBell() {
     const poll = setInterval(fetchData, 120_000);
 
     return () => {
+      window.clearTimeout(initialFetch);
       es.close();
       clearInterval(poll);
     };
@@ -94,10 +97,10 @@ export function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative flex items-center justify-center rounded p-2 hover:bg-muted"
+        className="relative flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         aria-label="Thông báo"
       >
-        <Bell className="size-5" />
+        <Bell className="size-4" />
         {unread > 0 && (
           <span className="absolute top-0 right-0 min-w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center px-1">
             {unread > 9 ? "9+" : unread}

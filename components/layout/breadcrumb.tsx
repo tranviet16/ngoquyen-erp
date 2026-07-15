@@ -48,6 +48,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   "bao-cao-dt": "Báo cáo doanh thu",
   "nhap-thang-moi": "Nhập tháng mới",
   "chi-tieu": "Chỉ tiêu",
+  "danh-muc-lo": "Danh mục lô",
   // Cong no sub
   "chi-tiet": "Chi tiết",
   "bao-cao-thang": "Báo cáo tháng",

@@ -3,8 +3,6 @@
  * Each adapter handles one Excel SOP file → one or more DB tables.
  */
 
-import type { PrismaClient } from "@prisma/client";
-
 export interface ParsedRow {
   /** Original 0-based row index from the sheet (for error messages) */
   rowIndex: number;

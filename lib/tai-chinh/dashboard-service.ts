@@ -12,15 +12,16 @@
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-import { getTotalCashPosition } from "./liquidity-service";
+import { getCashAccountBalances } from "./liquidity-service";
+import { getFinancePrTotals } from "./pr-sync-service";
 
 export interface KpiData {
   cashPositionVnd: Prisma.Decimal;        // Σ closing balance across all cash accounts
   materialDebtVnd: Prisma.Decimal;        // Total outstanding material ledger balance
   laborDebtVnd: Prisma.Decimal;           // Total outstanding labor ledger balance
   totalLoanPrincipalVnd: Prisma.Decimal;  // Active loans principal remaining
-  receivableVnd: Prisma.Decimal;          // Total receivable adjustments pending
-  payableVnd: Prisma.Decimal;             // Total payable adjustments pending
+  receivableVnd: Prisma.Decimal;          // Total receivable rows from Phải thu/Phải trả tab
+  payableVnd: Prisma.Decimal;             // Total payable rows from Phải thu/Phải trả tab
 }
 
 export interface CashflowMonthPoint {
@@ -35,6 +36,15 @@ export interface DebtCategoryPoint {
   amountVnd: number;
 }
 
+export interface SourceOfFundsPoint {
+  id: number;
+  label: string;
+  openingVnd: number;
+  inflowVnd: number;
+  outflowVnd: number;
+  closingVnd: number;
+}
+
 export interface LoanDue {
   id: number;
   lenderName: string;
@@ -47,6 +57,7 @@ export interface DashboardData {
   kpi: KpiData;
   cashflowTrend: CashflowMonthPoint[];   // Last 6 months
   debtByCategory: DebtCategoryPoint[];
+  sourceOfFunds: SourceOfFundsPoint[];
   loansDueSoon: LoanDue[];               // Due within 30 days
 }
 
@@ -68,10 +79,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     materialBalRows,
     laborBalRows,
     loanSumRows,
-    receivableRows,
-    payableRows,
+    prTotals,
     loansDue,
-    cashPositionVnd,
+    cashAccountBalances,
   ] = await Promise.all([
     // Cash flow by month (last 6 months) from JournalEntry
     prisma.$queryRaw<RawCashRow[]>`
@@ -124,17 +134,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         AND lp.status != 'paid'
     `,
 
-    // Pending receivables (manual adjustments)
-    prisma.payableReceivableAdjustment.aggregate({
-      where: { deletedAt: null, type: "receivable", status: "pending" },
-      _sum: { amountVnd: true },
-    }),
-
-    // Pending payables (manual adjustments)
-    prisma.payableReceivableAdjustment.aggregate({
-      where: { deletedAt: null, type: "payable", status: "pending" },
-      _sum: { amountVnd: true },
-    }),
+    // Same visible source as /tai-chinh/phai-thu-tra: synced PR lines + manual adjustments.
+    getFinancePrTotals(),
 
     // Loans due within 30 days
     prisma.loanPayment.findMany({
@@ -150,7 +151,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     }),
 
     // Total cash position = Σ closing per account
-    getTotalCashPosition(),
+    getCashAccountBalances(),
   ]);
 
   // Build 6-month trend
@@ -164,13 +165,23 @@ export async function getDashboardData(): Promise<DashboardData> {
   const materialDebtVnd = materialBalRows[0] ? new Prisma.Decimal(materialBalRows[0].balance_tt) : new Prisma.Decimal(0);
   const laborDebtVnd = laborBalRows[0] ? new Prisma.Decimal(laborBalRows[0].balance_tt) : new Prisma.Decimal(0);
   const totalLoanPrincipalVnd = loanSumRows[0] ? new Prisma.Decimal(loanSumRows[0].remaining) : new Prisma.Decimal(0);
-  const receivableVnd = receivableRows._sum.amountVnd ?? new Prisma.Decimal(0);
-  const payableVnd = payableRows._sum.amountVnd ?? new Prisma.Decimal(0);
+  const receivableVnd = prTotals.receivable;
+  const payableVnd = prTotals.payable;
+  const cashPositionVnd = cashAccountBalances.reduce(
+    (sum, account) => sum.add(account.closingVnd),
+    new Prisma.Decimal(0)
+  );
+  const sourceOfFunds: SourceOfFundsPoint[] = cashAccountBalances.map((account) => ({
+    id: account.id,
+    label: account.name,
+    openingVnd: Number(account.openingVnd),
+    inflowVnd: Number(account.inflowVnd),
+    outflowVnd: Number(account.outflowVnd),
+    closingVnd: Number(account.closingVnd),
+  }));
 
   const debtByCategory: DebtCategoryPoint[] = [
-    { label: "Nợ vật tư (TT)", amountVnd: Number(materialDebtVnd) },
-    { label: "Nợ nhân công (TT)", amountVnd: Number(laborDebtVnd) },
-    { label: "Phải trả khác", amountVnd: Number(payableVnd) },
+    { label: "Phải trả", amountVnd: Number(payableVnd) },
     { label: "Phải thu", amountVnd: Number(receivableVnd) },
   ];
 
@@ -186,6 +197,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     kpi: { cashPositionVnd, materialDebtVnd, laborDebtVnd, totalLoanPrincipalVnd, receivableVnd, payableVnd },
     cashflowTrend,
     debtByCategory,
+    sourceOfFunds,
     loansDueSoon,
   };
 }

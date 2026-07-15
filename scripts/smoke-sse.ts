@@ -6,7 +6,6 @@
  */
 import { chromium } from "playwright";
 import { prisma } from "../lib/prisma";
-import { createNotification } from "../lib/notification/notification-service";
 
 const BASE = process.env.SMOKE_BASE_URL ?? "http://localhost:3001";
 const EMAIL = "smoke-aleader@nq.local";

@@ -6,7 +6,7 @@ export const createTaskSchema = z.object({
   title: z.string().trim().min(3).max(200),
   description: z.string().trim().max(2000).optional().nullable(),
   deptId: z.number().int().positive(),
-  assigneeId: z.string().nullable().optional(),
+  assigneeId: z.string().trim().min(1, "Phải chọn người thực hiện"),
   priority: z.enum(PRIORITIES).default("trung_binh"),
   deadline: z
     .union([z.string(), z.null()])

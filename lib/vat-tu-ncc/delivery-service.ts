@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { deliverySchema, type DeliveryInput } from "./schemas";
@@ -46,7 +46,7 @@ export async function listDeliveriesMonthly(supplierId: number) {
 
 export async function createDelivery(input: DeliveryInput) {
   const role = await getSessionRole();
-  requireRole(role, "canbo_vt");
+  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
   const data = deliverySchema.parse(input);
   const record = await prisma.supplierDeliveryDaily.create({
     data: {
@@ -69,7 +69,7 @@ export async function createDelivery(input: DeliveryInput) {
 
 export async function updateDelivery(id: number, input: DeliveryInput) {
   const role = await getSessionRole();
-  requireRole(role, "canbo_vt");
+  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
   const data = deliverySchema.parse(input);
   const record = await prisma.supplierDeliveryDaily.update({
     where: { id },
@@ -93,7 +93,7 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
 
 export async function softDeleteDelivery(id: number, supplierId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "vat-tu-ncc", "admin");
   const record = await prisma.supplierDeliveryDaily.update({
     where: { id },
     data: { deletedAt: new Date() },

@@ -1,26 +1,39 @@
 import { Suspense } from "react";
+import { prisma } from "@/lib/prisma";
+import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { ENTITY_SPEC } from "@/lib/master-data/entities/table-spec";
 import { EntitiesClient } from "./entities-client";
-import { listEntities } from "@/lib/master-data/entity-service";
 
 interface Props {
-  searchParams: Promise<{ search?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function EntitiesPage({ searchParams }: Props) {
-  const params = await searchParams;
-  const search = params.search ?? "";
-  const page = Number(params.page ?? 1);
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") params.set(k, v);
+  }
 
-  const result = await listEntities({ search, page, pageSize: 20 });
+  const state = parseTableQuery(params, ENTITY_SPEC);
+  const args = buildPrismaArgs(state, ENTITY_SPEC);
+
+  const [rows, total] = await Promise.all([
+    prisma.entity.findMany({
+      ...args,
+      where: { ...args.where, deletedAt: null },
+    }),
+    prisma.entity.count({ where: { ...args.where, deletedAt: null } }),
+  ]);
 
   return (
     <Suspense>
       <EntitiesClient
-        data={result.items}
-        total={result.total}
-        page={result.page}
-        pageSize={result.pageSize}
-        searchValue={search}
+        data={rows}
+        total={total}
+        page={state.page}
+        pageSize={state.pageSize}
+        searchValue={state.search ?? ""}
       />
     </Suspense>
   );

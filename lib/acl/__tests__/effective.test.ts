@@ -6,7 +6,7 @@
  * React cache() is mocked to be a passthrough (no memoization in tests).
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ─── Mock react cache() as identity (passthrough) ────────────────────────────
 vi.mock("react", () => ({
@@ -16,6 +16,12 @@ vi.mock("react", () => ({
 // ─── Mock prisma ──────────────────────────────────────────────────────────────
 const mockFindUnique = vi.fn();
 const mockFindMany = vi.fn();
+
+// Stateless seed-backed stub for rolePermission.findMany — drives the role
+// fallback path (getDefaultModuleLevel). Immune to vi.resetAllMocks().
+function mockRolePermissionFindMany(...args: unknown[]) {
+  return rolePermissionFindMany(args[0] as { where?: { roleId?: string } });
+}
 
 vi.mock("../../prisma", () => ({
   prisma: {
@@ -34,6 +40,9 @@ vi.mock("../../prisma", () => ({
     userDeptAccess: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
     },
+    rolePermission: {
+      findMany: (...args: unknown[]) => mockRolePermissionFindMany(...args),
+    },
   },
 }));
 
@@ -44,71 +53,10 @@ import {
   checkRoleAxis,
   getViewableProjectIds,
 } from "../effective";
+import { MODULE_AVAILABILITY } from "../modules";
+import { rolePermissionFindMany } from "./_role-permission-fixture";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-type MockUser = {
-  id: string;
-  role: string;
-  isLeader: boolean;
-  isDirector: boolean;
-  departmentId?: number | null;
-};
-
-function setupUser(user: MockUser) {
-  mockFindUnique.mockImplementation((args: { where: { id?: string; userId?: string } }) => {
-    if ("id" in args.where && args.where.id === user.id) {
-      return Promise.resolve(user);
-    }
-    // For projectGrantAll — by default return null
-    return Promise.resolve(null);
-  });
-}
-
-function setupModulePermissions(rows: Array<{ moduleKey: string; level: string }>) {
-  // modulePermission.findMany
-  mockFindMany.mockImplementation(
-    (args: { where: { userId?: string; deptId?: number } }) => {
-      if (args.where?.userId !== undefined && !("deptId" in args.where)) {
-        // Check if it's a project permission query or module permission query
-        // We differentiate by checking what fields are in the mock call
-        return Promise.resolve(rows);
-      }
-      return Promise.resolve([]);
-    },
-  );
-}
-
-function setupProjectPermissions(
-  grantAll: { level: string } | null,
-  perProject: Array<{ projectId: number; level: string }>,
-  modulePermRows: Array<{ moduleKey: string; level: string }> = [],
-) {
-  mockFindUnique.mockImplementation(
-    (args: { where: { id?: string; userId?: string } }) => {
-      if ("userId" in args.where) {
-        // projectGrantAll lookup
-        return Promise.resolve(grantAll);
-      }
-      // user lookup — return null (caller should set up user separately)
-      return Promise.resolve(null);
-    },
-  );
-  mockFindMany.mockImplementation(
-    (args: { where: { userId?: string } }) => {
-      if (args.where?.userId) {
-        // Could be projectPermission or modulePermission or userDeptAccess
-        // Return perProject rows for projectPermission, modulePermRows for others
-        if (perProject.length > 0) {
-          // Heuristic: if the rows have projectId field, assume project
-          return Promise.resolve([...perProject, ...modulePermRows]);
-        }
-        return Promise.resolve(modulePermRows);
-      }
-      return Promise.resolve([]);
-    },
-  );
-}
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -147,6 +95,12 @@ describe("checkRoleAxis", () => {
 // ─── D1: Admin short-circuit ──────────────────────────────────────────────────
 
 describe("canAccess — admin short-circuit (D1)", () => {
+  const originalDashboardAvailability = { ...MODULE_AVAILABILITY.dashboard };
+
+  afterEach(() => {
+    MODULE_AVAILABILITY.dashboard = { ...originalDashboardAvailability };
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     mockFindUnique.mockResolvedValue({
@@ -180,6 +134,22 @@ describe("canAccess — admin short-circuit (D1)", () => {
       scope: "module",
     });
     expect(result).toBe(true);
+  });
+
+  it("disabled module blocks admin too because availability is a rollout switch", async () => {
+    MODULE_AVAILABILITY.dashboard = {
+      enabled: false,
+      showInMenu: true,
+      status: "development",
+    };
+
+    const result = await canAccess("admin1", "dashboard", {
+      minLevel: "read",
+      scope: "module",
+    });
+
+    expect(result).toBe(false);
+    expect(mockFindUnique).not.toHaveBeenCalled();
   });
 });
 
@@ -618,7 +588,7 @@ describe("getViewableProjectIds", () => {
       },
     );
     mockFindMany.mockImplementation(
-      (_args: { where: { userId?: string } }) => {
+      () => {
         findManyCallCount++;
         if (findManyCallCount === 1) {
           // modulePermission.findMany (called by getModuleAccessMap)

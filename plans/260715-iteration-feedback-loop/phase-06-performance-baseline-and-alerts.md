@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Baseline hiệu năng và cảnh báo"
-status: pending
+status: completed
 priority: P2
 effort: "8h"
 dependencies: [1, 4]
@@ -45,10 +45,10 @@ Fast query-count chạy trong CI như informational trend. Load runner chạy ma
 
 ## Todo list
 
-- [ ] Baseline có provenance seed/config/date.
-- [ ] Production guard/stop condition được test.
-- [ ] Dashboard/alert performance có owner.
-- [ ] Tất cả cảnh báo baseline/load/telemetry trong phạm vi có trạng thái `cleared`; không còn exception mở.
+- [x] Baseline có provenance seed/config/date.
+- [x] Production guard/stop condition được test.
+- [x] Dashboard/alert performance có owner.
+- [x] Tất cả cảnh báo baseline/load/telemetry trong phạm vi có trạng thái `cleared`; không còn exception mở.
 
 ## Success criteria
 

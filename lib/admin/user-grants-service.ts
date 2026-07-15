@@ -4,12 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
 import { LEVEL_ORDER, type AccessLevel } from "@/lib/dept-access";
-import { ALL_ROLES, type AppRole } from "@/lib/rbac";
 
 async function assertAdmin(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Phiên đăng nhập đã hết hạn");
   if (session.user.role !== "admin") throw new Error("Chỉ admin được thao tác");
+  const active = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isActive: true },
+  });
+  if (!active?.isActive) throw new Error("Tài khoản đã bị vô hiệu hóa");
   return session.user.id;
 }
 
@@ -26,6 +30,7 @@ export interface UserWithGrants {
   departmentName: string | null;
   isLeader: boolean;
   isDirector: boolean;
+  isActive: boolean;
   grants: { deptId: number; deptName: string; level: AccessLevel }[];
 }
 
@@ -49,6 +54,7 @@ export async function listUsersWithGrants(): Promise<UserWithGrants[]> {
     departmentName: u.department?.name ?? null,
     isLeader: u.isLeader,
     isDirector: u.isDirector,
+    isActive: u.isActive,
     grants: u.deptAccess
       .filter((g) => isAccessLevel(g.level))
       .map((g) => ({
@@ -121,6 +127,7 @@ export interface UpdateUserAttributesInput {
   role: string;
   isLeader: boolean;
   isDirector: boolean;
+  isActive: boolean;
   departmentId: number | null;
 }
 
@@ -129,12 +136,19 @@ export async function updateUserAttributes(
 ): Promise<void> {
   const adminId = await assertAdmin();
 
-  if (!ALL_ROLES.includes(input.role as AppRole)) {
+  const roleExists = await prisma.role.findUnique({
+    where: { id: input.role },
+    select: { id: true },
+  });
+  if (!roleExists) {
     throw new Error(`Role không hợp lệ: ${input.role}`);
   }
 
   if (input.userId === adminId && input.role !== "admin") {
     throw new Error("Không thể tự hạ quyền admin của chính mình");
+  }
+  if (input.userId === adminId && !input.isActive) {
+    throw new Error("Không thể tự vô hiệu hóa tài khoản của chính mình");
   }
 
   if (input.isLeader && input.departmentId === null) {
@@ -154,8 +168,9 @@ export async function updateUserAttributes(
     where: { id: input.userId },
     data: {
       role: input.role,
-      isLeader: input.isLeader,
-      isDirector: input.isDirector,
+      isLeader: input.isActive ? input.isLeader : false,
+      isDirector: input.isActive ? input.isDirector : false,
+      isActive: input.isActive,
       departmentId: input.departmentId,
     },
   });

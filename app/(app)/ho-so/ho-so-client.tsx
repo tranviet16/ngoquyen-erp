@@ -19,7 +19,9 @@ interface HoSoUser {
   name: string;
   email: string;
   image: string | null;
+  username: string | null;
   role: string;
+  title: string | null;
   isLeader: boolean;
   isDirector: boolean;
   department: { code: string; name: string } | null;
@@ -28,8 +30,8 @@ interface HoSoUser {
 const ROLE_LABELS: Record<string, string> = {
   admin: "Quản trị viên",
   ketoan: "Kế toán",
-  thukho: "Thủ kho",
-  giamsat: "Giám sát",
+  canbo_vt: "Cán bộ vật tư",
+  chihuy_ct: "Cán bộ kỹ thuật",
   viewer: "Người xem",
 };
 
@@ -241,9 +243,19 @@ export function HoSoClient({ user }: { user: HoSoUser }) {
         <h2 className="text-base font-semibold">Thông tin tài khoản</h2>
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
+            <dt className="text-muted-foreground">Tên đăng nhập</dt>
+            <dd className="font-medium">{user.username ?? "—"}</dd>
+          </div>
+          <div>
             <dt className="text-muted-foreground">Email</dt>
             <dd className="font-medium">{user.email}</dd>
           </div>
+          {user.title && (
+            <div>
+              <dt className="text-muted-foreground">Chức danh</dt>
+              <dd className="font-medium">{user.title}</dd>
+            </div>
+          )}
           <div>
             <dt className="text-muted-foreground">Vai trò</dt>
             <dd>

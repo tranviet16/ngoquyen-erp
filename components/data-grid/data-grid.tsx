@@ -13,11 +13,15 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { allCells } from "@glideapps/glide-data-grid-cells";
 import "@glideapps/glide-data-grid-cells/dist/index.css";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { useGlideTheme } from "./theme";
 import { useGridMutation } from "./use-grid-mutation";
+import { useGridView } from "./use-grid-view";
 import { buildCell, parseCellValue } from "./cells";
+import { FilterBar } from "./filter-bar";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "./types";
+
+const ROW_MARKER_WIDTH = 30;
 
 interface Props<T extends RowWithId> {
   columns: DataGridColumn<T>[];
@@ -29,13 +33,6 @@ interface Props<T extends RowWithId> {
   onSelectionChange?: (ids: number[]) => void;
 }
 
-function parseTsv(text: string): string[][] {
-  return text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .filter((l) => l.length > 0)
-    .map((l) => l.split("\t"));
-}
 
 export function DataGrid<T extends RowWithId>({
   columns,
@@ -47,50 +44,65 @@ export function DataGrid<T extends RowWithId>({
   onSelectionChange,
 }: Props<T>) {
   const theme = useGlideTheme();
-  const { rows, editCell, bulkPaste, addRow, deleteRows } = useGridMutation(
+  const { rows, editCell, bulkPaste, addRow, deleteRows, dirty } = useGridMutation(
     initialRows,
     handlers,
   );
+  const { sort, setSort, filters, setFilter, resetFilters, view, isFiltered } = useGridView(
+    rows,
+    columns,
+  );
   const [selection, setSelection] = useState<GridSelection | undefined>();
 
+  // Column widths derived from column spec
+  const colWidths = useMemo(() => columns.map((c) => c.width ?? 140), [columns]);
+
   const gridColumns = useMemo<GridColumn[]>(
-    () => columns.map((c) => ({ title: c.title, id: c.id, width: c.width ?? 140 })),
-    [columns],
+    () =>
+      columns.map((c) => {
+        let title = c.title;
+        if (c.sortable && sort?.col === c.id) {
+          title = sort.dir === "asc" ? `${c.title} ▲` : `${c.title} ▼`;
+        } else if (c.sortable) {
+          title = `${c.title} ⇅`;
+        }
+        return { title, id: c.id, width: c.width ?? 140 };
+      }),
+    [columns, sort],
   );
 
+  // getCellContent operates on `view` for display
   const getCellContent = useCallback(
     ([colIdx, rowIdx]: Item) => {
       const col = columns[colIdx];
-      const row = rows[rowIdx];
+      const row = view[rowIdx];
       if (!col || !row) {
         return { kind: GridCellKind.Text as const, data: "", displayData: "", allowOverlay: false };
       }
       return buildCell(row, col, role);
     },
-    [columns, rows, role],
+    [columns, view, role],
   );
 
+  // Edit resolves the view rowIdx → actual row id → mutate full set
   const onCellEdited = useCallback(
     ([colIdx, rowIdx]: Item, newCell: EditableGridCell) => {
       const col = columns[colIdx];
-      const row = rows[rowIdx];
+      const row = view[rowIdx]; // view row has same id as full-set row
       if (!col || !row) return;
-      const raw =
-        "data" in newCell ? (newCell.data as unknown) : undefined;
+      const raw = "data" in newCell ? (newCell.data as unknown) : undefined;
       const parsed = parseCellValue(col, raw);
       editCell(row.id, col.id, parsed);
     },
-    [columns, rows, editCell],
+    [columns, view, editCell],
   );
 
   const onPaste = useCallback(
     (target: Item, values: readonly (readonly string[])[]) => {
       const [startCol, startRow] = target;
-      // Build patch rows aligned to existing rows where possible
       const patches: Partial<T>[] = [];
       for (let r = 0; r < values.length; r++) {
-        const targetRowIdx = startRow + r;
-        const targetRow = rows[targetRowIdx];
+        const targetRow = view[startRow + r];
         const patch: Partial<T> = {} as Partial<T>;
         if (targetRow) (patch as RowWithId).id = targetRow.id;
         const lineValues = values[r];
@@ -104,23 +116,24 @@ export function DataGrid<T extends RowWithId>({
       void bulkPaste(patches);
       return true;
     },
-    [bulkPaste, columns, rows],
+    [bulkPaste, columns, view],
   );
 
   const handleAdd = useCallback(() => {
     void addRow(newRowTemplate);
   }, [addRow, newRowTemplate]);
 
+  // Selection indices are into `view` — resolve to ids from view
   const selectedRowIds = useMemo<number[]>(() => {
     const out: number[] = [];
     const sel = selection?.rows;
     if (!sel) return out;
     sel.toArray().forEach((idx) => {
-      const row = rows[idx];
+      const row = view[idx];
       if (row) out.push(row.id);
     });
     return out;
-  }, [selection, rows]);
+  }, [selection, view]);
 
   useEffect(() => {
     onSelectionChange?.(selectedRowIds);
@@ -132,8 +145,22 @@ export function DataGrid<T extends RowWithId>({
     setSelection(undefined);
   }, [deleteRows, selectedRowIds]);
 
+  const handleHeaderClicked = useCallback(
+    (colIdx: number) => {
+      const col = columns[colIdx];
+      if (!col?.sortable) return;
+      setSort(col.id);
+    },
+    [columns, setSort],
+  );
+
+  const filterBarHeight = columns.some((c) => c.filterable) ? 28 : 0;
+  const gridHeight =
+    typeof height === "number" ? height - filterBarHeight : undefined;
+
   return (
     <div className="space-y-2">
+      {/* Toolbar */}
       <div className="flex items-center gap-2">
         {handlers.onAddRow && (
           <Button size="sm" variant="outline" onClick={handleAdd}>
@@ -151,29 +178,50 @@ export function DataGrid<T extends RowWithId>({
             Xóa {selectedRowIds.length > 0 ? `(${selectedRowIds.length})` : ""}
           </Button>
         )}
-        <span className="text-xs text-muted-foreground ml-auto">
-          {rows.length} dòng
+        <span className="text-xs text-muted-foreground ml-auto flex items-center gap-2">
+          {dirty > 0 && (
+            <span className="text-amber-600 font-medium">● Đang lưu...</span>
+          )}
+          {isFiltered ? (
+            <>
+              <span className="text-blue-600 font-medium">
+                Đã lọc {view.length}/{rows.length} dòng
+              </span>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={resetFilters}>
+                <X className="h-3 w-3 mr-1" /> Xóa lọc
+              </Button>
+            </>
+          ) : (
+            <span>{rows.length} dòng</span>
+          )}
         </span>
       </div>
-      <div
-        className="rounded-md border overflow-hidden"
-        style={{ height }}
-      >
+
+      {/* Grid container */}
+      <div className="rounded-md border overflow-hidden" style={{ height }}>
+        <FilterBar
+          columns={columns}
+          filters={filters}
+          onFilter={setFilter}
+          colWidths={colWidths}
+          rowMarkerWidth={ROW_MARKER_WIDTH}
+        />
         <DataEditor
           theme={theme}
           getCellContent={getCellContent}
           columns={gridColumns}
-          rows={rows.length}
+          rows={view.length}
           onCellEdited={onCellEdited}
           onPaste={onPaste}
           rowMarkers="checkbox"
           gridSelection={selection}
           onGridSelectionChange={setSelection}
+          onHeaderClicked={handleHeaderClicked}
           customRenderers={allCells}
           smoothScrollX
           smoothScrollY
           width="100%"
-          height={typeof height === "number" ? height : undefined}
+          height={gridHeight}
         />
       </div>
     </div>

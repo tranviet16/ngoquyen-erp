@@ -37,16 +37,20 @@ export function normalizeLotCode(s: unknown): string {
   return String(s ?? "").replace(/\s+/g, " ").trim();
 }
 
-export function parseMonthSheetName(name: string): { year: number; month: number } | null {
+/**
+ * Year the workbook's earliest month sheet belongs to. Excel caps sheet names
+ * at 31 chars, which truncates the year off most of them ("...năm "), so it
+ * cannot be read back from the name. `resolveSheetMonths` anchors here and
+ * bumps the year on each month rollover.
+ */
+export const BASE_YEAR = 2025;
+
+/** Extract the 1–12 month from a sheet name, or null if it carries none. */
+export function parseSheetMonth(name: string): number | null {
   const m = name.match(/Th[áa]ng\s*(\d{1,2})/i);
   if (!m) return null;
   const month = parseInt(m[1], 10);
-  if (month < 1 || month > 12) return null;
-  const y = name.match(/n[ăa]m\s*(\d{2,4})/i);
-  let year = y ? parseInt(y[1], 10) : 2025;
-  if (year < 100) year = 2000 + year;
-  if (year < 1000) year = 2025;
-  return { year, month };
+  return month >= 1 && month <= 12 ? month : null;
 }
 
 interface HierState {
@@ -60,7 +64,14 @@ function newState(): HierState {
 }
 
 /** Update state from STT cell, return true if this row is a lot row. */
-function step(state: HierState, sttCell: unknown, danhMucCell: unknown, lotNameCell: unknown): { isLot: boolean; lotName: string } {
+function step(
+  state: HierState,
+  sttCell: unknown,
+  danhMucCell: unknown,
+  lotNameCell: unknown,
+  options: { requireLotPrefix?: boolean } = {},
+): { isLot: boolean; lotName: string } {
+  const requireLotPrefix = options.requireLotPrefix ?? true;
   const stt = String(sttCell ?? "").trim();
   if (!stt) return { isLot: false, lotName: "" };
   if (ROMAN.test(stt)) {
@@ -74,12 +85,12 @@ function step(state: HierState, sttCell: unknown, danhMucCell: unknown, lotNameC
   }
   if (/^\d+$/.test(stt)) {
     const candidate = normalizeLotCode(lotNameCell);
-    if (/^Lô\s/i.test(candidate)) {
+    if (candidate && (!requireLotPrefix || /^Lô\s/i.test(candidate))) {
       state.sortOrder++;
       return { isLot: true, lotName: candidate };
     }
     const fallback = normalizeLotCode(danhMucCell);
-    if (/^Lô\s/i.test(fallback)) {
+    if (fallback && (!requireLotPrefix || /^Lô\s/i.test(fallback))) {
       state.sortOrder++;
       return { isLot: true, lotName: fallback };
     }
@@ -123,9 +134,11 @@ export function parseDoanhThu(matrix: unknown[][], year: number, month: number) 
   for (let i = 0; i < matrix.length; i++) {
     const r = matrix[i] || [];
     // Doanh thu has lotName in col 2 (col 1 = "Xây nhà")
-    const { isLot, lotName } = step(state, r[0], r[2], r[2]);
+    const { isLot, lotName } = step(state, r[0], r[1], r[2] ?? r[1], { requireLotPrefix: false });
     if (!isLot) continue;
     const contractValue = num(r[3]);
+    const hasRevenueValue = [3, 4, 5, 6, 8, 9, 10].some((idx) => num(r[idx]) !== 0);
+    if (!hasRevenueValue) continue;
     out.push({
       kind: "lot_meta",
       data: {
@@ -259,4 +272,47 @@ export function classifySheet(name: string): SheetCategory {
   if (n.startsWith("bao cao doanh thu thang") || n.startsWith("bao cao doanh thu  thang")) return "doanh_thu";
   if (n.startsWith("chi tieu sl dt thang")) return "chi_tieu";
   return null;
+}
+
+export interface ResolvedMonth {
+  year: number;
+  month: number;
+}
+
+/**
+ * Resolve (year, month) for every month-bearing sheet.
+ *
+ * Excel truncates sheet names at 31 chars, cutting the year off ("...năm "),
+ * so the year cannot be read from the name. Within each sheet category the
+ * month sheets sit in chronological workbook order, so we anchor at
+ * `BASE_YEAR` and bump the year whenever the month number drops below the
+ * previous one (e.g. Dec → Mar = next year).
+ */
+export function resolveSheetMonths(sheetNames: string[]): Map<string, ResolvedMonth> {
+  const result = new Map<string, ResolvedMonth>();
+  const monthCategories: SheetCategory[] = ["san_luong", "doanh_thu", "chi_tieu", "tien_do_xd"];
+  for (const cat of monthCategories) {
+    let year = BASE_YEAR;
+    let prevMonth = 0;
+    for (const name of sheetNames) {
+      if (classifySheet(name) !== cat) continue;
+      const month = parseSheetMonth(name);
+      if (month == null) continue;
+      if (prevMonth && month < prevMonth) year++;
+      prevMonth = month;
+      result.set(name, { year, month });
+    }
+  }
+  return result;
+}
+
+/** Latest (year, month) across all resolved sheets, or null if none. */
+export function latestResolvedMonth(map: Map<string, ResolvedMonth>): ResolvedMonth | null {
+  let latest: ResolvedMonth | null = null;
+  for (const ym of map.values()) {
+    if (!latest || ym.year > latest.year || (ym.year === latest.year && ym.month > latest.month)) {
+      latest = ym;
+    }
+  }
+  return latest;
 }

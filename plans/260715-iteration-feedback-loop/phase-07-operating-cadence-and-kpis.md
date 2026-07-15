@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Nhịp vận hành, KPI và cải tiến liên tục"
-status: pending
+status: completed
 priority: P1
 effort: "8h"
 dependencies: [2, 3, 4, 5, 6, 8]
@@ -44,9 +44,9 @@ Signals/CI artifacts → triage board → severity/SLA → owner → fix/PR → 
 
 ## Todo list
 
-- [ ] RACI và SLA được owner xác nhận.
-- [ ] Incident closure requires regression + verification metric.
-- [ ] KPI dashboard/report có baseline period.
+- [x] RACI và SLA được owner xác nhận.
+- [x] Incident closure requires regression + verification metric.
+- [x] KPI dashboard/report có baseline period.
 
 ## Success criteria
 

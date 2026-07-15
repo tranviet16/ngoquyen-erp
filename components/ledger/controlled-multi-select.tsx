@@ -26,7 +26,9 @@ export function ControlledMultiSelect({ options, selected, label, onChange }: Pr
 
   // Sync draft when parent resets
   useEffect(() => {
-    setDraft(selected);
+    let active = true;
+    queueMicrotask(() => { if (active) setDraft(selected); });
+    return () => { active = false; };
   }, [selected]);
 
   useEffect(() => {

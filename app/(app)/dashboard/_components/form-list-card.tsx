@@ -10,13 +10,22 @@ export function FormListCard({
   viewAllHref: string;
 }) {
   return (
-    <div className="flex flex-col rounded-xl bg-card ring-1 ring-foreground/10">
-      <div className="px-4 pt-3 pb-2 border-b">
-        <h3 className="text-sm font-semibold">Phiếu chờ duyệt</h3>
+    <div className="nq-card flex flex-col overflow-hidden">
+      <div className="nq-card-head">
+        <div>
+          <h3 className="nq-card-title">Phiếu chờ duyệt</h3>
+          <p className="nq-card-sub">{forms.length} phiếu cần xử lý</p>
+        </div>
+        <Link
+          href={viewAllHref}
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          Tất cả <ArrowRight className="size-3" />
+        </Link>
       </div>
-      <div className="flex-1 p-3 space-y-1.5">
+      <div className="flex-1 bg-card">
         {forms.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">
+          <p className="px-5 py-5 text-sm text-muted-foreground">
             Không có phiếu phối hợp chờ duyệt.
           </p>
         ) : (
@@ -24,12 +33,12 @@ export function FormListCard({
             <Link
               key={f.id}
               href={`/van-hanh/phieu-phoi-hop/${f.id}`}
-              className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent text-sm"
+              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-b px-5 py-3 text-sm transition-colors last:border-b-0 hover:bg-secondary/45"
             >
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">
+              <span className="shrink-0 rounded border bg-secondary px-2 py-1 font-mono text-[11px] font-semibold text-muted-foreground">
                 {f.code}
               </span>
-              <span className="truncate flex-1">{f.content}</span>
+              <span className="min-w-0 truncate font-medium">{f.content}</span>
               <span className="shrink-0 text-xs text-muted-foreground">
                 {f.creator.name}
               </span>
@@ -37,12 +46,6 @@ export function FormListCard({
           ))
         )}
       </div>
-      <Link
-        href={viewAllHref}
-        className="flex items-center justify-end gap-1 px-4 py-2 text-xs text-muted-foreground hover:text-foreground border-t"
-      >
-        Xem tất cả <ArrowRight className="h-3 w-3" />
-      </Link>
     </div>
   );
 }

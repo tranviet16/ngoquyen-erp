@@ -3,9 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
+import {
+  normalizeJournalText,
+  resolveJournalCategoryId,
+  suggestJournalLabel,
+  type JournalCategoryLike,
+} from "@/lib/tai-chinh/journal-auto-label";
 
 async function getRole(): Promise<string | null> {
   try {
@@ -106,7 +112,7 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
 
 export async function createJournalEntry(input: JournalEntryInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const fromAccountId = input.fromAccountId ?? null;
   const toAccountId = input.toAccountId ?? null;
@@ -147,7 +153,7 @@ export async function createJournalEntry(input: JournalEntryInput) {
 
 export async function updateJournalEntry(id: number, input: JournalEntryInput) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
 
   const fromAccountId = input.fromAccountId ?? null;
   const toAccountId = input.toAccountId ?? null;
@@ -189,7 +195,16 @@ export async function updateJournalEntry(id: number, input: JournalEntryInput) {
 
 export async function softDeleteJournalEntry(id: number) {
   const role = await getRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  const current = await prisma.journalEntry.findUnique({
+    where: { id },
+    select: { refModule: true },
+  });
+  if (current?.refModule === "state_obligation") {
+    throw new Error(
+      "Bút toán này tự sinh từ module Nghĩa vụ Nhà nước — hãy xóa tại Sổ theo dõi nghĩa vụ.",
+    );
+  }
   await prisma.journalEntry.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/tai-chinh/nhat-ky");
   revalidatePath("/tai-chinh");
@@ -197,21 +212,37 @@ export async function softDeleteJournalEntry(id: number) {
 
 export async function softDeleteJournalEntries(ids: number[]) {
   const role = await getRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "tai-chinh", "admin");
   if (!ids.length) return;
-  await prisma.journalEntry.updateMany({
-    where: { id: { in: ids } },
-    data: { deletedAt: new Date() },
+  const guarded = await prisma.journalEntry.findFirst({
+    where: { id: { in: ids }, refModule: "state_obligation" },
+    select: { id: true },
   });
+  if (guarded) {
+    throw new Error(
+      "Có bút toán tự sinh từ module Nghĩa vụ Nhà nước trong vùng chọn — hãy xóa tại Sổ theo dõi nghĩa vụ.",
+    );
+  }
+  const deletedAt = new Date();
+  await prisma.$transaction(
+    ids.map((id) =>
+      prisma.journalEntry.update({ where: { id }, data: { deletedAt } }),
+    ),
+  );
   revalidatePath("/tai-chinh/nhat-ky");
   revalidatePath("/tai-chinh");
 }
 
 export async function patchJournalEntry(id: number, patch: Record<string, unknown>) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
   const current = await prisma.journalEntry.findUnique({ where: { id } });
   if (!current || current.deletedAt) throw new Error(`Bút toán #${id} không tồn tại`);
+  if (current.refModule === "state_obligation") {
+    throw new Error(
+      "Bút toán này tự sinh từ module Nghĩa vụ Nhà nước — hãy chỉnh sửa tại Sổ theo dõi nghĩa vụ.",
+    );
+  }
 
   const merged: JournalEntryInput = {
     date: (patch.date as string | undefined) ?? current.date.toISOString(),
@@ -244,7 +275,7 @@ export async function bulkUpsertJournalEntries(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   const role = await getRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
   const out: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;
@@ -271,4 +302,106 @@ export async function bulkUpsertJournalEntries(
     }
   }
   return out;
+}
+
+export async function autoLabelJournalEntries(ids: number[]) {
+  const role = await getRole();
+  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!uniqueIds.length) {
+    return { total: 0, updated: 0, skipped: 0, missingCategories: [] as string[], createdCategories: [] as string[] };
+  }
+
+  const [entries, categories] = await Promise.all([
+    prisma.journalEntry.findMany({
+      where: { id: { in: uniqueIds }, deletedAt: null },
+      select: {
+        id: true,
+        description: true,
+        entryType: true,
+        costBehavior: true,
+        fromAccountId: true,
+        toAccountId: true,
+        refModule: true,
+      },
+    }),
+    prisma.expenseCategory.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const missingCategories = new Set<string>();
+  const createdCategories = new Set<string>();
+  const categoryList: JournalCategoryLike[] = [...categories];
+  const updates: Array<ReturnType<typeof prisma.journalEntry.update>> = [];
+  let skipped = uniqueIds.length - entries.length;
+
+  async function getOrCreateAutoCategory(categoryName: string | null) {
+    if (!categoryName) return null;
+
+    const existingId = resolveJournalCategoryId(categoryName, categoryList);
+    if (existingId != null) return existingId;
+
+    const code = buildExpenseCategoryCode(categoryName);
+    const created = await prisma.expenseCategory.create({
+      data: { code, name: categoryName, level: 0 },
+      select: { id: true, name: true },
+    });
+    categoryList.push(created);
+    createdCategories.add(created.name);
+    return created.id;
+  }
+
+  for (const entry of entries) {
+    if (entry.refModule === "state_obligation") {
+      skipped += 1;
+      continue;
+    }
+
+    const suggestion = suggestJournalLabel(entry);
+    if (!suggestion) {
+      skipped += 1;
+      continue;
+    }
+
+    let expenseCategoryId: number | null = null;
+    try {
+      expenseCategoryId = await getOrCreateAutoCategory(suggestion.categoryName);
+    } catch {
+      if (suggestion.categoryName) missingCategories.add(suggestion.categoryName);
+      skipped += 1;
+      continue;
+    }
+
+    updates.push(prisma.journalEntry.update({
+      where: { id: entry.id },
+      data: {
+        entryType: suggestion.entryType,
+        costBehavior: suggestion.costBehavior,
+        expenseCategoryId,
+      },
+    }));
+  }
+
+  if (updates.length) await prisma.$transaction(updates);
+  revalidatePath("/tai-chinh/nhat-ky");
+  revalidatePath("/tai-chinh");
+
+  return {
+    total: uniqueIds.length,
+    updated: updates.length,
+    skipped,
+    missingCategories: [...missingCategories],
+    createdCategories: [...createdCategories],
+  };
+}
+
+function buildExpenseCategoryCode(name: string) {
+  const base = normalizeJournalText(name)
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+  return (base || "AUTO_CATEGORY").slice(0, 30);
 }

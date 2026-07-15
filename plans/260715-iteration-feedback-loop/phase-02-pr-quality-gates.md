@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Bootstrap CI và quality lane"
-status: pending
+status: completed
 priority: P1
 effort: "12h"
 dependencies: [1]
@@ -45,9 +45,9 @@ Dựng các lane CI theo rủi ro ở report-only trước. Required check và b
 
 ## Todo list
 
-- [ ] Risk lanes hiện trên PR thử với status names ổn định.
-- [ ] Security lane fail được report đúng; activation deferred sang Phase 8.
-- [ ] Flaky policy được máy kiểm tra.
+- [x] Risk lanes hiện trên PR thử với status names ổn định.
+- [x] Security lane fail được report đúng; activation deferred sang Phase 8.
+- [x] Flaky policy được máy kiểm tra.
 
 ## Success criteria
 

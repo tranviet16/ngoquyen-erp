@@ -2,11 +2,6 @@ import { KpiCard } from "./kpi-card";
 import { DeptBarRow } from "./dept-bar-row";
 import type { DeptMetrics } from "@/lib/van-hanh/performance-types";
 
-function sumNotNull(values: (number | null)[]): number | null {
-  const arr = values.filter((v): v is number => v !== null);
-  if (arr.length === 0) return null;
-  return arr.reduce((a, b) => a + b, 0);
-}
 function avgNotNull(values: (number | null)[]): number | null {
   const arr = values.filter((v): v is number => v !== null);
   if (arr.length === 0) return null;

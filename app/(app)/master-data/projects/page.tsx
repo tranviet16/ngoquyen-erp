@@ -1,27 +1,42 @@
 import { Suspense } from "react";
-import { ProjectsClient } from "./projects-client";
-import { listProjects } from "@/lib/master-data/project-service";
+import { prisma } from "@/lib/prisma";
+import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { PROJECT_SPEC } from "@/lib/master-data/projects/table-spec";
 import { serializeDecimals } from "@/lib/serialize";
+import { ProjectsClient } from "./projects-client";
 
 interface Props {
-  searchParams: Promise<{ search?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function ProjectsPage({ searchParams }: Props) {
-  const params = await searchParams;
-  const search = params.search ?? "";
-  const page = Number(params.page ?? 1);
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") params.set(k, v);
+  }
 
-  const result = await listProjects({ search, page, pageSize: 20 });
+  const state = parseTableQuery(params, PROJECT_SPEC);
+  const args = buildPrismaArgs(state, PROJECT_SPEC);
+  const where = { ...args.where, deletedAt: null };
+
+  const [rows, total] = await Promise.all([
+    prisma.project.findMany({
+      ...args,
+      where,
+      include: { _count: { select: { categories: { where: { deletedAt: null } } } } },
+    }),
+    prisma.project.count({ where }),
+  ]);
 
   return (
     <Suspense>
       <ProjectsClient
-        data={serializeDecimals(result.items)}
-        total={result.total}
-        page={result.page}
-        pageSize={result.pageSize}
-        searchValue={search}
+        data={serializeDecimals(rows)}
+        total={total}
+        page={state.page}
+        pageSize={state.pageSize}
+        searchValue={state.search ?? ""}
       />
     </Suspense>
   );

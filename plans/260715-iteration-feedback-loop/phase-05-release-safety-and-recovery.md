@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "An toàn release, migration và phục hồi"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: [1, 2, 3]
@@ -43,9 +43,9 @@ Release checklist tiêu thụ manifest P0 và runbook. Restore drill tạo dispo
 
 ## Todo list
 
-- [ ] Restore drill xanh trên disposable DB.
-- [ ] Migration policy được review.
-- [ ] Release checklist có owner ký nhận.
+- [x] Restore drill xanh trên disposable DB.
+- [x] Migration policy được review.
+- [x] Release checklist có owner ký nhận.
 
 ## Success criteria
 

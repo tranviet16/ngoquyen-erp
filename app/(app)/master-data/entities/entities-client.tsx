@@ -2,35 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { DataTable, type ColumnDef } from "@/components/data-table";
+import { DataTable } from "@/components/data-table";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { EntityForm } from "@/components/master-data/entity-form";
-import { createEntity, updateEntity, softDeleteEntity } from "@/lib/master-data/entity-service";
+import { createEntity, updateEntity, softDeleteEntity, patchEntity } from "@/lib/master-data/entity-service";
 import { type EntityInput } from "@/lib/master-data/schemas";
 import { useRouter } from "next/navigation";
-
-type EntityRow = {
-  id: number;
-  name: string;
-  type: string;
-  note: string | null;
-  createdAt: Date;
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  company: "Công ty",
-  person: "Cá nhân",
-};
-
-const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "name", header: "Tên chủ thể" },
-  {
-    key: "type",
-    header: "Loại",
-    render: (row) => TYPE_LABELS[row.type as string] ?? String(row.type),
-  },
-  { key: "note", header: "Ghi chú" },
-];
+import { ENTITY_COLUMNS, ENTITY_SPEC, type EntityRow } from "@/lib/master-data/entities/table-spec";
 
 interface EntitiesClientProps {
   data: EntityRow[];
@@ -44,7 +22,7 @@ export function EntitiesClient({ data, total, page, pageSize, searchValue }: Ent
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EntityRow | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function handleCreate(input: EntityInput) {
     await createEntity(input);
@@ -75,13 +53,18 @@ export function EntitiesClient({ data, total, page, pageSize, searchValue }: Ent
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={ENTITY_COLUMNS}
         data={data as unknown as Record<string, unknown>[]}
         total={total}
         page={page}
         pageSize={pageSize}
         searchValue={searchValue}
         searchPlaceholder="Tìm theo tên..."
+        resourceSpec={ENTITY_SPEC}
+        onCellEdit={async (row, key, value) => {
+          const entity = row as unknown as EntityRow;
+          return patchEntity(entity.id, { [key]: value }) as Promise<Record<string, unknown>>;
+        }}
         actionColumn={(row) => {
           const entity = row as unknown as EntityRow;
           return (

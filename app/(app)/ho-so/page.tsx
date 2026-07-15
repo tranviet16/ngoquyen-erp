@@ -23,7 +23,9 @@ export default async function HoSoPage() {
         name: user.name,
         email: user.email,
         image: user.image,
+        username: user.username,
         role: user.role,
+        title: user.title,
         isLeader: user.isLeader,
         isDirector: user.isDirector,
         department: user.department

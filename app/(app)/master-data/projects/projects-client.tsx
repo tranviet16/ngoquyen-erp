@@ -8,27 +8,51 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { ProjectForm } from "@/components/master-data/project-form";
-import { createProject, updateProject, softDeleteProject } from "@/lib/master-data/project-service";
+import { createProject, updateProject, softDeleteProject, patchProject } from "@/lib/master-data/project-service";
 import { type ProjectInput } from "@/lib/master-data/schemas";
+import { PROJECT_SPEC, type ProjectRow } from "@/lib/master-data/projects/table-spec";
 import { formatNumber } from "@/lib/utils/format";
 
-type ProjectRow = {
-  id: number;
-  code: string;
-  name: string;
-  ownerInvestor: string | null;
-  status: string;
-  _count: { categories: number };
-};
-
-const COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "code", header: "Mã DA", className: "w-[100px] font-mono" },
-  { key: "name", header: "Tên dự án" },
+const PROJECT_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
+  {
+    key: "code",
+    header: "Mã DA",
+    kind: "text",
+    className: "w-[100px] font-mono",
+    sortable: true,
+    filterable: true,
+    editable: true,
+    editKind: "text",
+  },
+  {
+    key: "name",
+    header: "Tên dự án",
+    kind: "text",
+    sortable: true,
+    filterable: true,
+    editable: true,
+    editKind: "text",
+  },
   { key: "ownerInvestor", header: "Chủ đầu tư" },
   {
     key: "status",
     header: "Trạng thái",
+    kind: "select",
     className: "w-[160px]",
+    sortable: true,
+    filterable: true,
+    editable: true,
+    editKind: "select",
+    editOptions: [
+      { id: "active", name: "Đang thi công" },
+      { id: "completed", name: "Hoàn thành" },
+      { id: "paused", name: "Tạm dừng" },
+    ],
+    filterOptions: [
+      { id: "active", name: "Đang thi công" },
+      { id: "completed", name: "Hoàn thành" },
+      { id: "paused", name: "Tạm dừng" },
+    ],
     render: (row) => <StatusBadge status={row.status as string} />,
   },
   {
@@ -55,7 +79,7 @@ export function ProjectsClient({ data, total, page, pageSize, searchValue }: Pro
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProjectRow | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function handleCreate(input: ProjectInput) {
     await createProject(input);
@@ -89,13 +113,18 @@ export function ProjectsClient({ data, total, page, pageSize, searchValue }: Pro
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={PROJECT_COLUMNS}
         data={data as unknown as Record<string, unknown>[]}
         total={total}
         page={page}
         pageSize={pageSize}
         searchValue={searchValue}
         searchPlaceholder="Tìm theo mã hoặc tên..."
+        resourceSpec={PROJECT_SPEC}
+        onCellEdit={async (row, key, value) => {
+          const project = row as unknown as ProjectRow;
+          return patchProject(project.id, { [key]: value }) as Promise<Record<string, unknown>>;
+        }}
         onRowClick={(row) => router.push(`/master-data/projects/${(row as unknown as ProjectRow).id}`)}
         actionColumn={(row) => {
           const project = row as unknown as ProjectRow;

@@ -6,7 +6,8 @@
  * Auth enforcement layers in this app:
  *  - `proxy.ts` (Next 16 middleware): for any non-public path, a request with
  *    NO session cookie is 307-redirected to /login. It only checks cookie
- *    *presence*, never validity. Public prefixes: /api/auth, /login, /_next.
+ *    *presence*, never validity. Public prefixes: /api/auth, /api/health,
+ *    /login, /_next.
  *  - Route handlers: call `auth.api.getSession` → 401 on invalid/garbage
  *    cookie; a few also call `canAccess` (ACL) → 403.
  *
@@ -38,8 +39,8 @@ export const SECURITY_ENDPOINTS: SecEndpoint[] = [
     name: "health",
     method: "GET",
     path: "/api/health",
-    note: "Handler has no auth check; proxy still redirects anon (path not public).",
-    expect: { admin: [200, 503], viewer: [200, 503], scoped: [200, 503], anon: ANON_BLOCKED },
+    note: "Public liveness/readiness endpoint; every role, including anonymous probes, receives the handler status.",
+    expect: { admin: [200, 503], viewer: [200, 503], scoped: [200, 503], anon: [200, 503] },
   },
   {
     name: "auth-get-session",

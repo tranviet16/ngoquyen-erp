@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
 import { Calendar, User as UserIcon, FileText } from "lucide-react";
@@ -32,8 +32,11 @@ export function TaskCard({
   onClick: () => void;
   dragId?: string | number;
 }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: dragId ?? task.id,
     disabled: !draggable || !mounted,

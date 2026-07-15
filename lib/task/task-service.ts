@@ -6,7 +6,6 @@ import { getUserContext, type UserContext } from "@/lib/department-rbac";
 import {
   getDeptAccessMap,
   hasDeptAccess,
-  assertDeptAccess,
   type DeptAccessMap,
 } from "@/lib/dept-access";
 import {
@@ -111,6 +110,21 @@ function canDeleteTask(task: Task, ctx: UserContext, role: string): boolean {
   if (role === "admin") return true;
   if (task.creatorId === ctx.userId && task.status === "todo") return true;
   return false;
+}
+
+export function assertCanCreateTask(
+  ctx: UserContext,
+  role: string,
+  deptId: number,
+  assigneeId: string,
+): void {
+  if (role === "admin" || ctx.isDirector) return;
+  const ownDept = ctx.departmentId !== null && ctx.departmentId === deptId;
+  if (ctx.isLeader && ownDept) return;
+  if (ownDept && assigneeId === ctx.userId) return; // self-task
+  throw new Error(
+    "Bạn chỉ được tự tạo task cho mình. Giao việc cho người khác hoặc phòng khác phải qua Phiếu phối hợp công việc.",
+  );
 }
 
 export function moveRole(task: Task, ctx: UserContext, role: string): TaskMoveRole {
@@ -226,25 +240,19 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
   const data = createTaskSchema.parse(input);
   const { ctx, role } = await requireContext();
 
-  // Permission: member of dept | leader | admin/director
-  // Cross-dept "edit" grant KHÔNG cho phép tạo task — giữ rule cũ.
-  const isMember = ctx.departmentId === data.deptId;
-  const allowed = role === "admin" || ctx.isDirector || ctx.isLeader || isMember;
-  if (!allowed) throw new Error("Bạn không có quyền tạo task ở phòng này");
+  assertCanCreateTask(ctx, role, data.deptId, data.assigneeId);
 
   // Validate dept active
   const dept = await prisma.department.findUnique({ where: { id: data.deptId } });
   if (!dept || !dept.isActive) throw new Error("Phòng ban không hợp lệ hoặc đã ngừng hoạt động");
 
-  // Validate assignee belongs to dept (if provided)
-  if (data.assigneeId) {
-    const assignee = await prisma.user.findUnique({
-      where: { id: data.assigneeId },
-      select: { departmentId: true },
-    });
-    if (!assignee || assignee.departmentId !== data.deptId) {
-      throw new Error("Người được giao phải thuộc phòng đã chọn");
-    }
+  // Validate assignee belongs to dept
+  const assignee = await prisma.user.findUnique({
+    where: { id: data.assigneeId },
+    select: { departmentId: true },
+  });
+  if (!assignee || assignee.departmentId !== data.deptId) {
+    throw new Error("Người được giao phải thuộc phòng đã chọn");
   }
 
   return prisma.$transaction(async (tx) => {
@@ -253,7 +261,7 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
         title: data.title,
         description: data.description ?? null,
         deptId: data.deptId,
-        assigneeId: data.assigneeId ?? null,
+        assigneeId: data.assigneeId,
         priority: data.priority,
         deadline: data.deadline,
         creatorId: ctx.userId,

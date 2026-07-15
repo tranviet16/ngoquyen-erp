@@ -125,6 +125,14 @@ export interface PaymentPlanLite {
   dot4Milestone: string | null;
 }
 
+export {
+  suggestMonthlySlDtTargets,
+  type MonthlySlDtTargetInputs,
+  type MonthlySlDtTargetOptions,
+  type MonthlySlDtTargetSuggestion,
+  type MonthlyTargetReasonCode,
+} from "./monthly-target-suggestion";
+
 /**
  * Suggest target milestone (col "Công việc cần hoàn thành theo DT lũy kế")
  * by comparing dtThoLuyKe to cumulative payment-plan amounts.

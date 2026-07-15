@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/rbac";
+import { prisma } from "@/lib/prisma";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Topbar } from "@/components/layout/topbar";
@@ -12,10 +12,9 @@ import { Topbar } from "@/components/layout/topbar";
  * middleware is misconfigured, unauthenticated requests cannot reach any
  * (app) route group page.
  *
- * RBAC: `hasRole(role, "viewer")` passes for every valid role, blocking only
- * users with no role at all. Stricter per-route role checks (e.g. requireRole
- * for "admin" segments) should be added in those segments' layouts or page
- * components using `requireRole()` from lib/rbac.ts.
+ * RBAC: this layout only blocks users with no role at all. Per-module access
+ * checks are enforced in each segment's layout via requireModuleAccess() and
+ * in write paths via requireRoleModuleAccess() from lib/acl.
  */
 export default async function AppLayout({
   children,
@@ -29,18 +28,26 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  // Require at least the lowest role — any user with no role is denied.
-  if (!hasRole(session.user.role, "viewer")) {
+  const activeUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isActive: true },
+  });
+  if (!activeUser?.isActive) {
+    redirect("/login");
+  }
+
+  // Any user with no role at all is denied.
+  if (!session.user.role) {
     redirect("/login");
   }
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
+    <SidebarProvider style={{ "--sidebar-width": "17rem" } as React.CSSProperties}>
+      <div className="nq-app-shell flex min-h-screen w-full">
         <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Topbar />
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="nq-main flex-1 overflow-auto">
             {children}
           </main>
         </div>

@@ -5,6 +5,7 @@ import {
   assignTask,
   createTaskManual,
   deleteTask,
+  listDeptMembers,
   moveTask,
   updateTask,
 } from "@/lib/task/task-service";
@@ -54,6 +55,10 @@ export async function createTaskAction(input: CreateTaskInput) {
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
   return { id: t.id };
+}
+
+export async function listDeptMembersAction(deptId: number) {
+  return listDeptMembers(deptId);
 }
 
 export async function updateTaskAction(id: number, input: UpdateTaskInput) {

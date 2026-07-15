@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, type FormEvent } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { ArrowLeft, LogOut, User as UserIcon } from "lucide-react";
+import { ArrowLeft, LogOut, Search, Settings, User as UserIcon } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth-client";
 import {
   DropdownMenu,
@@ -21,13 +22,14 @@ interface ExtendedUser {
   name: string;
   email: string;
   role?: string;
+  title?: string | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Quản trị viên",
   ketoan: "Kế toán",
-  thukho: "Thủ kho",
-  giamsat: "Giám sát",
+  canbo_vt: "Cán bộ vật tư",
+  chihuy_ct: "Cán bộ kỹ thuật",
   viewer: "Người xem",
 };
 
@@ -42,10 +44,12 @@ function initialsOf(name?: string, email?: string): string {
 export function Topbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const [query, setQuery] = useState("");
   const { data: session } = useSession();
   const showBack = pathname !== "/dashboard" && pathname !== "/";
   const user = session?.user as ExtendedUser | undefined;
   const roleLabel = user?.role ? ROLE_LABELS[user.role] ?? user.role : null;
+  const positionLabel = user?.title || roleLabel;
 
   async function handleSignOut() {
     await signOut();
@@ -53,10 +57,18 @@ export function Topbar() {
     router.refresh();
   }
 
+  function handleSearch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+    router.push(`/tim-kiem?q=${encodeURIComponent(q)}`);
+    setQuery("");
+  }
+
   return (
-    <header className="flex h-14 items-center gap-3 border-b bg-background/95 backdrop-blur-sm px-4 sticky top-0 z-20 supports-[backdrop-filter]:bg-background/80">
-      <SidebarTrigger className="-ml-1 shrink-0" />
-      <div className="h-5 w-px bg-border shrink-0" aria-hidden="true" />
+    <header className="nq-topbar sticky top-0 z-20 flex h-16 items-center gap-3 border-b px-5">
+      <SidebarTrigger className="-ml-1 size-9 shrink-0 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" />
+      <div className="h-4 w-px bg-border shrink-0" aria-hidden="true" />
       {showBack && (
         <button
           type="button"
@@ -68,27 +80,49 @@ export function Topbar() {
           <ArrowLeft className="size-4" aria-hidden="true" />
         </button>
       )}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <Breadcrumb />
       </div>
+      <form
+        onSubmit={handleSearch}
+        className="hidden h-9 w-[320px] items-center gap-2 rounded-md border bg-card/80 px-2.5 text-left text-xs text-muted-foreground transition-colors focus-within:border-primary/45 focus-within:bg-card lg:flex"
+      >
+        <Search className="size-3.5" aria-hidden="true" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          placeholder="Tìm dự án, NCC, phiếu phối hợp..."
+          aria-label="Tìm kiếm"
+        />
+      </form>
+      <div className="hidden h-4 w-px bg-border lg:block" aria-hidden="true" />
       <div className="flex items-center gap-1 shrink-0">
         <ThemeToggle />
         <NotificationBell />
+        <button
+          type="button"
+          className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label="Cài đặt"
+          title="Cài đặt"
+        >
+          <Settings className="size-4" aria-hidden="true" />
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="flex items-center gap-2 rounded-md pl-1.5 pr-2 py-1 hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="flex h-10 items-center gap-2 rounded-md border bg-card/72 py-1 pl-1.5 pr-2 transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             aria-label="Tài khoản"
           >
-            <span className="inline-flex items-center justify-center size-8 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+            <span className="inline-flex size-8 items-center justify-center rounded-md bg-primary text-xs font-bold text-primary-foreground">
               {initialsOf(user?.name, user?.email)}
             </span>
             <span className="hidden sm:flex flex-col items-start leading-tight text-left min-w-0">
               <span className="text-sm font-medium truncate max-w-[160px]">
                 {user?.name ?? user?.email ?? "Người dùng"}
               </span>
-              {roleLabel && (
+              {positionLabel && (
                 <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">
-                  {roleLabel}
+                  {positionLabel}
                 </span>
               )}
             </span>
@@ -98,9 +132,9 @@ export function Topbar() {
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-medium truncate">{user?.name ?? "Người dùng"}</span>
                 <span className="text-xs font-normal text-muted-foreground truncate">{user?.email}</span>
-                {roleLabel && (
+                {positionLabel && (
                   <span className="mt-1 inline-flex w-fit items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                    {roleLabel}
+                    {positionLabel}
                   </span>
                 )}
               </div>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { deliverySchema, type DeliveryInput } from "@/lib/vat-tu-ncc/schemas";
 
@@ -33,7 +33,7 @@ export function DeliveryForm({ supplierId, items, projects, defaultValues, onSub
     },
   });
 
-  const watchItemId = form.watch("itemId");
+  const watchItemId = useWatch({ control: form.control, name: "itemId" });
   useEffect(() => {
     const item = items.find((i) => i.id === Number(watchItemId));
     if (item) form.setValue("unit", item.unit);

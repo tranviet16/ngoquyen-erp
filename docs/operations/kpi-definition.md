@@ -1,5 +1,7 @@
 # KPI definitions
 
+Baseline period 1 started with the 2026-07-15/16 release evidence. Targets remain intentionally unset until two to four weeks of measurements are available.
+
 | KPI | Source | Cadence |
 |---|---|---|
 | P0 path coverage | risk manifest and security test evidence | weekly |

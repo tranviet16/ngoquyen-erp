@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { contractSchema, type ContractInput } from "./schemas";
 
@@ -26,7 +26,7 @@ export async function listContracts(projectId: number) {
 
 export async function createContract(input: ContractInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = contractSchema.parse(input);
   const record = await prisma.projectContract.create({
     data: {
@@ -48,7 +48,7 @@ export async function createContract(input: ContractInput) {
 
 export async function updateContract(id: number, input: ContractInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = contractSchema.parse(input);
   const record = await prisma.projectContract.update({
     where: { id },
@@ -70,7 +70,7 @@ export async function updateContract(id: number, input: ContractInput) {
 
 export async function softDeleteContract(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectContract.update({
     where: { id },
     data: { deletedAt: new Date() },

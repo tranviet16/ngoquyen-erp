@@ -7,6 +7,7 @@ export default async function SlDtPage() {
 
   const navItems = [
     { href: "/sl-dt/nhap-thang-moi", label: "Nhập tháng mới", desc: "Form 4 tab — kế thừa từ tháng trước, lũy kế tự động", primary: true },
+    { href: "/sl-dt/danh-muc-lo", label: "Danh mục lô", desc: "Quản lý nhóm lớn, nhóm nhỏ, lô và kỳ bắt đầu" },
     { href: "/sl-dt/bao-cao-sl", label: "Báo cáo Sản lượng", desc: "11 cột SL theo lô" },
     { href: "/sl-dt/bao-cao-dt", label: "Báo cáo Doanh thu", desc: "13 cột DT theo lô" },
     { href: "/sl-dt/chi-tieu", label: "Chỉ tiêu", desc: "Tiến độ + phải nộp tiền" },

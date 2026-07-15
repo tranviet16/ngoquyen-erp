@@ -4,7 +4,13 @@
  * All async loaders are React cache()-memoized for per-request dedup.
  */
 
-import { LEVEL_RANK, MODULE_AXIS, type AccessLevel, type ModuleKey } from "./modules";
+import {
+  LEVEL_RANK,
+  MODULE_AXIS,
+  isModuleEnabled,
+  type AccessLevel,
+  type ModuleKey,
+} from "./modules";
 import { getEffectiveModuleLevel } from "./module-access";
 import {
   getProjectAccessMap,
@@ -59,6 +65,8 @@ export async function canAccess(
   moduleKey: ModuleKey,
   opts: CanAccessOpts,
 ): Promise<boolean> {
+  if (!isModuleEnabled(moduleKey)) return false;
+
   const user = await loadUser(userId);
 
   // D1: admin short-circuit — must be before null check to avoid false negatives

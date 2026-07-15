@@ -5,6 +5,31 @@ loadEnv({ path: ".env.test" });
 import type { FullConfig } from "@playwright/test";
 import { Pool } from "pg";
 import { E2E_PASSWORD, E2E_USERS } from "./constants";
+import { ROLES } from "../scripts/roles-seed-data";
+
+/**
+ * Seeds the dynamic-RBAC tables (`roles` + `role_permissions`) idempotently.
+ * Required since the RBAC refactor: write guards resolve permissions from
+ * `role_permissions`, so E2E users with a non-admin role need their matrix.
+ */
+async function seedRoles(pool: Pool): Promise<void> {
+  for (const role of ROLES) {
+    await pool.query(
+      `INSERT INTO roles (id, name, description, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, now(), now())
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name,
+         description = EXCLUDED.description, "updatedAt" = now()`,
+      [role.id, role.name, role.description],
+    );
+    await pool.query(`DELETE FROM role_permissions WHERE "roleId" = $1`, [role.id]);
+    for (const [moduleKey, level] of Object.entries(role.permissions)) {
+      await pool.query(
+        `INSERT INTO role_permissions ("roleId", "moduleKey", level) VALUES ($1, $2, $3)`,
+        [role.id, moduleKey, level],
+      );
+    }
+  }
+}
 
 /**
  * Creates the 3 base E2E users idempotently. Sign-up goes through the running
@@ -22,6 +47,7 @@ async function globalSetup(config: FullConfig): Promise<void> {
 
   const pool = new Pool({ connectionString: url });
   try {
+    await seedRoles(pool);
     for (const u of E2E_USERS) {
       const { rows } = await pool.query<{ id: string; role: string }>(
         "SELECT id, role FROM users WHERE email = $1",
@@ -37,7 +63,12 @@ async function globalSetup(config: FullConfig): Promise<void> {
           throw new Error(`Failed to create base E2E user ${u.email}: ${res.status} ${await res.text()}`);
         }
       }
-      await pool.query("UPDATE users SET role = $1 WHERE email = $2", [u.role, u.email]);
+      // Set role + username/displayUsername: better-auth marks `role` as
+      // non-input, and the login page signs in via the username() plugin.
+      await pool.query(
+        'UPDATE users SET role = $1, username = $2, "displayUsername" = $2 WHERE email = $3',
+        [u.role, u.username, u.email],
+      );
     }
   } finally {
     await pool.end();

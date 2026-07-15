@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import {
   createDepartment,
   updateDepartment,
@@ -15,7 +15,7 @@ import {
 async function requireAdmin() {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.phong-ban", "admin");
 }
 
 export async function createDepartmentAction(data: { code: string; name: string }) {

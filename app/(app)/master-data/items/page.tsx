@@ -1,27 +1,39 @@
 import { Suspense } from "react";
+import { prisma } from "@/lib/prisma";
+import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { ITEM_SPEC } from "@/lib/master-data/items/table-spec";
 import { ItemsClient } from "./items-client";
-import { listItems } from "@/lib/master-data/item-service";
 
 interface Props {
-  searchParams: Promise<{ search?: string; page?: string; type?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function ItemsPage({ searchParams }: Props) {
-  const params = await searchParams;
-  const search = params.search ?? "";
-  const page = Number(params.page ?? 1);
-  const type = params.type;
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string") params.set(k, v);
+  }
 
-  const result = await listItems({ search, page, pageSize: 20, type });
+  const state = parseTableQuery(params, ITEM_SPEC);
+  const args = buildPrismaArgs(state, ITEM_SPEC);
+
+  const [rows, total] = await Promise.all([
+    prisma.item.findMany({
+      ...args,
+      where: { ...args.where, deletedAt: null },
+    }),
+    prisma.item.count({ where: { ...args.where, deletedAt: null } }),
+  ]);
 
   return (
     <Suspense>
       <ItemsClient
-        data={result.items}
-        total={result.total}
-        page={result.page}
-        pageSize={result.pageSize}
-        searchValue={search}
+        data={rows}
+        total={total}
+        page={state.page}
+        pageSize={state.pageSize}
+        searchValue={state.search ?? ""}
       />
     </Suspense>
   );

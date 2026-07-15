@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { hasRole } from "@/lib/rbac";
+import { hasRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { getRuns, getAdapters } from "./import-actions";
 import { ImportUploadForm } from "./import-upload-form";
 import { DeleteRunButton } from "./delete-run-button";
@@ -9,11 +9,12 @@ import { DeleteRunButton } from "./delete-run-button";
 export default async function AdminImportPage() {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
-  if (!session?.user || !hasRole(session.user.role, "admin")) {
+  if (!session?.user || !(await hasRoleModuleAccess(session.user.role, "admin.import", "admin"))) {
     redirect("/dashboard");
   }
 
   const [runs, adapters] = await Promise.all([getRuns(), getAdapters()]);
+  const rollbackByAdapter = new Map(adapters.map((a) => [a.name, a.supportsRollback]));
 
   function statusBadge(status: string) {
     const colors: Record<string, string> = {
@@ -81,7 +82,11 @@ export default async function AdminImportPage() {
                       </a>
                     </td>
                     <td className="p-2">
-                      <DeleteRunButton id={r.id} status={r.status} />
+                      <DeleteRunButton
+                        id={r.id}
+                        status={r.status}
+                        supportsRollback={rollbackByAdapter.get(r.adapter) ?? true}
+                      />
                     </td>
                   </tr>
                 ))}

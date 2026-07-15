@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeSanLuong, computeDoanhThu, computeChiTieu, computePaidStatus, computeDtCanThucHien, computeTinhTrangDoanhThu, suggestTargetMilestone } from "./compute";
+import { cleanHierarchyLabel, hasHierarchyLabel } from "./hierarchy";
+import { activeLotWhere } from "./lot-effective";
 import { rollupSanLuong, rollupDoanhThu, type SanLuongRow, type DoanhThuRow } from "./rollup";
 
 export type { SanLuongRow, DoanhThuRow };
@@ -20,13 +22,16 @@ async function buildScoreMap(): Promise<Map<string, number>> {
 // ─── Báo cáo Sản lượng ───────────────────────────────────────────────────────
 
 export async function getSanLuongReport(year: number, month: number): Promise<SanLuongRow[]> {
-  const lots = await prisma.slDtLot.findMany({
-    where: { deletedAt: null },
-    include: {
-      monthlyInputs: { where: { year, month } },
-    },
-    orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
-  });
+  const [lots, labels] = await Promise.all([
+    prisma.slDtLot.findMany({
+      where: activeLotWhere(year, month, "sanLuong"),
+      include: {
+        monthlyInputs: { where: { year, month } },
+      },
+      orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
+    }),
+    prisma.slDtSubtotalLabel.findMany(),
+  ]);
 
   const lotRows: SanLuongRow[] = lots.map((lot) => {
     const inp = lot.monthlyInputs[0];
@@ -55,19 +60,22 @@ export async function getSanLuongReport(year: number, month: number): Promise<Sa
     };
   });
 
-  return rollupSanLuong(lotRows);
+  return rollupSanLuong(lotRows, hierarchyOrder(labels));
 }
 
 // ─── Báo cáo Doanh thu ───────────────────────────────────────────────────────
 
 export async function getDoanhThuReport(year: number, month: number): Promise<DoanhThuRow[]> {
-  const lots = await prisma.slDtLot.findMany({
-    where: { deletedAt: null },
-    include: {
-      monthlyInputs: { where: { year, month } },
-    },
-    orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
-  });
+  const [lots, labels] = await Promise.all([
+    prisma.slDtLot.findMany({
+      where: activeLotWhere(year, month, "doanhThu"),
+      include: {
+        monthlyInputs: { where: { year, month } },
+      },
+      orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
+    }),
+    prisma.slDtSubtotalLabel.findMany(),
+  ]);
 
   const lotRows: DoanhThuRow[] = lots.map((lot) => {
     const inp = lot.monthlyInputs[0];
@@ -99,7 +107,7 @@ export async function getDoanhThuReport(year: number, month: number): Promise<Do
     };
   });
 
-  return rollupDoanhThu(lotRows);
+  return rollupDoanhThu(lotRows, hierarchyOrder(labels));
 }
 
 // ─── Chỉ tiêu report ──────────────────────────────────────────────────────────
@@ -136,6 +144,7 @@ export interface ChiTieuRow {
   tinhTrang: string;         // col 14
   // Editable text
   settlementStatus: string | null; // col 15a (settlement)
+  hoSoQuyetToan: string | null;
   ghiChu: string | null;     // col 15b (notes)
   // Legacy fields (still used elsewhere)
   phaiNop: number;
@@ -151,9 +160,9 @@ function prevMonthOf(year: number, month: number): { year: number; month: number
 
 export async function getChiTieuReport(year: number, month: number): Promise<ChiTieuRow[]> {
   const prev = prevMonthOf(year, month);
-  const [lots, prevInputs, scoreMap] = await Promise.all([
+  const [lots, prevInputs, latestQtStatuses, scoreMap] = await Promise.all([
     prisma.slDtLot.findMany({
-      where: { deletedAt: null },
+      where: activeLotWhere(year, month, "chiTieu"),
       include: {
         paymentPlan: true,
         progressStatus: { where: { year, month } },
@@ -162,10 +171,23 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
       orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
     }),
     prisma.slDtMonthlyInput.findMany({ where: { year: prev.year, month: prev.month } }),
+    prisma.slDtProgressStatus.findMany({
+      where: {
+        hoSoQuyetToan: { not: null },
+        OR: [{ year: { lt: year } }, { AND: [{ year }, { month: { lte: month } }] }],
+      },
+      orderBy: [{ lotId: "asc" }, { year: "desc" }, { month: "desc" }, { updatedAt: "desc" }],
+    }),
     buildScoreMap(),
   ]);
 
   const prevByLot = new Map(prevInputs.map((p) => [p.lotId, p]));
+  const latestQtByLot = new Map<number, string>();
+  for (const status of latestQtStatuses) {
+    if (!latestQtByLot.has(status.lotId) && status.hoSoQuyetToan) {
+      latestQtByLot.set(status.lotId, status.hoSoQuyetToan);
+    }
+  }
 
   const lotRows: ChiTieuRow[] = lots.map((lot) => {
     const status = lot.progressStatus[0];
@@ -229,6 +251,7 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
       milestoneText,
       tinhTrang,
       settlementStatus,
+      hoSoQuyetToan: status?.hoSoQuyetToan ?? latestQtByLot.get(lot.id) ?? null,
       ghiChu: status?.ghiChu ?? null,
       phaiNop,
       tienDaDong,
@@ -239,7 +262,7 @@ export async function getChiTieuReport(year: number, month: number): Promise<Chi
 
   const labels = await prisma.slDtSubtotalLabel.findMany();
   const labelMap = new Map(labels.map((l) => [`${l.scope}:${l.key}`, l.label]));
-  return buildChiTieuHierarchy(lotRows, labelMap);
+  return buildChiTieuHierarchy(lotRows, labelMap, hierarchyOrder(labels));
 }
 
 export function subtotalLabelKey(row: { kind: string; phaseCode: string; groupCode: string }): string | null {
@@ -257,7 +280,7 @@ function emptySubtotal(kind: "group" | "phase" | "grand", lotName: string, phase
     slKeHoachKy: 0, slThucKyTho: 0, dtKeHoachKy: 0, dtThoKy: 0,
     slTrat: 0, dtTratKy: 0, dtCanThucHien: 0,
     targetMilestone: null, suggestedTarget: null, milestoneText: null, tinhTrang: "",
-    settlementStatus: null, ghiChu: null,
+    settlementStatus: null, hoSoQuyetToan: null, ghiChu: null,
     phaiNop: 0, tienDaDong: 0, paidStatus: "", dtThoLuyKe: 0,
   };
 }
@@ -272,7 +295,19 @@ function sumInto(target: ChiTieuRow, src: ChiTieuRow) {
   for (const k of NUMERIC_KEYS) target[k] += src[k];
 }
 
-function buildChiTieuHierarchy(lotRows: ChiTieuRow[], labelMap: Map<string, string> = new Map()): ChiTieuRow[] {
+function hierarchyOrder(labels: Array<{ scope: string; key: string; sortOrder: number }>) {
+  return new Map(labels.map((l) => [`${l.scope}:${l.key}`, l.sortOrder]));
+}
+
+function orderValue(orderMap: Map<string, number>, key: string) {
+  return orderMap.get(key) ?? 999999;
+}
+
+function buildChiTieuHierarchy(
+  lotRows: ChiTieuRow[],
+  labelMap: Map<string, string> = new Map(),
+  orderMap: Map<string, number> = new Map(),
+): ChiTieuRow[] {
   const result: ChiTieuRow[] = [];
   const byPhase = new Map<string, Map<string, ChiTieuRow[]>>();
 
@@ -286,22 +321,33 @@ function buildChiTieuHierarchy(lotRows: ChiTieuRow[], labelMap: Map<string, stri
   const grandLabel = labelMap.get("grand:_") ?? "Tổng cộng";
   const grand = emptySubtotal("grand", grandLabel, "", "", 999999);
 
-  for (const [phaseCode, byGroup] of byPhase) {
-    const phaseLabel = labelMap.get(`phase:${phaseCode}`) ?? `Tổng giai đoạn ${phaseCode}`;
+  const phaseEntries = [...byPhase.entries()].sort((a, b) =>
+    orderValue(orderMap, `phase:${a[0]}`) - orderValue(orderMap, `phase:${b[0]}`) || a[0].localeCompare(b[0], "vi"),
+  );
+
+  for (const [phaseCode, byGroup] of phaseEntries) {
+    const phaseLabel = labelMap.get(`phase:${phaseCode}`) ?? cleanHierarchyLabel(phaseCode);
     const phaseSub = emptySubtotal("phase", phaseLabel, phaseCode, "", 99999);
+    const pendingGroups: Array<{ row: ChiTieuRow; lots: ChiTieuRow[] }> = [];
 
-    for (const [groupCode, lots] of byGroup) {
+    const groupEntries = [...byGroup.entries()].sort((a, b) =>
+      orderValue(orderMap, `group:${phaseCode}/${a[0]}`) - orderValue(orderMap, `group:${phaseCode}/${b[0]}`) || a[0].localeCompare(b[0], "vi"),
+    );
+    for (const [groupCode, lots] of groupEntries) {
       const sorted = [...lots].sort((a, b) => a.sortOrder - b.sortOrder);
-      result.push(...sorted);
 
-      const groupLabel = labelMap.get(`group:${phaseCode}/${groupCode}`) ?? `Tổng nhóm ${groupCode}`;
+      const groupLabel = labelMap.get(`group:${phaseCode}/${groupCode}`) ?? cleanHierarchyLabel(groupCode);
       const groupSub = emptySubtotal("group", groupLabel, phaseCode, groupCode, 9999);
       for (const r of sorted) sumInto(groupSub, r);
       sumInto(phaseSub, groupSub);
-      result.push(groupSub);
+      pendingGroups.push({ row: groupSub, lots: sorted });
     }
     sumInto(grand, phaseSub);
-    result.push(phaseSub);
+    if (hasHierarchyLabel(phaseCode)) result.push(phaseSub);
+    for (const item of pendingGroups) {
+      if (hasHierarchyLabel(item.row.groupCode)) result.push(item.row);
+      result.push(...item.lots);
+    }
   }
   result.push(grand);
   return result;
@@ -327,9 +373,16 @@ export interface TienDoXdLotRow {
   ghiChu: string | null;
 }
 
+function hasTienDoXdValue(row: Omit<TienDoXdLotRow, "lotId" | "code" | "lotName" | "phaseCode" | "groupCode" | "sortOrder">) {
+  return Boolean(
+    row.milestoneText || row.settlementStatus || row.khungBtct || row.xayTuong ||
+    row.tratNgoai || row.xayTho || row.tratHoanThien || row.hoSoQuyetToan || row.ghiChu,
+  );
+}
+
 export async function getTienDoXdReport(year: number, month: number): Promise<TienDoXdLotRow[]> {
   const lots = await prisma.slDtLot.findMany({
-    where: { deletedAt: null },
+    where: activeLotWhere(year, month, "tienDoXd"),
     include: {
       progressStatus: { where: { year, month } },
     },
@@ -355,7 +408,7 @@ export async function getTienDoXdReport(year: number, month: number): Promise<Ti
       hoSoQuyetToan: s?.hoSoQuyetToan ?? null,
       ghiChu: s?.ghiChu ?? null,
     };
-  });
+  }).filter(hasTienDoXdValue);
 }
 
 // ─── Payment plans ────────────────────────────────────────────────────────────
@@ -381,7 +434,7 @@ export interface PaymentPlanRow {
 
 export async function getPaymentPlans(): Promise<PaymentPlanRow[]> {
   const lots = await prisma.slDtLot.findMany({
-    where: { deletedAt: null },
+    where: activeLotWhere(undefined, undefined, "nopTien"),
     include: { paymentPlan: true },
     orderBy: [{ phaseCode: "asc" }, { groupCode: "asc" }, { sortOrder: "asc" }],
   });

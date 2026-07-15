@@ -1,4 +1,11 @@
 {
+  "_verification": {
+    "date": "2026-07-15",
+    "environment": "isolated local PostgreSQL and standalone ERP server",
+    "seed": "synthetic test users and deterministic performance fixtures",
+    "load": "10 connections x 15 seconds per endpoint; 4/4 targets below 150 ms with zero non-2xx",
+    "status": "cleared"
+  },
   "_comment": "Query-count ceilings + load-test p95 ceilings. Ratchet: tighten on improvement, never loosen silently. Observed counts (2026-05-16): dashboard 8, ledgerSummary 1, aggregateMonth 2, taskBoard 9 — all constant w.r.t. row volume, no N+1. Ceilings carry a small margin for plan/driver variance.",
   "dashboard": 12,
   "ledgerSummary": 3,
@@ -8,7 +15,7 @@
     "_comment": "p95 latency ceilings in ms for the load suite (on-demand / nightly). Observed (2026-05-16, local, 10 conns x 15s): health 20, notifications 22, cascade-projects 20, cascade-suppliers 22 ms p95, zero non-2xx. Ceilings set ~7x observed to absorb machine/plan variance; tighten further after a multi-run baseline.",
     "/api/health": 150,
     "/api/notifications": 150,
-    "/api/cong-no/cascade-projects": 150,
-    "/api/thanh-toan/cascade-suppliers": 150
+    "/api/cong-no/cascade-projects?ledgerType=material": 150,
+    "/api/thanh-toan/cascade-suppliers?ledgerType=all&entityId=1": 150
   }
 }

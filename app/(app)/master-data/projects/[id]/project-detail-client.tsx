@@ -51,7 +51,7 @@ export function ProjectDetailClient({ project }: ProjectDetailClientProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Category | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function handleCreateCategory(input: CategoryInput) {
     await createCategory(project.id, input);

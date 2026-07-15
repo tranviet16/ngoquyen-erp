@@ -40,6 +40,7 @@ function pickSheet(wb: XLSX.WorkBook): string | null {
 export const GachNamHuongAdapter: ImportAdapter = {
   name: "gach-nam-huong",
   label: "Gạch Nam Hương 2025",
+  supportsRollback: true,
 
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });

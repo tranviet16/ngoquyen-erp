@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+vi.mock("react", () => ({
+  cache: <T extends (...args: unknown[]) => unknown>(fn: T): T => fn,
+}));
+
 const mockDb = vi.hoisted(() => ({
   project3WayCashflow: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+  rolePermission: { findMany: vi.fn() },
 }));
 const mockAuth = vi.hoisted(() => ({ getSession: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
@@ -14,8 +19,12 @@ import {
   createCashflow,
   softDeleteCashflow,
 } from "@/lib/du-an/cashflow-service";
+import { rolePermissionFindMany } from "@/lib/acl/__tests__/_role-permission-fixture";
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
+});
 
 describe("getCashflowSummary", () => {
   it("buckets amounts by flow direction and totals them", async () => {

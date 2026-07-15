@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { projectSchema, categorySchema, type ProjectInput, type CategoryInput } from "./schemas";
 import { serializeDecimal } from "@/lib/utils/serialize-decimal";
@@ -61,7 +61,7 @@ export async function getProjectById(id: number) {
 
 export async function createProject(input: ProjectInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = projectSchema.parse(input);
   const project = await prisma.project.create({
     data: {
@@ -81,7 +81,7 @@ export async function createProject(input: ProjectInput) {
 
 export async function updateProject(id: number, input: ProjectInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = projectSchema.parse(input);
   const project = await prisma.project.update({
     where: { id },
@@ -103,16 +103,53 @@ export async function updateProject(id: number, input: ProjectInput) {
 
 export async function softDeleteProject(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "master-data", "admin");
   const project = await prisma.project.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/master-data/projects");
   revalidatePath("/master-data");
   return project;
 }
 
+// ─── Inline-edit patch ────────────────────────────────────────────────────────
+
+import { z } from "zod";
+
+// Project fields safe for inline edit (startDate/endDate/contractValue → form only)
+const PROJECT_PATCH_WHITELIST = ["code", "name", "status"] as const;
+
+const patchProjectSchema = z.object({
+  code: z.string().min(1, "Mã không được để trống").optional(),
+  name: z.string().min(1, "Tên không được để trống").optional(),
+  status: z.enum(["active", "completed", "paused"]).optional(),
+});
+
+export async function patchProject(id: number, patch: Record<string, unknown>) {
+  const role = await getSessionRole();
+  await requireRoleModuleAccess(role, "master-data", "edit");
+
+  for (const k of Object.keys(patch)) {
+    if (!(PROJECT_PATCH_WHITELIST as readonly string[]).includes(k)) {
+      throw new Error(`Field "${k}" không được phép inline edit`);
+    }
+  }
+
+  const data = patchProjectSchema.parse(patch);
+  const updated = await prisma.project.update({ where: { id }, data });
+  revalidatePath(`/master-data/projects/${id}`);
+  revalidatePath("/master-data/projects");
+  revalidatePath("/master-data");
+  revalidatePath("/du-an");
+  return updated;
+}
+
+// patchDuAn aliases patchProject — same Prisma model, both paths revalidated
+export async function patchDuAn(id: number, patch: Record<string, unknown>) {
+  return patchProject(id, patch);
+}
+
 export async function createCategory(projectId: number, input: CategoryInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = categorySchema.parse(input);
   const category = await prisma.projectCategory.create({
     data: { ...data, projectId },
@@ -123,7 +160,7 @@ export async function createCategory(projectId: number, input: CategoryInput) {
 
 export async function updateCategory(id: number, projectId: number, input: CategoryInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = categorySchema.parse(input);
   const category = await prisma.projectCategory.update({ where: { id }, data });
   revalidatePath(`/master-data/projects/${projectId}`);
@@ -132,7 +169,7 @@ export async function updateCategory(id: number, projectId: number, input: Categ
 
 export async function softDeleteCategory(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "master-data", "admin");
   const category = await prisma.projectCategory.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath(`/master-data/projects/${projectId}`);
   return category;

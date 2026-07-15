@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Bật required security gates"
-status: pending
+status: completed
 priority: P1
 effort: "4h"
 dependencies: [1, 2, 3]

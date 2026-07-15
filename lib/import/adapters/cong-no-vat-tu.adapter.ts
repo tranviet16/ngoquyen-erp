@@ -43,6 +43,7 @@ const OpenSchema = z.object({
 export const CongNoVatTuAdapter: ImportAdapter = {
   name: "cong-no-vat-tu",
   label: "Công nợ Vật tư",
+  supportsRollback: true,
 
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });

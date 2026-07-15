@@ -27,15 +27,18 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const stored =
-      (readCookie(STORAGE_KEY) as "light" | "dark" | null) ??
-      (localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null);
-    const initial =
-      stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setTheme(initial);
-    applyTheme(initial);
-    if (!readCookie(STORAGE_KEY)) writeCookie(STORAGE_KEY, initial);
-    setMounted(true);
+    const timer = window.setTimeout(() => {
+      const stored =
+        (readCookie(STORAGE_KEY) as "light" | "dark" | null) ??
+        (localStorage.getItem(STORAGE_KEY) as "light" | "dark" | null);
+      const initial =
+        stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      setTheme(initial);
+      applyTheme(initial);
+      if (!readCookie(STORAGE_KEY)) writeCookie(STORAGE_KEY, initial);
+      setMounted(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function toggle() {
@@ -54,7 +57,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={theme === "dark" ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
       title={theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
-      className="inline-flex items-center justify-center size-9 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       {mounted && theme === "dark" ? (
         <Sun className="size-4" aria-hidden="true" />

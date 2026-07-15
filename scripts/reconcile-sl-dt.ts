@@ -9,7 +9,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { computeSanLuong, computeDoanhThu } from "../lib/sl-dt/compute";
-import { parseMonthSheetName, classifySheet, normalizeLotCode } from "../lib/import/adapters/sl-dt-sheet-parsers";
+import { resolveSheetMonths, classifySheet, normalizeLotCode } from "../lib/import/adapters/sl-dt-sheet-parsers";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg(new Pool({ connectionString: process.env.DATABASE_URL })),
@@ -121,9 +121,10 @@ async function reconcileDoanhThu(matrix: unknown[][], sheetName: string, year: n
 }
 
 async function main() {
-  const file = process.argv[2] ?? "SOP/SL - DT 2025.xlsx";
+  const file = process.argv[2] ?? "SOP/SL - DT.xlsx";
   const buf = readFileSync(file);
   const wb = XLSX.read(buf, { type: "buffer" });
+  const monthBySheet = resolveSheetMonths(wb.SheetNames);
 
   const lots = await prisma.slDtLot.findMany({ where: { deletedAt: null } });
   const lotByName = new Map<string, number>();
@@ -137,7 +138,7 @@ async function main() {
   for (const name of wb.SheetNames) {
     const cat = classifySheet(name);
     if (cat !== "san_luong" && cat !== "doanh_thu") continue;
-    const ym = parseMonthSheetName(name);
+    const ym = monthBySheet.get(name);
     if (!ym) continue;
     const ws = wb.Sheets[name];
     const matrix = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null, raw: false });

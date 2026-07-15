@@ -7,6 +7,7 @@ import {
   computeDtCanThucHien,
   computeTinhTrangDoanhThu,
   computePaidStatus,
+  suggestMonthlySlDtTargets,
   type ChiTieuInputs,
   type PaymentPlanLite,
 } from "@/lib/sl-dt/compute";
@@ -141,6 +142,229 @@ describe("suggestTargetMilestone", () => {
   it("picks the nearest cumulative milestone", () => {
     expect(suggestTargetMilestone(110, plan)).toBe("M1");
     expect(suggestTargetMilestone(190, plan)).toBe("M2");
+  });
+});
+
+describe("suggestMonthlySlDtTargets", () => {
+  const plan: PaymentPlanLite = {
+    dot1Amount: 400_000_000,
+    dot1Milestone: "D1",
+    dot2Amount: 400_000_000,
+    dot2Milestone: "D2",
+    dot3Amount: 400_000_000,
+    dot3Milestone: "D3",
+    dot4Amount: 400_000_000,
+    dot4Milestone: "D4",
+  };
+
+  it("uses the selected target milestone minus beginning cumulative values", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 2_000_000_000,
+      dtStartCumulative: 500_000_000,
+      slStartCumulative: 450_000_000,
+      targetMilestone: "D2",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(300_000_000);
+    expect(out.slTargetKy).toBe(350_000_000);
+    expect(out.targetRevenueCumulative).toBe(800_000_000);
+    expect(out.targetProductionCumulative).toBe(800_000_000);
+    expect(out.targetMilestone).toBe("D2");
+    expect(out.reasonCode).toBe("target_milestone");
+  });
+
+  it("does not shrink targets based on current-period actuals", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 2_000_000_000,
+      dtStartCumulative: 400_000_000,
+      slStartCumulative: 400_000_000,
+      targetMilestone: "D3",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(800_000_000);
+    expect(out.slTargetKy).toBe(800_000_000);
+    expect(out.targetRevenueCumulative).toBe(1_200_000_000);
+    expect(out.targetMilestone).toBe("D3");
+  });
+
+  it("falls back to the first upcoming milestone when no target milestone is selected", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 2_000_000_000,
+      dtStartCumulative: 0,
+      slStartCumulative: 0,
+      targetMilestone: null,
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(400_000_000);
+    expect(out.slTargetKy).toBe(400_000_000);
+    expect(out.targetMilestone).toBe("D1");
+    expect(out.reasonCode).toBe("next_target_milestone");
+  });
+
+  it("falls back to the next upcoming milestone from beginning cumulative revenue", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 2_000_000_000,
+      dtStartCumulative: 450_000_000,
+      slStartCumulative: 410_000_000,
+      targetMilestone: null,
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(350_000_000);
+    expect(out.slTargetKy).toBe(390_000_000);
+    expect(out.targetMilestone).toBe("D2");
+    expect(out.reasonCode).toBe("next_target_milestone");
+  });
+
+  it("keeps 4B-style completed closeout lots at zero when revenue already reaches the estimate", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 1_241_664_000,
+      dtStartCumulative: 1_241_664_000,
+      slStartCumulative: 1_241_664_000,
+      targetMilestone: null,
+      hoSoQuyetToan: "Đã ký",
+      plan: {
+        dot1Amount: 500_000_000,
+        dot1Milestone: "Mái tầng 1",
+        dot2Amount: 400_000_000,
+        dot2Milestone: "Mái tầng 3",
+        dot3Amount: 400_000_000,
+        dot3Milestone: "Xong khung BTCT",
+        dot4Amount: 0,
+        dot4Milestone: "Quyết toán",
+      },
+    });
+
+    expect(out.dtTargetKy).toBe(0);
+    expect(out.slTargetKy).toBe(0);
+    expect(out.reasonCode).toBe("completed_by_estimate");
+  });
+
+  it("keeps 7B-style completed closeout lots at zero when revenue already reaches the estimate", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 1_221_751_000,
+      dtStartCumulative: 1_221_751_000,
+      slStartCumulative: 1_221_751_000,
+      targetMilestone: null,
+      hoSoQuyetToan: "Đã ký",
+      plan: {
+        dot1Amount: 500_000_000,
+        dot1Milestone: "Mái tầng 1",
+        dot2Amount: 400_000_000,
+        dot2Milestone: "Mái tầng 3",
+        dot3Amount: 400_000_000,
+        dot3Milestone: "Xong khung BTCT",
+        dot4Amount: 0,
+        dot4Milestone: "Quyết toán",
+      },
+    });
+
+    expect(out.dtTargetKy).toBe(0);
+    expect(out.slTargetKy).toBe(0);
+    expect(out.reasonCode).toBe("completed_by_estimate");
+  });
+
+  it("calculates 5A-style signed closeout revenue against the rough estimate", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 1_138_313_000,
+      dtStartCumulative: 1_000_000_000,
+      slStartCumulative: 1_138_313_000,
+      targetMilestone: null,
+      hoSoQuyetToan: "Đã ký",
+      plan: {
+        dot1Amount: 400_000_000,
+        dot1Milestone: "Mái tầng 1",
+        dot2Amount: 300_000_000,
+        dot2Milestone: "Mái tầng 3",
+        dot3Amount: 300_000_000,
+        dot3Milestone: "Xong khung BTCT",
+        dot4Amount: 0,
+        dot4Milestone: "Quyết toán",
+      },
+    });
+
+    expect(out.dtTargetKy).toBe(138_313_000);
+    expect(out.slTargetKy).toBe(0);
+    expect(out.targetRevenueCumulative).toBe(1_138_313_000);
+    expect(out.targetProductionCumulative).toBe(1_138_313_000);
+    expect(out.targetMilestone).toBe("Quyết toán");
+    expect(out.reasonCode).toBe("next_target_milestone");
+  });
+
+  it("caps production cumulative at the lot estimate", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 1_000_000_000,
+      dtStartCumulative: 700_000_000,
+      slStartCumulative: 700_000_000,
+      targetMilestone: "D4",
+      hoSoQuyetToan: "Đã ký",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(300_000_000);
+    expect(out.slTargetKy).toBe(300_000_000);
+    expect(out.targetProductionCumulative).toBe(1_000_000_000);
+  });
+
+  it("blocks final revenue closeout until Hồ sơ QT is signed", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 1_000_000_000,
+      dtStartCumulative: 900_000_000,
+      slStartCumulative: 850_000_000,
+      targetMilestone: "D4",
+      hoSoQuyetToan: "Chưa ký",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(0);
+    expect(out.slTargetKy).toBe(150_000_000);
+    expect(out.targetProductionCumulative).toBe(1_000_000_000);
+    expect(out.reasonCode).toBe("final_closeout_waiting_for_qt");
+  });
+
+  it("allows final revenue closeout when Hồ sơ QT is signed", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 1_000_000_000,
+      dtStartCumulative: 900_000_000,
+      slStartCumulative: 1_000_000_000,
+      targetMilestone: "D4",
+      hoSoQuyetToan: "Đã ký",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(100_000_000);
+    expect(out.slTargetKy).toBe(0);
+    expect(out.reasonCode).toBe("target_milestone");
+  });
+
+  it("returns zero targets when the beginning cumulative already reaches the target", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 2_000_000_000,
+      dtStartCumulative: 900_000_000,
+      slStartCumulative: 850_000_000,
+      targetMilestone: "D2",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(0);
+    expect(out.slTargetKy).toBe(0);
+  });
+
+  it("returns zero and reason when the selected milestone is not usable", () => {
+    const out = suggestMonthlySlDtTargets({
+      estimateValue: 2_000_000_000,
+      dtStartCumulative: 0,
+      slStartCumulative: 0,
+      targetMilestone: "Unknown",
+      plan,
+    });
+
+    expect(out.dtTargetKy).toBe(0);
+    expect(out.slTargetKy).toBe(0);
+    expect(out.reasonCode).toBe("target_not_in_plan");
   });
 });
 

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { cashflowSchema, type CashflowInput } from "./schemas";
 
@@ -51,7 +51,7 @@ export async function getCashflowSummary(projectId: number) {
 
 export async function createCashflow(input: CashflowInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = cashflowSchema.parse(input);
   const record = await prisma.project3WayCashflow.create({
     data: {
@@ -73,7 +73,7 @@ export async function createCashflow(input: CashflowInput) {
 
 export async function updateCashflow(id: number, input: CashflowInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = cashflowSchema.parse(input);
   const record = await prisma.project3WayCashflow.update({
     where: { id },
@@ -103,7 +103,7 @@ export async function adminPatchCashflow(
   projectId: number,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.project3WayCashflow.update({ where: { id }, data: patch });
   revalidatePath(`/du-an/${projectId}/dong-tien-3-ben`);
   return record;
@@ -111,7 +111,7 @@ export async function adminPatchCashflow(
 
 export async function softDeleteCashflow(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.project3WayCashflow.update({
     where: { id },
     data: { deletedAt: new Date() },

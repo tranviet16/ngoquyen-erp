@@ -1,0 +1,523 @@
+{
+	"@programName": "ZAP",
+	"@version": "2.17.0",
+	"@generated": "Wed, 15 Jul 2026 17:35:40",
+	"created": "2026-07-15T17:35:40.479567184Z",
+	"insights":[
+		{
+			"level": "Low",
+			"reason": "Warning",
+			"site": "",
+			"key": "insight.log.warn",
+			"description": "ZAP warnings logged - see the zap.log file for details",
+			"statistic": "3"
+		},
+		{
+			"level": "Low",
+			"reason": "Exceeded Low",
+			"site": "",
+			"key": "insight.network.failure",
+			"description": "Percentage of network failures",
+			"statistic": "4"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.code.2xx",
+			"description": "Percentage of responses with status code 2xx",
+			"statistic": "48"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.code.3xx",
+			"description": "Percentage of responses with status code 3xx",
+			"statistic": "5"
+		},
+		{
+			"level": "Info",
+			"reason": "Exceeded Low",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.code.4xx",
+			"description": "Percentage of responses with status code 4xx",
+			"statistic": "42"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.code.5xx",
+			"description": "Percentage of responses with status code 5xx",
+			"statistic": "3"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.ctype.application/javascript",
+			"description": "Percentage of endpoints with content type application/javascript",
+			"statistic": "45"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.ctype.font/woff2",
+			"description": "Percentage of endpoints with content type font/woff2",
+			"statistic": "28"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.ctype.image/x-icon",
+			"description": "Percentage of endpoints with content type image/x-icon",
+			"statistic": "2"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.ctype.text/css",
+			"description": "Percentage of endpoints with content type text/css",
+			"statistic": "5"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.ctype.text/html",
+			"description": "Percentage of endpoints with content type text/html",
+			"statistic": "17"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.method.GET",
+			"description": "Percentage of endpoints with method GET",
+			"statistic": "100"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.endpoint.total",
+			"description": "Count of total endpoints",
+			"statistic": "35"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net",
+			"key": "insight.response.slow",
+			"description": "Percentage of slow responses",
+			"statistic": "4"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.code.2xx",
+			"description": "Percentage of responses with status code 2xx",
+			"statistic": "96"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.code.3xx",
+			"description": "Percentage of responses with status code 3xx",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.code.4xx",
+			"description": "Percentage of responses with status code 4xx",
+			"statistic": "1"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.endpoint.ctype.image/x-icon",
+			"description": "Percentage of endpoints with content type image/x-icon",
+			"statistic": "14"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.endpoint.ctype.text/css",
+			"description": "Percentage of endpoints with content type text/css",
+			"statistic": "14"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.endpoint.ctype.text/html",
+			"description": "Percentage of endpoints with content type text/html",
+			"statistic": "42"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.endpoint.ctype.text/javascript",
+			"description": "Percentage of endpoints with content type text/javascript",
+			"statistic": "28"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.endpoint.method.GET",
+			"description": "Percentage of endpoints with method GET",
+			"statistic": "100"
+		},
+		{
+			"level": "Info",
+			"reason": "Informational",
+			"site": "https://admin-pc.tail8998df.ts.net:8444",
+			"key": "insight.endpoint.total",
+			"description": "Count of total endpoints",
+			"statistic": "7"
+		}
+	],
+	"site":[ 
+		{
+			"@name": "https://admin-pc.tail8998df.ts.net:8444",
+			"@host": "admin-pc.tail8998df.ts.net",
+			"@port": "8444",
+			"@ssl": "true",
+			"alerts": [ 
+				{
+					"pluginid": "10109",
+					"alertRef": "10109",
+					"alert": "Modern Web Application",
+					"name": "Modern Web Application",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one.</p>",
+					"instances":[ 
+						{
+							"id": "18",
+							"uri": "https://admin-pc.tail8998df.ts.net:8444/",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net:8444\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script nonce=\"T9rZArcEU91U3a82pcZjKQ\">\n      const theme = localStorage.getItem(\"theme\");\n      const systemTheme = matchMedia(\"(prefers-color-scheme: dark)\");\n      if (theme === \"dark\" || (theme === null && systemTheme.matches)) {\n        document.documentElement.classList.remove(\"light\");\n        document.documentElement.classList.add(\"dark\");\n      } else {\n        document.documentElement.classList.remove(\"dark\");\n        document.documentElement.classList.add(\"light\");\n      }\n    </script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						}
+					],
+					"count": "1",
+					"systemic": false,
+					"solution": "<p>This is an informational alert and so no changes are required.</p>",
+					"otherinfo": "<p>No links have been found while there are scripts, which is an indication that this is a modern web application.</p>",
+					"reference": "",
+					"cweid": "-1",
+					"wascid": "-1",
+					"sourceid": "84"
+				}
+			]
+		},
+		{
+			"@name": "https://admin-pc.tail8998df.ts.net",
+			"@host": "admin-pc.tail8998df.ts.net",
+			"@port": "443",
+			"@ssl": "true",
+			"alerts": [ 
+				{
+					"pluginid": "10109",
+					"alertRef": "10109",
+					"alert": "Modern Web Application",
+					"name": "Modern Web Application",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The application appears to be a modern web application. If you need to explore it automatically then the Client Spider may well be more effective than the standard one.</p>",
+					"instances":[ 
+						{
+							"id": "15",
+							"uri": "https://admin-pc.tail8998df.ts.net/login?callbackUrl=%2F",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/login (callbackUrl)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/1fwxhcgd98n4v.js\" async=\"\" nonce=\"M2Q1MzhkNTktMjEzMS00ODFkLTgzYzktNjIwYjljOTNiOTZk\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "16",
+							"uri": "https://admin-pc.tail8998df.ts.net/login?callbackUrl=%2Frobots.txt",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/login (callbackUrl)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/1fwxhcgd98n4v.js\" async=\"\" nonce=\"ODBkZWM0NTUtZWMxZi00YmVlLTg4OTEtZmViYjQ3YTA3Nzhk\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "0",
+							"uri": "https://admin-pc.tail8998df.ts.net/login?callbackUrl=%2F",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/login (callbackUrl)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/1fwxhcgd98n4v.js\" async=\"\" nonce=\"Y2NkZjAwZDEtZGI0My00MDJmLTgxMmEtOGI1NDIwNzEyZDc2\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "17",
+							"uri": "https://admin-pc.tail8998df.ts.net/login?callbackUrl=%2Fsitemap.xml",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/login (callbackUrl)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script src=\"/_next/static/chunks/1fwxhcgd98n4v.js\" async=\"\" nonce=\"YjA4MWRkODYtZGJjNC00ZTMxLTliMWQtMDc2ZjhkZTQ2YmZl\"></script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						},
+						{
+							"id": "18",
+							"uri": "https://admin-pc.tail8998df.ts.net:8444/",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net:8444\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "<script nonce=\"T9rZArcEU91U3a82pcZjKQ\">\n      const theme = localStorage.getItem(\"theme\");\n      const systemTheme = matchMedia(\"(prefers-color-scheme: dark)\");\n      if (theme === \"dark\" || (theme === null && systemTheme.matches)) {\n        document.documentElement.classList.remove(\"light\");\n        document.documentElement.classList.add(\"dark\");\n      } else {\n        document.documentElement.classList.remove(\"dark\");\n        document.documentElement.classList.add(\"light\");\n      }\n    </script>",
+							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
+						}
+					],
+					"count": "5",
+					"systemic": false,
+					"solution": "<p>This is an informational alert and so no changes are required.</p>",
+					"otherinfo": "<p>No links have been found while there are scripts, which is an indication that this is a modern web application.</p>",
+					"reference": "",
+					"cweid": "-1",
+					"wascid": "-1",
+					"sourceid": "15"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-1",
+					"alert": "Non-Storable Content",
+					"name": "Non-Storable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are not storable by caching components such as proxy servers. If the response does not contain sensitive, personal or user-specific information, it may benefit from being stored and cached, to improve performance.</p>",
+					"instances":[ 
+						{
+							"id": "3",
+							"uri": "https://admin-pc.tail8998df.ts.net",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "307",
+							"otherinfo": ""
+						},
+						{
+							"id": "1",
+							"uri": "https://admin-pc.tail8998df.ts.net/",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "307",
+							"otherinfo": ""
+						},
+						{
+							"id": "2",
+							"uri": "https://admin-pc.tail8998df.ts.net/login?callbackUrl=%2F",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/login (callbackUrl)",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "no-store",
+							"otherinfo": ""
+						},
+						{
+							"id": "4",
+							"uri": "https://admin-pc.tail8998df.ts.net/robots.txt",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/robots.txt",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "307",
+							"otherinfo": ""
+						},
+						{
+							"id": "5",
+							"uri": "https://admin-pc.tail8998df.ts.net/sitemap.xml",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/sitemap.xml",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "307",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": false,
+					"solution": "<p>The content may be marked as storable by ensuring that the following conditions are satisfied:</p><p>The request method must be understood by the cache and defined as being cacheable (\"GET\", \"HEAD\", and \"POST\" are currently defined as cacheable)</p><p>The response status code must be understood by the cache (one of the 1XX, 2XX, 3XX, 4XX, or 5XX response classes are generally understood)</p><p>The \"no-store\" cache directive must not appear in the request or response header fields</p><p>For caching by \"shared\" caches such as \"proxy\" caches, the \"private\" response directive must not appear in the response</p><p>For caching by \"shared\" caches such as \"proxy\" caches, the \"Authorization\" header field must not appear in the request, unless the response explicitly allows it (using one of the \"must-revalidate\", \"public\", or \"s-maxage\" Cache-Control response directives)</p><p>In addition to the conditions above, at least one of the following conditions must also be satisfied by the response:</p><p>It must contain an \"Expires\" header field</p><p>It must contain a \"max-age\" response directive</p><p>For \"shared\" caches such as \"proxy\" caches, it must contain a \"s-maxage\" response directive</p><p>It must contain a \"Cache Control Extension\" that allows it to be cached</p><p>It must have a status code that is defined as cacheable by default (200, 203, 204, 206, 300, 301, 404, 405, 410, 414, 501).</p>",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "9"
+				},
+				{
+					"pluginid": "10049",
+					"alertRef": "10049-3",
+					"alert": "Storable and Cacheable Content",
+					"name": "Storable and Cacheable Content",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>The response contents are storable by caching components such as proxy servers, and may be retrieved directly from the cache, rather than from the origin server by the caching servers, in response to similar requests from other users. If the response data is sensitive, personal or user-specific, this may result in sensitive information being leaked. In some cases, this may even result in a user gaining complete control of the session of another user, depending on the configuration of the caching components in use in their environment. This is primarily an issue where \"shared\" caching servers such as \"proxy\" caches are configured on the local network. This configuration is typically found in corporate or educational environments, for instance.</p>",
+					"instances":[ 
+						{
+							"id": "9",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next/static/media/3c285486269019b7-s.p.2g-0we2o5_ngd.woff2",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next\/static\/media\/3c285486269019b7-s.p.2g-0we2o5_ngd.woff2",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "7",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next/static/media/53e45098eac42afb-s.p.1uklb5el4zgvl.woff2",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next\/static\/media\/53e45098eac42afb-s.p.1uklb5el4zgvl.woff2",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "8",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next/static/media/8ffc259da9d23054-s.p.10uaeld2xxvpt.woff2",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next\/static\/media\/8ffc259da9d23054-s.p.10uaeld2xxvpt.woff2",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "11",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next/static/media/a3bcb02a0e9e5d11-s.p.25pbmqxk8u2s7.woff2",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next\/static\/media\/a3bcb02a0e9e5d11-s.p.25pbmqxk8u2s7.woff2",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						},
+						{
+							"id": "14",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next/static/media/eca1cc1e672884b5-s.p.28-lxb4pyxwvn.woff2",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next\/static\/media\/eca1cc1e672884b5-s.p.28-lxb4pyxwvn.woff2",
+							"method": "GET",
+							"param": "",
+							"attack": "",
+							"evidence": "max-age=31536000",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "<p>Validate that the response does not contain sensitive, personal or user-specific information. If it does, consider the use of the following HTTP response headers, to limit, or prevent the content being stored and retrieved from the cache by another user:</p><p>Cache-Control: no-cache, no-store, must-revalidate, private</p><p>Pragma: no-cache</p><p>Expires: 0</p><p>This configuration directs both HTTP 1.0 and HTTP 1.1 compliant caching servers to not store the response, and to not retrieve the response (without validation) from the cache, in response to a similar request.</p>",
+					"otherinfo": "",
+					"reference": "<p>https://datatracker.ietf.org/doc/html/rfc7234</p><p>https://datatracker.ietf.org/doc/html/rfc7231</p><p>https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html</p>",
+					"cweid": "524",
+					"wascid": "13",
+					"sourceid": "41"
+				},
+				{
+					"pluginid": "10104",
+					"alertRef": "10104",
+					"alert": "User Agent Fuzzer",
+					"name": "User Agent Fuzzer",
+					"riskcode": "0",
+					"confidence": "2",
+					"riskdesc": "Informational (Medium)",
+					"desc": "<p>Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response.</p>",
+					"instances":[ 
+						{
+							"id": "19",
+							"uri": "https://admin-pc.tail8998df.ts.net",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "20",
+							"uri": "https://admin-pc.tail8998df.ts.net/",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "23",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "21",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						},
+						{
+							"id": "22",
+							"uri": "https://admin-pc.tail8998df.ts.net/_next/static",
+							"nodeName": "https:\/\/admin-pc.tail8998df.ts.net\/_next\/static",
+							"method": "GET",
+							"param": "Header User-Agent",
+							"attack": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)",
+							"evidence": "",
+							"otherinfo": ""
+						}
+					],
+					"count": "5",
+					"systemic": true,
+					"solution": "",
+					"otherinfo": "",
+					"reference": "<p>https://owasp.org/wstg</p>",
+					"cweid": "0",
+					"wascid": "0",
+					"sourceid": "1417"
+				}
+			]
+		}
+	],
+	"sequences":[
+	]
+
+}

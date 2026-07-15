@@ -1,5 +1,17 @@
 # Production Deployment Runbook
 
+## Current Windows host deployment
+
+The active instance is private to the Tailscale network:
+
+- ERP: `https://admin-pc.tail8998df.ts.net` → `127.0.0.1:3001`
+- Uptime Kuma: `https://admin-pc.tail8998df.ts.net:8443` → `127.0.0.1:8002`
+- GlitchTip: `https://admin-pc.tail8998df.ts.net:8444` → security-header proxy on `127.0.0.1:8003`
+
+Run `npx prisma migrate deploy` against the production database before declaring a fresh database healthy; `/api/health` proves connectivity but does not replace migration verification. Provision the bootstrap admin with `powershell -File scripts/manage-erp-admin-local.ps1 provision`; the idempotent command generates a random password, DPAPI-encrypts it for the current Windows user at `%LOCALAPPDATA%\NgoQuyenERP\erp-admin-secrets.json`, and never prints it. Check access with the same script's `status` action. If the store is missing while the admin already exists, provisioning fails closed and removes the unverified new store; reset/recover the existing account before provisioning again. Never commit the secret store; rotate the password after the first login.
+
+---
+
 **Stack:** Next.js 16 (standalone) + PostgreSQL 16 + nginx + Docker Compose  
 **Target OS:** Ubuntu 24.04 LTS  
 **Estimated time:** 45–60 minutes for first deploy

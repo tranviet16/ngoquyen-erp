@@ -21,6 +21,7 @@ import {
   normHeader,
   findHeaderRow,
 } from "./excel-utils";
+import { suggestJournalLabel } from "@/lib/tai-chinh/journal-auto-label";
 import type {
   ImportAdapter,
   ParsedData,
@@ -38,9 +39,106 @@ function findSheet(wb: XLSX.WorkBook, ...hints: string[]): string | null {
   return null;
 }
 
+function resolveJournalSourceAccounts(
+  sourceName: string | undefined,
+  entryType: string,
+  entryTypeLabel: string,
+) {
+  if (!sourceName) return { fromAccount: undefined, toAccount: undefined };
+  const label = normHeader(entryTypeLabel);
+  if (entryType === "thu") return { fromAccount: undefined, toAccount: sourceName };
+  if (entryType === "chi") return { fromAccount: sourceName, toAccount: undefined };
+  if (entryType === "chuyen_khoan" && label.includes("den")) {
+    return { fromAccount: undefined, toAccount: sourceName };
+  }
+  return { fromAccount: sourceName, toAccount: undefined };
+}
+
+function journalTransferMergeKey(row: ParsedRow) {
+  if (row.data._type !== "journal" || row.data.entryType !== "chuyen_khoan") return null;
+  const date = row.data.date instanceof Date
+    ? row.data.date.toISOString().slice(0, 10)
+    : String(row.data.date ?? "");
+  return [
+    date,
+    String(row.data.amountVnd ?? ""),
+    String(row.data.description ?? "").trim(),
+  ].join("|");
+}
+
+function canMergeTransferRows(left: ParsedRow, right: ParsedRow) {
+  const leftHasFrom = !!left.data.fromAccount;
+  const leftHasTo = !!left.data.toAccount;
+  const rightHasFrom = !!right.data.fromAccount;
+  const rightHasTo = !!right.data.toAccount;
+  return (leftHasFrom && !leftHasTo && !rightHasFrom && rightHasTo) ||
+    (!leftHasFrom && leftHasTo && rightHasFrom && !rightHasTo);
+}
+
+function mergeJournalTransferRows(rows: ParsedRow[]) {
+  const merged: ParsedRow[] = [];
+  for (const row of rows) {
+    const key = journalTransferMergeKey(row);
+    if (!key) {
+      merged.push(row);
+      continue;
+    }
+
+    const matchIndex = merged.findIndex((existing) =>
+      journalTransferMergeKey(existing) === key && canMergeTransferRows(existing, row),
+    );
+    if (matchIndex < 0) {
+      merged.push(row);
+      continue;
+    }
+
+    const existing = merged[matchIndex];
+    merged[matchIndex] = {
+      rowIndex: Math.min(existing.rowIndex, row.rowIndex),
+      data: {
+        ...existing.data,
+        fromAccount: existing.data.fromAccount ?? row.data.fromAccount,
+        toAccount: existing.data.toAccount ?? row.data.toAccount,
+      },
+    };
+  }
+  return merged;
+}
+
+/**
+ * Count-based idempotency checker.
+ *
+ * A row is "already imported" only if its key already had >= N matching rows
+ * in the DB *before this run started*. The Nth occurrence of a key within the
+ * file is skipped only when N pre-existing DB rows cover it.
+ *
+ * This preserves legitimate within-file duplicates — e.g. two genuine journal
+ * entries on the same date, same amount, same description — which a plain
+ * "exists → skip" check would silently collapse into one (data loss), while
+ * still making a full re-import of the same file fully idempotent.
+ */
+function makeDedupChecker() {
+  const dbCountBefore = new Map<string, number>();
+  const seenInRun = new Map<string, number>();
+  return async function isAlreadyImported(
+    key: string,
+    countExisting: () => Promise<number>,
+  ): Promise<boolean> {
+    let before = dbCountBefore.get(key);
+    if (before === undefined) {
+      before = await countExisting();
+      dbCountBefore.set(key, before);
+    }
+    const occ = seenInRun.get(key) ?? 0;
+    seenInRun.set(key, occ + 1);
+    return occ < before;
+  };
+}
+
 export const TaiChinhNqAdapter: ImportAdapter = {
   name: "tai-chinh-nq",
   label: "Tài chính NQ 2025",
+  supportsRollback: true,
 
   async parse(buffer: Buffer): Promise<ParsedData> {
     const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
@@ -93,25 +191,35 @@ export const TaiChinhNqAdapter: ImportAdapter = {
         const date = parseExcelDate(r["Ngày"] ?? r["Date"]);
         if (!date) continue;
         const loai = String(r["Loại"] ?? "").trim();
-        const entryType = loai.toLowerCase().startsWith("thu")
-          ? "thu"
-          : loai.toLowerCase().startsWith("chuy")
-            ? "chuyen_khoan"
-            : "chi";
         const amount = parseVndNumber(r["Số tiền"] ?? r["Amount"] ?? 0);
         if (amount === 0) continue;
         const description = String(r["Nội dung"] ?? r["Desc"] ?? "").trim();
         if (!description) continue;
-        const categoryName = String(r["Loại cụ thể"] ?? r["Danh mục"] ?? "").trim() || undefined;
+        const workbookCategory = String(r["Loại cụ thể"] ?? r["Danh mục"] ?? "").trim();
+        const suggestion = suggestJournalLabel({
+          description,
+          entryTypeLabel: loai,
+          categoryName: workbookCategory,
+        });
+        const categoryName =
+          suggestion?.categoryName && suggestion.categoryName !== "—"
+            ? suggestion.categoryName
+            : undefined;
+        const sourceName = String(r["Nguồn"] ?? r["Tài khoản"] ?? "").trim() || undefined;
+        const accountFields = resolveJournalSourceAccounts(
+          sourceName,
+          suggestion?.entryType ?? "chi",
+          loai,
+        );
         rows.push({
           rowIndex: rowIdx++,
           data: {
             _type: "journal",
             date,
-            entryType,
+            entryType: suggestion?.entryType ?? "chi",
+            costBehavior: suggestion?.costBehavior ?? "variable",
             amountVnd: amount,
-            fromAccount: String(r["Nguồn"] ?? r["Tài khoản"] ?? "").trim() || undefined,
-            toAccount: undefined,
+            ...accountFields,
             categoryName,
             description,
             contractCode: String(r["Mã hợp đồng"] ?? "").trim() || undefined,
@@ -275,7 +383,7 @@ export const TaiChinhNqAdapter: ImportAdapter = {
     }
 
     return {
-      rows,
+      rows: mergeJournalTransferRows(rows),
       conflicts: [],
       meta: {
         sheetCount: wb.SheetNames.length,
@@ -316,6 +424,15 @@ export const TaiChinhNqAdapter: ImportAdapter = {
     const errors: ImportSummary["errors"] = [];
     const db = tx as typeof import("@/lib/prisma")["prisma"];
 
+    // Idempotency: skip a row only when a matching DB record already existed
+    // before this run — never collapse legitimate within-file duplicates.
+    const dkey = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? ""));
+    const loanDedup = makeDedupChecker();
+    const journalDedup = makeDedupChecker();
+    const loanPaymentDedup = makeDedupChecker();
+    const expenseClassDedup = makeDedupChecker();
+    const payRecvDedup = makeDedupChecker();
+
     const catCache = new Map<string, number>();
     async function getOrCreateCategory(name: string): Promise<number> {
       const code = name.slice(0, 30).replace(/\s+/g, "_").toUpperCase();
@@ -331,6 +448,34 @@ export const TaiChinhNqAdapter: ImportAdapter = {
       return created.id;
     }
 
+    const accountCache = new Map<string, number>();
+    async function getOrCreateCashAccount(name: string | null | undefined): Promise<number | null> {
+      const trimmed = String(name ?? "").trim();
+      if (!trimmed) return null;
+      const key = normHeader(trimmed);
+      if (accountCache.has(key)) return accountCache.get(key)!;
+
+      const existing = await db.cashAccount.findFirst({
+        where: { name: trimmed },
+        select: { id: true, deletedAt: true },
+      });
+      if (existing) {
+        if (existing.deletedAt) {
+          await db.cashAccount.update({ where: { id: existing.id }, data: { deletedAt: null } });
+        }
+        accountCache.set(key, existing.id);
+        return existing.id;
+      }
+
+      const created = await db.cashAccount.create({
+        data: { name: trimmed, openingBalanceVnd: 0, displayOrder: 0 },
+        select: { id: true },
+      });
+      accountCache.set(key, created.id);
+      imported++;
+      return created.id;
+    }
+
     // Loan contracts
     for (const row of data.rows.filter((r) => r.data._type === "loan")) {
       try {
@@ -341,15 +486,20 @@ export const TaiChinhNqAdapter: ImportAdapter = {
           skipped++;
           continue;
         }
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM loan_contracts
-          WHERE "lenderName" = ${lenderName}
-            AND "startDate"::date = ${startDate}::date
-            AND "principalVnd" = ${principalVnd}
-            AND "deletedAt" IS NULL
-          LIMIT 1
-        `;
-        if (existing.length > 0) {
+        const alreadyImported = await loanDedup(
+          `${lenderName}|${dkey(startDate)}|${principalVnd}`,
+          async () => {
+            const r = await db.$queryRaw<{ n: number }[]>`
+              SELECT count(*)::int AS n FROM loan_contracts
+              WHERE "lenderName" = ${lenderName}
+                AND "startDate"::date = ${startDate}::date
+                AND "principalVnd" = ${principalVnd}
+                AND "deletedAt" IS NULL
+            `;
+            return r[0]?.n ?? 0;
+          },
+        );
+        if (alreadyImported) {
           skipped++;
           continue;
         }
@@ -379,34 +529,44 @@ export const TaiChinhNqAdapter: ImportAdapter = {
         const date = row.data.date as Date;
         const amountVnd = Number(row.data.amountVnd ?? 0);
         const entryType = String(row.data.entryType ?? "chi");
+        const costBehavior = String(row.data.costBehavior ?? (entryType === "chuyen_khoan" ? "transfer" : "variable"));
         const description = String(row.data.description ?? "");
+        const fromAccount = row.data.fromAccount ? String(row.data.fromAccount) : null;
+        const toAccount = row.data.toAccount ? String(row.data.toAccount) : null;
+        const fromAccountId = await getOrCreateCashAccount(fromAccount);
+        const toAccountId = await getOrCreateCashAccount(toAccount);
 
         let expenseCategoryId: number | null = null;
         if (row.data.categoryName) {
           expenseCategoryId = await getOrCreateCategory(String(row.data.categoryName));
         }
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM journal_entries
-          WHERE date::date = ${date}::date
-            AND "entryType" = ${entryType}
-            AND "amountVnd" = ${amountVnd}
-            AND description = ${description}
-            AND "deletedAt" IS NULL
-          LIMIT 1
-        `;
-        if (existing.length > 0) {
+        const alreadyImported = await journalDedup(
+          `${dkey(date)}|${entryType}|${amountVnd}|${description}`,
+          async () => {
+            const r = await db.$queryRaw<{ n: number }[]>`
+              SELECT count(*)::int AS n FROM journal_entries
+              WHERE date::date = ${date}::date
+                AND "entryType" = ${entryType}
+                AND "amountVnd" = ${amountVnd}
+                AND description = ${description}
+                AND "deletedAt" IS NULL
+            `;
+            return r[0]?.n ?? 0;
+          },
+        );
+        if (alreadyImported) {
           skipped++;
           continue;
         }
         await db.$executeRaw`
           INSERT INTO journal_entries
             (date, "entryType", "amountVnd", "fromAccount", "toAccount",
-             "expenseCategoryId", description, note, "importRunId", "createdAt", "updatedAt")
+             "fromAccountId", "toAccountId", "costBehavior", "expenseCategoryId",
+             description, note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${date}, ${entryType}, ${amountVnd},
-             ${row.data.fromAccount ? String(row.data.fromAccount) : null},
-             ${row.data.toAccount ? String(row.data.toAccount) : null},
-             ${expenseCategoryId}, ${description},
+             ${fromAccount}, ${toAccount},
+             ${fromAccountId}, ${toAccountId}, ${costBehavior}, ${expenseCategoryId}, ${description},
              ${row.data.note ? String(row.data.note) : null},
              ${importRunId ?? null}, NOW(), NOW())
         `;
@@ -432,14 +592,19 @@ export const TaiChinhNqAdapter: ImportAdapter = {
         }
         const principalDue = Number(row.data.principalDue ?? 0);
         const interestDue = Number(row.data.interestDue ?? 0);
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM loan_payments
-          WHERE "loanContractId" = ${contract[0].id}
-            AND "dueDate"::date = ${dueDate}::date
-            AND "deletedAt" IS NULL
-          LIMIT 1
-        `;
-        if (existing.length > 0) {
+        const alreadyImported = await loanPaymentDedup(
+          `${contract[0].id}|${dkey(dueDate)}`,
+          async () => {
+            const r = await db.$queryRaw<{ n: number }[]>`
+              SELECT count(*)::int AS n FROM loan_payments
+              WHERE "loanContractId" = ${contract[0].id}
+                AND "dueDate"::date = ${dueDate}::date
+                AND "deletedAt" IS NULL
+            `;
+            return r[0]?.n ?? 0;
+          },
+        );
+        if (alreadyImported) {
           skipped++;
           continue;
         }
@@ -478,15 +643,20 @@ export const TaiChinhNqAdapter: ImportAdapter = {
           });
           projectId = p?.id ?? null;
         }
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM expense_classifications
-          WHERE date::date = ${date}::date
-            AND "categoryName" = ${categoryName}
-            AND "amountVnd" = ${amountVnd}
-            AND "deletedAt" IS NULL
-          LIMIT 1
-        `;
-        if (existing.length > 0) {
+        const alreadyImported = await expenseClassDedup(
+          `${dkey(date)}|${categoryName}|${amountVnd}`,
+          async () => {
+            const r = await db.$queryRaw<{ n: number }[]>`
+              SELECT count(*)::int AS n FROM expense_classifications
+              WHERE date::date = ${date}::date
+                AND "categoryName" = ${categoryName}
+                AND "amountVnd" = ${amountVnd}
+                AND "deletedAt" IS NULL
+            `;
+            return r[0]?.n ?? 0;
+          },
+        );
+        if (alreadyImported) {
           skipped++;
           continue;
         }
@@ -515,15 +685,20 @@ export const TaiChinhNqAdapter: ImportAdapter = {
         const partyName = String(row.data.partyName ?? "");
         const type = String(row.data.type ?? "payable");
         const amountVnd = Number(row.data.amountVnd ?? 0);
-        const existing = await db.$queryRaw<{ id: number }[]>`
-          SELECT id FROM payable_receivable_adjustments
-          WHERE "partyName" = ${partyName}
-            AND type = ${type}
-            AND "amountVnd" = ${amountVnd}
-            AND "deletedAt" IS NULL
-          LIMIT 1
-        `;
-        if (existing.length > 0) {
+        const alreadyImported = await payRecvDedup(
+          `${partyName}|${type}|${amountVnd}`,
+          async () => {
+            const r = await db.$queryRaw<{ n: number }[]>`
+              SELECT count(*)::int AS n FROM payable_receivable_adjustments
+              WHERE "partyName" = ${partyName}
+                AND type = ${type}
+                AND "amountVnd" = ${amountVnd}
+                AND "deletedAt" IS NULL
+            `;
+            return r[0]?.n ?? 0;
+          },
+        );
+        if (alreadyImported) {
           skipped++;
           continue;
         }

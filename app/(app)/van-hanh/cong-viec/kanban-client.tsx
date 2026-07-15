@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -23,7 +23,7 @@ import {
 } from "@/lib/task/state-machine";
 import type { TaskWithRelations } from "@/lib/task/task-service";
 import { regroupBySwimlane } from "@/lib/task/regroup-swimlane";
-import { createTaskAction, moveTaskAction } from "./actions";
+import { createTaskAction, listDeptMembersAction, moveTaskAction } from "./actions";
 import { TaskCard } from "@/components/task/task-card";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { ViewToggle, type ViewMode } from "@/components/task/view-toggle";
@@ -88,13 +88,10 @@ export function KanbanClient({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [optimistic, setOptimistic] = useState(byStatus);
-  // Re-sync local optimistic state when server returns a new board (e.g. after
-  // changing the dept filter or after router.refresh). Without this, useState's
-  // initial value sticks and filter changes don't visibly update the columns.
-  useEffect(() => {
-    setOptimistic(byStatus);
-  }, [byStatus]);
+  const [optimistic, setOptimistic] = useOptimistic(
+    byStatus,
+    (_current, next: Record<TaskStatus, TaskWithRelations[]>) => next,
+  );
   const [openEdit, setOpenEdit] = useState<TaskWithRelations | null>(null);
   const [openCreate, setOpenCreate] = useState(false);
 
@@ -134,9 +131,8 @@ export function KanbanClient({
     const next = { ...optimistic };
     next[fromStatus] = next[fromStatus].filter((t) => t.id !== taskId);
     next[toStatus] = [...next[toStatus], { ...task, status: toStatus }];
-    setOptimistic(next);
-
     startTransition(async () => {
+      setOptimistic(next);
       try {
         await moveTaskAction(taskId, toStatus);
         toast.success("Đã chuyển task");
@@ -298,7 +294,12 @@ export function KanbanClient({
       {openCreate && (
         <CreateTaskDialog
           departments={departments}
+          members={members}
+          currentUserId={currentUserId}
+          currentRole={currentRole}
           currentDeptId={currentDeptId}
+          currentIsLeader={currentIsLeader}
+          currentIsDirector={currentIsDirector}
           onClose={() => setOpenCreate(false)}
           onCreated={() => {
             setOpenCreate(false);
@@ -382,34 +383,69 @@ function Column({
 
 function CreateTaskDialog({
   departments,
+  members,
+  currentUserId,
+  currentRole,
   currentDeptId,
+  currentIsLeader,
+  currentIsDirector,
   onClose,
   onCreated,
   pending,
 }: {
   departments: DeptOpt[];
+  members: MemberOpt[];
+  currentUserId: string;
+  currentRole: string;
   currentDeptId: number | null;
+  currentIsLeader: boolean;
+  currentIsDirector: boolean;
   onClose: () => void;
   onCreated: () => void;
   pending: boolean;
 }) {
+  const isPrivileged = currentRole === "admin" || currentIsDirector;
+  const isPlainMember = !isPrivileged && !currentIsLeader;
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [deptId, setDeptId] = useState<number | "">(currentDeptId ?? "");
   const [priority, setPriority] = useState<"cao" | "trung_binh" | "thap">("trung_binh");
   const [deadline, setDeadline] = useState("");
+  const [assigneeId, setAssigneeId] = useState(isPlainMember ? currentUserId : "");
+  const [memberOptions, setMemberOptions] = useState<MemberOpt[]>(members);
   const [submitting, startSubmit] = useTransition();
+
+  // Privileged users can pick any dept — reload its members on change.
+  useEffect(() => {
+    if (!isPrivileged || deptId === "") return;
+    let cancelled = false;
+    listDeptMembersAction(Number(deptId))
+      .then((rows) => {
+        if (cancelled) return;
+        setMemberOptions(rows);
+        setAssigneeId((prev) => (rows.some((m) => m.id === prev) ? prev : ""));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isPrivileged, deptId]);
+
+  const selfName = members.find((m) => m.id === currentUserId)?.name ?? "Tôi";
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (deptId === "") return toast.error("Chọn phòng ban");
     if (title.trim().length < 3) return toast.error("Tiêu đề tối thiểu 3 ký tự");
+    if (!assigneeId) return toast.error("Chọn người thực hiện");
     startSubmit(async () => {
       try {
         await createTaskAction({
           title: title.trim(),
           description: description.trim() || null,
           deptId: Number(deptId),
+          assigneeId,
           priority,
           deadline: deadline || null,
         });
@@ -442,9 +478,10 @@ function CreateTaskDialog({
           <div>
             <Label>Phòng *</Label>
             <select
-              className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm disabled:opacity-60"
               value={deptId}
               onChange={(e) => setDeptId(e.target.value === "" ? "" : Number(e.target.value))}
+              disabled={!isPrivileged}
               required
             >
               <option value="">— Chọn —</option>
@@ -465,6 +502,24 @@ function CreateTaskDialog({
               <option value="thap">Thấp</option>
             </select>
           </div>
+        </div>
+        <div>
+          <Label>Người thực hiện *</Label>
+          {isPlainMember ? (
+            <Input value={selfName} disabled className="mt-1" />
+          ) : (
+            <select
+              className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+              value={assigneeId}
+              onChange={(e) => setAssigneeId(e.target.value)}
+              required
+            >
+              <option value="">— Chọn —</option>
+              {memberOptions.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <Label>Hạn chót</Label>

@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { getViewableProjectIds } from "@/lib/acl";
-import { listProjects } from "@/lib/master-data/project-service";
+import { prisma } from "@/lib/prisma";
+import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { DU_AN_SPEC } from "@/lib/master-data/du-an/table-spec";
 import { DuAnListClient } from "./du-an-list-client";
 
 interface Props {
-  searchParams: Promise<{ search?: string; page?: string; status?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export default async function DuAnPage({ searchParams }: Props) {
@@ -16,29 +18,46 @@ export default async function DuAnPage({ searchParams }: Props) {
 
   const v = await getViewableProjectIds(session.user.id);
 
-  const params = await searchParams;
-  const search = params.search ?? "";
-  const page = Number(params.page ?? 1);
-  const status = params.status;
+  const sp = await searchParams;
+  const params = new URLSearchParams();
+  for (const [k, val] of Object.entries(sp)) {
+    if (typeof val === "string") params.set(k, val);
+  }
 
-  // No viewable projects — show empty list (layout guard already checked module access)
+  const state = parseTableQuery(params, DU_AN_SPEC);
+
+  // No viewable projects — show empty list
   if (v.kind === "none") {
     return (
       <Suspense>
-        <DuAnListClient data={[]} total={0} page={1} pageSize={20} searchValue={search} />
+        <DuAnListClient
+          data={[]}
+          total={0}
+          page={state.page}
+          pageSize={state.pageSize}
+          searchValue={state.search ?? ""}
+        />
       </Suspense>
     );
   }
 
-  const result = await listProjects({
-    search,
-    page,
-    pageSize: 20,
-    status,
-    ...(v.kind === "subset" ? { ids: v.ids } : {}),
-  });
+  const args = buildPrismaArgs(state, DU_AN_SPEC);
+  const where = {
+    ...args.where,
+    deletedAt: null,
+    ...(v.kind === "subset" ? { id: { in: v.ids } } : {}),
+  };
 
-  const items = result.items.map((p) => ({
+  const [rows, total] = await Promise.all([
+    prisma.project.findMany({
+      ...args,
+      where,
+      include: { _count: { select: { categories: { where: { deletedAt: null } } } } },
+    }),
+    prisma.project.count({ where }),
+  ]);
+
+  const items = rows.map((p) => ({
     id: p.id,
     code: p.code,
     name: p.name,
@@ -53,10 +72,10 @@ export default async function DuAnPage({ searchParams }: Props) {
     <Suspense>
       <DuAnListClient
         data={items}
-        total={result.total}
-        page={result.page}
-        pageSize={result.pageSize}
-        searchValue={search}
+        total={total}
+        page={state.page}
+        pageSize={state.pageSize}
+        searchValue={state.search ?? ""}
       />
     </Suspense>
   );

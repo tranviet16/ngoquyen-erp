@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
-import { signIn } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,11 +23,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await signIn.email({
-        email,
-        password,
-        callbackURL: "/dashboard",
-      });
+      const identifier = loginId.trim();
+      const result = identifier.includes("@")
+        ? await authClient.signIn.email({ email: identifier, password })
+        : await authClient.signIn.username({ username: identifier, password });
 
       if (result.error) {
         setError(result.error.message ?? "Đăng nhập thất bại");
@@ -52,13 +51,15 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="loginId">Tên đăng nhập hoặc email</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="admin@nq.local"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="loginId"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                placeholder="admin hoặc tranthithuha@nq.local"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
                 required
                 disabled={loading}
               />

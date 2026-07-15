@@ -8,7 +8,7 @@ env:
   # Ephemeral service-container creds — NOT secrets. DB name ends in `_test`,
   # which the truncateAll() / global-setup guards require.
   DATABASE_URL: postgresql://test:test@localhost:5432/ngoquyyen_erp_test
-  BETTER_AUTH_SECRET: Q7mV2xL9pR4sT8wY3zB6cD1fG5hJ0kNq
+  BETTER_AUTH_SECRET: test-only-better-auth-secret-not-for-production
 
 jobs:
   classify:
@@ -165,8 +165,8 @@ jobs:
       - run: npx prisma migrate deploy
       - run: npm run build
       # E2E users are seeded idempotently by e2e/global-setup.ts via the running
-      # app's better-auth sign-up endpoint; webServer (next start) is launched by
-      # playwright.config.ts before globalSetup runs.
+      # app's better-auth sign-up endpoint; Playwright launches the standalone
+      # production server before globalSetup runs.
       - run: npm run test:e2e
       - name: Upload Playwright report
         if: always()

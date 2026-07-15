@@ -1,15 +1,13 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
-import type { ReactElement } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Pencil, Power, PowerOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
-import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import {
   createDepartmentAction,
   updateDepartmentAction,
@@ -17,16 +15,6 @@ import {
   setDirectorAction,
   unsetDirectorAction,
 } from "./actions";
-
-const DataGrid = dynamic(
-  () => import("@/components/data-grid").then((m) => m.DataGrid),
-  { ssr: false },
-) as <T extends RowWithId>(p: {
-  columns: DataGridColumn<T>[];
-  rows: T[];
-  handlers: DataGridHandlers<T>;
-  height?: number | string;
-}) => ReactElement;
 
 interface DeptRow {
   id: number;
@@ -70,12 +58,21 @@ export function DepartmentClient({ departments, users }: Props) {
     setDeptDialog({ open: true, edit: null });
   }
 
+  function openEditDept(dept: DeptRow) {
+    setDeptForm({ code: dept.code, name: dept.name });
+    setDeptDialog({ open: true, edit: dept });
+  }
+
   async function submitDept(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       try {
-        await createDepartmentAction(deptForm);
-        toast.success("Đã lưu");
+        if (deptDialog.edit) {
+          await updateDepartmentAction(deptDialog.edit.id, deptForm);
+        } else {
+          await createDepartmentAction(deptForm);
+        }
+        toast.success(deptDialog.edit ? "Đã cập nhật phòng ban" : "Đã tạo phòng ban");
         setDeptDialog({ open: false, edit: null });
         router.refresh();
       } catch (err) {
@@ -84,30 +81,22 @@ export function DepartmentClient({ departments, users }: Props) {
     });
   }
 
-  const deptColumns: DataGridColumn<DeptRow>[] = [
-    { id: "code", title: "Mã", kind: "text", width: 100 },
-    { id: "name", title: "Tên phòng ban", kind: "text", width: 260 },
-    { id: "memberCount", title: "Số thành viên", kind: "number", width: 130, readonly: true },
-    { id: "isActive", title: "Hoạt động", kind: "boolean", width: 100 },
-  ];
-
-  const deptHandlers: DataGridHandlers<DeptRow> = {
-    onCellEdit: async (id, col, value) => {
-      const patch: Partial<{ code: string; name: string; isActive: boolean }> = {};
-      if (col === "code" && typeof value === "string") patch.code = value;
-      else if (col === "name" && typeof value === "string") patch.name = value;
-      else if (col === "isActive") patch.isActive = Boolean(value);
-      else return;
+  function toggleDeptActive(dept: DeptRow) {
+    const nextActive = !dept.isActive;
+    const message = nextActive
+      ? `Kích hoạt lại phòng ban "${dept.name}"?`
+      : `Ẩn phòng ban "${dept.name}"? Thành viên hiện có vẫn được giữ.`;
+    if (!confirm(message)) return;
+    startTransition(async () => {
       try {
-        await updateDepartmentAction(id, patch);
-        toast.success("Đã lưu");
-        startTransition(() => router.refresh());
+        await updateDepartmentAction(dept.id, { isActive: nextActive });
+        toast.success(nextActive ? "Đã kích hoạt phòng ban" : "Đã ẩn phòng ban");
+        router.refresh();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err));
-        startTransition(() => router.refresh());
       }
-    },
-  };
+    });
+  }
 
   function changeUserDept(u: UserRow, deptId: number | null) {
     startTransition(async () => {
@@ -191,18 +180,73 @@ export function DepartmentClient({ departments, users }: Props) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              Sửa trực tiếp Mã, Tên, Hoạt động trong bảng. Toggle ô &quot;Hoạt động&quot; để ẩn/hiện.
+              Quản lý mã, tên và trạng thái phòng ban. Ẩn phòng ban không xóa thành viên hay dữ liệu lịch sử.
             </p>
             <Button size="sm" onClick={openCreateDept} disabled={pending}>
               + Thêm phòng ban
             </Button>
           </div>
-          <DataGrid<DeptRow>
-            columns={deptColumns}
-            rows={departments}
-            handlers={deptHandlers}
-            height={420}
-          />
+          <div className="overflow-hidden rounded-md border bg-card">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40">
+                <tr>
+                  <th className="px-3 py-2 text-left">Mã</th>
+                  <th className="px-3 py-2 text-left">Tên phòng ban</th>
+                  <th className="px-3 py-2 text-right">Thành viên</th>
+                  <th className="px-3 py-2 text-left">Trạng thái</th>
+                  <th className="px-3 py-2 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {departments.map((dept) => (
+                  <tr key={dept.id} className="border-b last:border-0 hover:bg-muted/20">
+                    <td className="px-3 py-2 font-mono text-xs font-semibold">{dept.code}</td>
+                    <td className="px-3 py-2 font-medium">{dept.name}</td>
+                    <td className="px-3 py-2 text-right">{dept.memberCount}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={
+                          dept.isActive
+                            ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                            : "rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                        }
+                      >
+                        {dept.isActive ? "Đang dùng" : "Đã ẩn"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditDept(dept)}
+                          disabled={pending}
+                        >
+                          <Pencil className="mr-1 h-3.5 w-3.5" />
+                          Sửa
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={dept.isActive ? "outline" : "default"}
+                          onClick={() => toggleDeptActive(dept)}
+                          disabled={pending}
+                        >
+                          {dept.isActive ? (
+                            <PowerOff className="mr-1 h-3.5 w-3.5" />
+                          ) : (
+                            <Power className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          {dept.isActive ? "Ẩn" : "Kích hoạt"}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="rounded-lg border overflow-x-auto">
@@ -270,7 +314,7 @@ export function DepartmentClient({ departments, users }: Props) {
       )}
 
       <CrudDialog
-        title="Thêm phòng ban"
+        title={deptDialog.edit ? "Sửa phòng ban" : "Thêm phòng ban"}
         open={deptDialog.open}
         onOpenChange={(o) => setDeptDialog({ open: o, edit: null })}
       >
@@ -304,7 +348,7 @@ export function DepartmentClient({ departments, users }: Props) {
               Hủy
             </Button>
             <Button type="submit" disabled={pending}>
-              {pending ? "Đang lưu..." : "Lưu"}
+              {pending ? "Đang lưu..." : deptDialog.edit ? "Cập nhật" : "Lưu"}
             </Button>
           </div>
         </form>

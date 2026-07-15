@@ -7,6 +7,11 @@ import * as XLSX from "xlsx";
 import type { ParsedRow } from "./adapter-types";
 import { parseExcelDate, parseVndNumber } from "./excel-utils";
 
+type ParseLedgerOptions = {
+  partyHeaders?: string[];
+  itemHeaders?: string[];
+};
+
 function normalizeTxType(val: unknown): "lay_hang" | "thanh_toan" | "dieu_chinh" {
   const s = String(val ?? "").toLowerCase().trim();
   if (s.includes("trả") || s.includes("tra") || s.includes("payment")) return "thanh_toan";
@@ -32,6 +37,7 @@ export function parseTxSheet(
   baseRowIdx: number,
   supplierNames: Set<string>,
   entityNames: Set<string>,
+  options: ParseLedgerOptions = {},
 ): ParsedRow[] {
   const matrix = readMatrix(sheet);
   const HEADER_ROW = 2;
@@ -43,9 +49,9 @@ export function parseTxSheet(
   const cDate = col("Ngày GD", "Ngày");
   const cType = col("Loại GD", "Loại");
   const cEntity = col("Chủ Thể");
-  const cSupplier = col("Nhà Cung Cấp", "NCC");
+  const cSupplier = col(...(options.partyHeaders ?? ["Nhà Cung Cấp", "NCC"]));
   const cProject = col("Dự Án / Công Trình", "Dự Án");
-  const cItem = col("Tên Vật Tư");
+  const cItem = col(...(options.itemHeaders ?? ["Tên Vật Tư"]));
   const cTotalTt = headers.findIndex((h) => h.startsWith("Tổng TT"));
   const cTotalHd = headers.findIndex((h) => h.startsWith("Tổng HĐ"));
   const cInvoice = col("Số HĐ");
@@ -86,6 +92,7 @@ export function parseOpenSheet(
   baseRowIdx: number,
   supplierNames: Set<string>,
   entityNames: Set<string>,
+  options: ParseLedgerOptions = {},
 ): ParsedRow[] {
   const matrix = readMatrix(sheet);
   // Header at row 4: "Chủ Thể | Nhà Cung Cấp | Dự Án | Số Dư TT | Số Dư HĐ | Ngày Xác Nhận"
@@ -96,7 +103,7 @@ export function parseOpenSheet(
     return -1;
   };
   const cEntity = col("Chủ Thể");
-  const cSupplier = col("Nhà Cung Cấp", "NCC");
+  const cSupplier = col(...(options.partyHeaders ?? ["Nhà Cung Cấp", "NCC"]));
   const cProject = col("Dự Án");
   const cBalTt = col("Số Dư TT");
   const cBalHd = col("Số Dư HĐ");

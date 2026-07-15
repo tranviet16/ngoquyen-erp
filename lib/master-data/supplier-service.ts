@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { supplierSchema, type SupplierInput } from "./schemas";
 
@@ -41,7 +41,7 @@ export async function getSupplierById(id: number) {
 
 export async function createSupplier(input: SupplierInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = supplierSchema.parse(input);
   const supplier = await prisma.supplier.create({ data });
   revalidatePath("/master-data/suppliers");
@@ -51,7 +51,7 @@ export async function createSupplier(input: SupplierInput) {
 
 export async function updateSupplier(id: number, input: SupplierInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "master-data", "edit");
   const data = supplierSchema.parse(input);
   const supplier = await prisma.supplier.update({ where: { id }, data });
   revalidatePath("/master-data/suppliers");
@@ -61,9 +61,40 @@ export async function updateSupplier(id: number, input: SupplierInput) {
 
 export async function softDeleteSupplier(id: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "master-data", "admin");
   const supplier = await prisma.supplier.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/master-data/suppliers");
   revalidatePath("/master-data");
   return supplier;
+}
+
+// ─── Inline-edit patch ────────────────────────────────────────────────────────
+
+import { z } from "zod";
+
+// Supplier Prisma fields safe for inline edit
+const SUPPLIER_PATCH_WHITELIST = ["name", "taxCode", "phone", "address"] as const;
+
+const patchSupplierSchema = z.object({
+  name: z.string().min(1, "Tên không được để trống").optional(),
+  taxCode: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+});
+
+export async function patchSupplier(id: number, patch: Record<string, unknown>) {
+  const role = await getSessionRole();
+  await requireRoleModuleAccess(role, "master-data", "edit");
+
+  for (const k of Object.keys(patch)) {
+    if (!(SUPPLIER_PATCH_WHITELIST as readonly string[]).includes(k)) {
+      throw new Error(`Field "${k}" không được phép inline edit`);
+    }
+  }
+
+  const data = patchSupplierSchema.parse(patch);
+  const updated = await prisma.supplier.update({ where: { id }, data });
+  revalidatePath("/master-data/suppliers");
+  revalidatePath("/master-data");
+  return updated;
 }

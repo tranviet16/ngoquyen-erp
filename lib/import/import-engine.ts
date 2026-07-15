@@ -208,6 +208,11 @@ export async function getRollbackInfo(id: number) {
     pra,
     eclass,
     psds,
+    slLot,
+    slMs,
+    slPp,
+    slMi,
+    slPs,
   ] = await Promise.all([
     prisma.ledgerTransaction.count({ where: { importRunId: id } }),
     prisma.ledgerOpeningBalance.count({ where: { importRunId: id } }),
@@ -227,6 +232,11 @@ export async function getRollbackInfo(id: number) {
     prisma.payableReceivableAdjustment.count({ where: { importRunId: id } }),
     prisma.expenseClassification.count({ where: { importRunId: id } }),
     prisma.projectSupplierDebtSnapshot.count({ where: { importRunId: id } }),
+    prisma.slDtLot.count({ where: { importRunId: id } }),
+    prisma.slDtMilestoneScore.count({ where: { importRunId: id } }),
+    prisma.slDtPaymentPlan.count({ where: { importRunId: id } }),
+    prisma.slDtMonthlyInput.count({ where: { importRunId: id } }),
+    prisma.slDtProgressStatus.count({ where: { importRunId: id } }),
   ]);
   return {
     ledgerTransactions: tx,
@@ -247,9 +257,15 @@ export async function getRollbackInfo(id: number) {
     payableReceivableAdjustments: pra,
     expenseClassifications: eclass,
     projectSupplierDebtSnapshots: psds,
+    slDtLots: slLot,
+    slDtMilestoneScores: slMs,
+    slDtPaymentPlans: slPp,
+    slDtMonthlyInputs: slMi,
+    slDtProgressStatuses: slPs,
     total:
       tx + open + est + ptx + sdd + psc + lc + je +
-      psch + pacc + pco + pcon + p3wf + srec + lpay + pra + eclass + psds,
+      psch + pacc + pco + pcon + p3wf + srec + lpay + pra + eclass + psds +
+      slLot + slMs + slPp + slMi + slPs,
   };
 }
 
@@ -288,6 +304,13 @@ export async function rollbackImportRun(id: number) {
     const praCount = await tx.$executeRaw`DELETE FROM payable_receivable_adjustments WHERE "importRunId" = ${id}`;
     const eclassCount = await tx.$executeRaw`DELETE FROM expense_classifications WHERE "importRunId" = ${id}`;
     const psdsCount = await tx.$executeRaw`DELETE FROM project_supplier_debt_snapshots WHERE "importRunId" = ${id}`;
+    // SL-DT module — delete children before lots (deleting a lot cascades to its
+    // children, so a child tagged by another run could vanish; clear by run first).
+    const slPpCount = await tx.$executeRaw`DELETE FROM sl_dt_payment_plans WHERE "importRunId" = ${id}`;
+    const slMiCount = await tx.$executeRaw`DELETE FROM sl_dt_monthly_inputs WHERE "importRunId" = ${id}`;
+    const slPsCount = await tx.$executeRaw`DELETE FROM sl_dt_progress_statuses WHERE "importRunId" = ${id}`;
+    const slLotCount = await tx.$executeRaw`DELETE FROM sl_dt_lots WHERE "importRunId" = ${id}`;
+    const slMsCount = await tx.$executeRaw`DELETE FROM sl_dt_milestone_scores WHERE "importRunId" = ${id}`;
     await tx.importRun.delete({ where: { id } });
     return {
       ledgerTransactions: txCount,
@@ -308,9 +331,15 @@ export async function rollbackImportRun(id: number) {
       payableReceivableAdjustments: praCount,
       expenseClassifications: eclassCount,
       projectSupplierDebtSnapshots: psdsCount,
+      slDtPaymentPlans: slPpCount,
+      slDtMonthlyInputs: slMiCount,
+      slDtProgressStatuses: slPsCount,
+      slDtLots: slLotCount,
+      slDtMilestoneScores: slMsCount,
       total:
         txCount + openCount + estCount + ptxCount + sddCount + pscCount + lcCount + lpCount + jeCount +
-        pschCount + paccCount + pcoCount + pconCount + p3wfCount + srecCount + praCount + eclassCount + psdsCount,
+        pschCount + paccCount + pcoCount + pconCount + p3wfCount + srecCount + praCount + eclassCount + psdsCount +
+        slPpCount + slMiCount + slPsCount + slLotCount + slMsCount,
     };
   });
 }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { estimateSchema, type EstimateInput } from "./schemas";
@@ -27,7 +27,7 @@ export async function listEstimates(projectId: number) {
 
 export async function createEstimate(input: EstimateInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = estimateSchema.parse(input);
   const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.create({
@@ -51,7 +51,7 @@ export async function createEstimate(input: EstimateInput) {
 
 export async function updateEstimate(id: number, input: EstimateInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = estimateSchema.parse(input);
   const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.update({
@@ -85,7 +85,7 @@ export async function adminPatchEstimate(
   projectId: number,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const data: Prisma.ProjectEstimateUpdateInput = {};
   if (patch.itemName !== undefined) data.itemName = patch.itemName;
   if (patch.unit !== undefined) data.unit = patch.unit;
@@ -102,7 +102,7 @@ export async function adminPatchEstimate(
 
 export async function softDeleteEstimate(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectEstimate.update({
     where: { id },
     data: { deletedAt: new Date() },

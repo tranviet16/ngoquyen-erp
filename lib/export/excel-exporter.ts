@@ -45,6 +45,8 @@ export function addSheet<T extends Record<string, unknown>>(
   }
 ): void {
   const aoa: unknown[][] = [];
+  const titleRows = options?.title ? 1 : 0;
+  const headerRowIndex = titleRows;
 
   // Optional title row
   if (options?.title) {
@@ -77,9 +79,35 @@ export function addSheet<T extends Record<string, unknown>>(
   }
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1:A1");
 
   // Set column widths
   ws["!cols"] = columns.map((c) => ({ wch: c.width ?? 15 }));
+  ws["!rows"] = aoa.map((_, index) => ({
+    hpt: index === 0 && options?.title ? 24 : index === headerRowIndex ? 20 : 18,
+  }));
+
+  if (options?.title && columns.length > 1) {
+    ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: columns.length - 1 } }];
+  }
+
+  ws["!freeze"] = { xSplit: 0, ySplit: headerRowIndex + 1 };
+  ws["!autofilter"] = {
+    ref: XLSX.utils.encode_range({
+      s: { r: headerRowIndex, c: 0 },
+      e: { r: Math.max(headerRowIndex, range.e.r), c: columns.length - 1 },
+    }),
+  };
+  ws["!margins"] = { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
+
+  const dataStart = headerRowIndex + 1;
+  const dataEnd = range.e.r;
+  for (let rowIndex = dataStart; rowIndex <= dataEnd; rowIndex += 1) {
+    columns.forEach((column, columnIndex) => {
+      const cell = ws[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })];
+      if (cell && column.numFmt) cell.z = column.numFmt;
+    });
+  }
 
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
 }

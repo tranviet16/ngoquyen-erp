@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Inventory rủi ro và baseline an toàn"
-status: pending
+status: completed
 priority: P1
 effort: "10h"
 dependencies: []
@@ -50,10 +50,10 @@ Xây nguồn sự thật cho những gì phải được bảo vệ và xác nh�
 
 ## Todo list
 
-- [ ] Manifest P0/P1 review xong.
-- [ ] Toolchain/CI command tái lập được từ checkout sạch.
-- [ ] Test/load environment guard chứng minh không chạm production.
-- [ ] Canonical checkout chạy tái lập được command CI; nếu không, blocker đã được escalated.
+- [x] Manifest P0/P1 review xong.
+- [x] Toolchain/CI command tái lập được từ checkout sạch.
+- [x] Test/load environment guard chứng minh không chạm production.
+- [x] Canonical checkout chạy tái lập được command CI; nếu không, blocker đã được escalated.
 
 ## Success criteria
 

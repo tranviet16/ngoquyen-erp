@@ -26,23 +26,27 @@ export async function cleanupTasksByPrefix(prefix: string): Promise<void> {
 }
 
 /**
- * Ensures one active department exists for task-creation specs. Idempotent —
- * reuses the `E2E` department across runs, reactivating it if a prior spec
- * left it inactive.
+ * Ensures one active department exists for task-creation specs, and makes the
+ * E2E admin a member of it so a valid assignee exists (task creation requires
+ * the assignee to belong to the task's department). Admin is chosen because the
+ * RBAC admin short-circuit means its departmentId never alters authz outcomes.
+ * Idempotent — reuses the `E2E` department across runs, reactivating it if a
+ * prior spec left it inactive.
  */
 export async function ensureDepartment(): Promise<{ id: number; code: string; name: string }> {
   const code = "E2E";
   const existing = await db.department.findFirst({ where: { code } });
-  if (existing) {
-    if (!existing.isActive) {
-      await db.department.update({ where: { id: existing.id }, data: { isActive: true } });
-    }
-    return { id: existing.id, code: existing.code, name: existing.name };
+  const dept =
+    existing ??
+    (await db.department.create({ data: { code, name: "Phòng E2E", isActive: true } }));
+  if (existing && !existing.isActive) {
+    await db.department.update({ where: { id: existing.id }, data: { isActive: true } });
   }
-  const created = await db.department.create({
-    data: { code, name: "Phòng E2E", isActive: true },
+  await db.user.updateMany({
+    where: { email: "e2e-admin@nq.local" },
+    data: { departmentId: dept.id },
   });
-  return { id: created.id, code: created.code, name: created.name };
+  return { id: dept.id, code: dept.code, name: dept.name };
 }
 
 /**

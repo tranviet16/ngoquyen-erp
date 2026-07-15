@@ -2,13 +2,18 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canAccess, type ModuleKey } from "@/lib/acl";
-import { listTasksForBoard } from "@/lib/task/task-service";
 import { listForms } from "@/lib/coordination-form/coordination-form-service";
 import { countMyUnread } from "@/lib/notification/notification-service";
-import { KpiCard } from "./_components/kpi-card";
-import { TaskListCard } from "./_components/task-list-card";
-import { FormListCard } from "./_components/form-list-card";
+import { getDashboardData } from "@/lib/tai-chinh/dashboard-service";
+import { listTasksForBoard } from "@/lib/task/task-service";
 import { EmptyFallback, type Shortcut } from "./_components/empty-fallback";
+import { FinanceSnapshotCard } from "./_components/finance-snapshot-card";
+import { FormListCard } from "./_components/form-list-card";
+import { KpiCard } from "./_components/kpi-card";
+import { OperationsHero } from "./_components/operations-hero";
+import { PriorityQueueCard } from "./_components/priority-queue-card";
+import { TaskListCard } from "./_components/task-list-card";
+import { WorkflowOverviewCard } from "./_components/workflow-overview-card";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +40,22 @@ export default async function DashboardPage() {
   if (!session?.user) redirect("/login");
 
   const userId = session.user.id;
+  const isAdmin = session.user.role === "admin";
   const now = new Date();
   const sevenDaysLater = new Date(now.getTime() + 7 * 86400000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000);
 
-  const [tasksResult, formsResult, unreadCount, shortcutAccess] = await Promise.all([
-    listTasksForBoard({ assigneeId: userId, includeUndated: true }),
+  const taskQuery = isAdmin
+    ? { includeUndated: true }
+    : { assigneeId: userId, includeUndated: true };
+
+  const financeDataPromise = canAccess(userId, "tai-chinh", {
+    minLevel: "read",
+    scope: "module",
+  }).then((ok) => (ok ? getDashboardData() : null));
+
+  const [tasksResult, formsResult, unreadCount, shortcutAccess, financeData] = await Promise.all([
+    listTasksForBoard(taskQuery),
     listForms({ status: "pending_leader" }),
     countMyUnread(),
     Promise.all(
@@ -47,6 +63,7 @@ export default async function DashboardPage() {
         canAccess(userId, s.key, { minLevel: "read", scope: "module" }),
       ),
     ),
+    financeDataPromise,
   ]);
 
   const tasksOpen = [
@@ -66,6 +83,9 @@ export default async function DashboardPage() {
     .slice(0, 5);
 
   const pendingForms = formsResult.items.slice(0, 5);
+  const doneThisWindow = tasksResult.byStatus.done.filter(
+    (t) => t.completedAt && t.completedAt >= sevenDaysAgo,
+  );
 
   const accessibleShortcuts: Shortcut[] = MODULE_SHORTCUTS.filter(
     (_, i) => shortcutAccess[i],
@@ -75,24 +95,53 @@ export default async function DashboardPage() {
     overdueTasks.length === 0 && upcomingTasks.length === 0 && pendingForms.length === 0;
 
   return (
-    <div className="space-y-5 p-2">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-bold">Xin chào, {session.user.name}</h1>
-        <p className="text-sm text-muted-foreground capitalize">{formatToday()}</p>
-      </div>
+    <div className="space-y-5">
+      <OperationsHero
+        userName={session.user.name}
+        today={formatToday()}
+        pendingForms={formsResult.total}
+        shortcuts={accessibleShortcuts}
+        scopeLabel={isAdmin ? "Admin đang xem toàn hệ thống" : "Đang xem phạm vi cá nhân"}
+      />
 
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <KpiCard label="Task đang chờ" value={tasksOpen.length} />
-        <KpiCard label="Task quá hạn" value={overdueTasks.length} accent="danger" />
-        <KpiCard label="Phiếu chờ duyệt" value={formsResult.total} />
-        <KpiCard label="Thông báo chưa đọc" value={unreadCount} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <KpiCard
+          label="Task mở"
+          value={tasksOpen.length}
+          sub={isAdmin ? "Tổng task chưa đóng" : "Todo + đang làm + review"}
+        />
+        <KpiCard label="Quá hạn" value={overdueTasks.length} accent="danger" sub="Cần xử lý trước" />
+        <KpiCard label="Chờ duyệt" value={formsResult.total} accent="warning" sub="Phiếu phối hợp" />
+        <KpiCard label="Chưa đọc" value={unreadCount} accent="success" sub="Thông báo mới" />
       </div>
 
       {allEmpty ? (
         <EmptyFallback shortcuts={accessibleShortcuts} />
       ) : (
         <>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 xl:grid-cols-[1.35fr_1fr]">
+            <WorkflowOverviewCard
+              href="/van-hanh/cong-viec"
+              metrics={[
+                { label: "Quá hạn", value: overdueTasks.length, tone: "danger" },
+                { label: "Sắp đến hạn", value: upcomingTasks.length, tone: "warning" },
+                { label: "Chờ duyệt", value: pendingForms.length, tone: "primary" },
+                { label: "Đã xử lý", value: doneThisWindow.length, tone: "success" },
+              ]}
+            />
+            <PriorityQueueCard
+              overdueTasks={overdueTasks}
+              upcomingTasks={upcomingTasks}
+              pendingForms={pendingForms}
+            />
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+            <FinanceSnapshotCard data={financeData} />
+            <FormListCard forms={pendingForms} viewAllHref="/van-hanh/phieu-phoi-hop" />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
             <TaskListCard
               title="Task quá hạn"
               tasks={overdueTasks}
@@ -101,16 +150,15 @@ export default async function DashboardPage() {
               viewAllHref="/van-hanh/cong-viec"
               now={now}
             />
-            <FormListCard forms={pendingForms} viewAllHref="/van-hanh/phieu-phoi-hop" />
+            <TaskListCard
+              title="Task sắp đến hạn"
+              tasks={upcomingTasks}
+              mode="upcoming"
+              emptyText="Không có task sắp đến hạn."
+              viewAllHref="/van-hanh/cong-viec"
+              now={now}
+            />
           </div>
-          <TaskListCard
-            title="Task sắp đến hạn (7 ngày)"
-            tasks={upcomingTasks}
-            mode="upcoming"
-            emptyText="Không có task sắp đến hạn."
-            viewAllHref="/van-hanh/cong-viec"
-            now={now}
-          />
         </>
       )}
     </div>

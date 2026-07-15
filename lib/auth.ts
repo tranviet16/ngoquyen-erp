@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { username } from "better-auth/plugins";
 import { env } from "./env";
 // Use the shared singleton from lib/prisma.ts so Better Auth's own writes
 // go through the same connection pool. Session/Account/Verification writes
@@ -7,10 +8,10 @@ import { env } from "./env";
 import { prisma } from "./prisma";
 
 const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
-// Rate limiting defends prod auth endpoints, but E2E runs the production build
-// (`npm run start`) and would trip the 429 limit while seeding/login-spamming.
-// Disable it only when CI marks the run.
-const isCI = process.env.CI === "true";
+// Rate limiting defends prod auth endpoints, but the E2E suite login-spams the
+// auth endpoints and would trip the 429 limit. Disable it for automated test
+// runs — both CI and the local Playwright server (which sets E2E=true).
+const isTestRun = process.env.CI === "true" || process.env.E2E === "true";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -27,7 +28,7 @@ export const auth = betterAuth({
     requireEmailVerification: false,
   },
   rateLimit: {
-    enabled: !isCI,
+    enabled: !isTestRun,
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7,
@@ -56,8 +57,21 @@ export const auth = betterAuth({
         // role is NOT settable by users on signup — only admin can change it
         input: false,
       },
+      title: {
+        // Org-position label (chức danh) — display only, set by admin.
+        type: "string",
+        required: false,
+        input: false,
+      },
+      isActive: {
+        type: "boolean",
+        required: false,
+        defaultValue: true,
+        input: false,
+      },
     },
   },
+  plugins: [username()],
 });
 
 export type Session = typeof auth.$Infer.Session;

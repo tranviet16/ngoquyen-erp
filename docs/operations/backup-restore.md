@@ -109,7 +109,7 @@ Run this on staging or a spare VPS monthly to verify backups are usable:
 ```bash
 # On staging VPS:
 scp prod:/opt/ngoquyyen-erp/backups/erp-latest.sql.gz /tmp/
-bash restore-db.sh /tmp/erp-latest.sql.gz --force
+PGDATABASE=ngoquyyen_erp_test bash restore-db.sh /tmp/erp-latest.sql.gz --force
 
 # Verify data
 psql $DATABASE_URL -c "SELECT COUNT(*) FROM users;"
@@ -117,6 +117,12 @@ psql $DATABASE_URL -c "SELECT COUNT(*) FROM audit_logs;"
 ```
 
 Document result and date in a restore test log.
+
+Latest local drill evidence: `plans/260715-iteration-feedback-loop/reports/restore-drill-20260716.md`. It restored the live local schema into an isolated `*_test` database, matched 60 tables, 4 views and the bootstrap-admin row, then removed the disposable database and temporary dump.
+
+The restore script refuses every non-`*_test` target unless the incident owner
+sets `ALLOW_PRODUCTION_RESTORE=yes` explicitly. `--force` never bypasses this
+production-target guard.
 
 ---
 
@@ -138,3 +144,17 @@ ls -t /opt/ngoquyyen-erp/backups/*.sql.gz | tail -n +11 | xargs rm -f
 ```
 
 If remote (B2) upload fails but local backup succeeded — local acts as fallback for up to 30 days.
+
+---
+
+## Local observability backups
+
+GlitchTip backups are validated PostgreSQL custom-format dumps retained for 30 days. The dump itself is not DPAPI-encrypted; its directory ACL grants access only to the current Windows owner and `SYSTEM`:
+
+```powershell
+powershell -File scripts/manage-glitchtip-local.ps1 backup
+```
+
+They are written outside the repository to `%LOCALAPPDATA%\NgoQuyenERP\backups\glitchtip`. The command validates every dump with `pg_restore --list` before reporting success and prunes expired files.
+
+Uptime Kuma stores SQLite data in Docker volume `ngoquyen-uptime_uptime-kuma-data`. Back up this volume before upgrades and retain the archive for 30 days. Kuma credentials are separately DPAPI-encrypted at `%LOCALAPPDATA%\NgoQuyenERP\uptime-kuma-secrets.json`; never put either artifact in Git.

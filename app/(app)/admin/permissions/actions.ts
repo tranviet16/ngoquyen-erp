@@ -21,13 +21,12 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
 import {
   MODULE_KEYS,
-  MODULE_LEVELS,
   isValidLevelForModule,
   type ModuleKey,
   type AccessLevel,
@@ -52,7 +51,7 @@ async function assertAdmin(): Promise<string> {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
   if (!session?.user) throw new Error("Phiên đăng nhập đã hết hạn");
-  requireRole(session.user.role, "admin");
+  await requireRoleModuleAccess(session.user.role, "admin.permissions", "admin");
   return session.user.id;
 }
 

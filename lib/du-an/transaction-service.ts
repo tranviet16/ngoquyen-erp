@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { transactionSchema, type TransactionInput } from "./schemas";
@@ -27,7 +27,7 @@ export async function listTransactions(projectId: number) {
 
 export async function createTransaction(input: TransactionInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = transactionSchema.parse(input);
   const qtyDecimal = new Prisma.Decimal(data.qty);
   const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
@@ -59,7 +59,7 @@ export async function createTransaction(input: TransactionInput) {
 
 export async function updateTransaction(id: number, input: TransactionInput) {
   const role = await getSessionRole();
-  requireRole(role, "ketoan");
+  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = transactionSchema.parse(input);
   const qtyDecimal = new Prisma.Decimal(data.qty);
   const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
@@ -98,7 +98,7 @@ export async function adminPatchTransaction(
   projectId: number,
 ) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const data: Record<string, unknown> = {};
   if (patch.amountHd !== undefined) data.amountHd = new Prisma.Decimal(patch.amountHd);
   if (patch.amountTt !== undefined) data.amountTt = new Prisma.Decimal(patch.amountTt);
@@ -110,7 +110,7 @@ export async function adminPatchTransaction(
 
 export async function softDeleteTransaction(id: number, projectId: number) {
   const role = await getSessionRole();
-  requireRole(role, "admin");
+  await requireRoleModuleAccess(role, "du-an", "admin");
   const record = await prisma.projectTransaction.update({
     where: { id },
     data: { deletedAt: new Date() },

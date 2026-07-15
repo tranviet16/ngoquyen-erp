@@ -92,7 +92,7 @@ export async function listForms(opts: {
     },
   };
 
-  let [items, total] = await Promise.all([
+  const [initialItems, total] = await Promise.all([
     prisma.coordinationForm.findMany({
       where,
       include,
@@ -102,6 +102,7 @@ export async function listForms(opts: {
     }),
     prisma.coordinationForm.count({ where }),
   ]);
+  let items = initialItems;
 
   const overdueIds = items.filter((f) => isOverdue(f)).map((f) => f.id);
   if (overdueIds.length > 0) {

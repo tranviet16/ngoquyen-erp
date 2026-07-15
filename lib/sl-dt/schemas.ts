@@ -34,6 +34,19 @@ export const milestoneScoreSchema = z.object({
   sortOrder: z.number().int().min(0).default(0),
 });
 
+export const lotCatalogSchema = z.object({
+  code: z.string().trim().min(1, "Mã lô không được để trống"),
+  lotName: z.string().trim().min(1, "Tên lô không được để trống"),
+  phaseCode: z.string().trim().default(""),
+  groupCode: z.string().trim().default(""),
+  sortOrder: z.number().int().min(0).default(0),
+  activeFromYear: z.number().int().min(2000).max(2100),
+  activeFromMonth: z.number().int().min(1).max(12),
+  estimateValue: z.number().min(0).default(0),
+  contractValue: z.number().min(0).nullable().optional(),
+});
+
 export type ProgressStatusInput = z.infer<typeof progressStatusSchema>;
 export type PaymentPlanInput = z.infer<typeof paymentPlanSchema>;
 export type MilestoneScoreInput = z.infer<typeof milestoneScoreSchema>;
+export type LotCatalogInput = z.infer<typeof lotCatalogSchema>;

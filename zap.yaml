@@ -1,0 +1,46 @@
+env:
+  contexts:
+  - excludePaths: []
+    name: baseline
+    urls:
+    - https://admin-pc.tail8998df.ts.net:8444
+  parameters:
+    failOnError: true
+    progressToStdout: false
+jobs:
+- parameters:
+    enableTags: false
+    maxAlertsPerRule: 10
+  type: passiveScan-config
+- parameters:
+    maxDuration: 1
+    url: https://admin-pc.tail8998df.ts.net:8444
+  type: spider
+- parameters:
+    maxDuration: 0
+  type: passiveScan-wait
+- parameters:
+    format: Long
+    summaryFile: /home/zap/zap_out.json
+  rules:
+  - action: IGNORE
+    customMessage: ''
+    id: 10049
+  - action: IGNORE
+    customMessage: ''
+    id: 10109
+  type: outputSummary
+- parameters:
+    reportDescription: ''
+    reportDir: /zap/wrk/
+    reportFile: plans/260715-iteration-feedback-loop/reports/zap-glitchtip-baseline-clean-v2-20260715.md
+    reportTitle: ZAP Scanning Report
+    template: traditional-md
+  type: report
+- parameters:
+    reportDescription: ''
+    reportDir: /zap/wrk/
+    reportFile: plans/260715-iteration-feedback-loop/reports/zap-glitchtip-baseline-clean-v2-20260715.json
+    reportTitle: ZAP Scanning Report
+    template: traditional-json
+  type: report
