@@ -80,6 +80,12 @@ const SEGMENT_LABELS: Record<string, string> = {
   modules: "Phân hệ",
 };
 
+const NON_NAVIGABLE_PARENT_HREFS = new Set([
+  "/admin",
+  "/thanh-toan",
+  "/van-hanh",
+]);
+
 function labelFor(segment: string): string {
   if (SEGMENT_LABELS[segment]) return SEGMENT_LABELS[segment];
   // Numeric ID → keep as #id; UUID-like → "Chi tiết"
@@ -113,8 +119,11 @@ export function Breadcrumb() {
       {crumbs.map((c) => (
         <span key={c.href} className="flex items-center gap-1 min-w-0">
           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50" aria-hidden="true" />
-          {c.isLast ? (
-            <span className="font-medium text-foreground truncate" aria-current="page">
+          {c.isLast || NON_NAVIGABLE_PARENT_HREFS.has(c.href) ? (
+            <span
+              className="font-medium text-foreground truncate"
+              aria-current={c.isLast ? "page" : undefined}
+            >
               {c.label}
             </span>
           ) : (
