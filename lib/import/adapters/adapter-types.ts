@@ -67,7 +67,7 @@ export interface ImportAdapter {
    * False → adapter writes via idempotent upserts with no per-run tagging
    *         (e.g. SL-DT), so a committed run cannot be selectively undone.
    */
-  readonly supportsRollback: boolean;
+  readonly supportsRollback?: boolean;
 
   /**
    * Parse the raw Excel buffer into structured rows + detected conflicts.
