@@ -63,6 +63,13 @@ export interface ImportAdapter {
   readonly name: string;
   /** Human-readable label shown in UI */
   readonly label: string;
+  /**
+   * Whether a committed run of this adapter can be rolled back.
+   * True  → rows are tagged with `importRunId`; `rollbackImportRun` deletes them.
+   * False → adapter writes via idempotent upserts with no per-run tagging
+   *         (e.g. SL-DT), so a committed run cannot be selectively undone.
+   */
+  readonly supportsRollback: boolean;
 
   /**
    * Parse the raw Excel buffer into structured rows + detected conflicts.
