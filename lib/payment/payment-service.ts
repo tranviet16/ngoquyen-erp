@@ -64,6 +64,11 @@ async function getActor(): Promise<Actor> {
     select: { isDirector: true, isLeader: true, role: true },
   });
   if (!dbUser) throw new Error("User không tồn tại");
+  // Payment data has no department key yet, so a non-admin request cannot be
+  // filtered through its configured department ACL axis without leaking data.
+  if (!isAdmin(dbUser.role ?? session.user.role ?? null)) {
+    throw new Error("Dữ liệu thanh toán hiện chỉ dành cho admin cho đến khi hoàn tất phân quyền theo phòng ban");
+  }
   return {
     id: session.user.id,
     role: dbUser.role ?? session.user.role ?? null,
@@ -369,11 +374,13 @@ export async function approveItem(input: {
 
   const item = await prisma.paymentRoundItem.findUnique({
     where: { id: input.itemId },
-    include: { round: { select: { id: true, status: true } } },
+    include: { round: { select: { id: true, status: true, createdById: true } } },
   });
   if (!item) throw new Error("Không tìm thấy dòng");
   if (item.round.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi mới được duyệt");
+  if (item.round.createdById === actor.id)
+    throw new Error("Người lập đợt không được tự duyệt");
 
   const soDuyet = input.soDuyet ?? Number(item.soDeNghi);
 
@@ -391,11 +398,13 @@ export async function rejectItem(itemId: number) {
 
   const item = await prisma.paymentRoundItem.findUnique({
     where: { id: itemId },
-    include: { round: { select: { id: true, status: true } } },
+    include: { round: { select: { id: true, status: true, createdById: true } } },
   });
   if (!item) throw new Error("Không tìm thấy dòng");
   if (item.round.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi");
+  if (item.round.createdById === actor.id)
+    throw new Error("Người lập đợt không được tự từ chối");
 
   await prisma.paymentRoundItem.update({
     where: { id: itemId },
@@ -411,10 +420,12 @@ export async function bulkApproveAsRequested(roundId: number) {
 
   const round = await prisma.paymentRound.findUnique({
     where: { id: roundId },
-    select: { status: true },
+    select: { status: true, createdById: true },
   });
   if (round?.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi");
+  if (round.createdById === actor.id)
+    throw new Error("Người lập đợt không được tự duyệt");
 
   const items = await prisma.paymentRoundItem.findMany({
     where: { roundId, approvedAt: null },
@@ -455,10 +466,12 @@ export async function rejectRound(roundId: number, reason: string) {
     throw new Error("Chỉ Giám đốc/admin được từ chối");
   const round = await prisma.paymentRound.findUnique({
     where: { id: roundId },
-    select: { status: true },
+    select: { status: true, createdById: true },
   });
   if (round?.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi");
+  if (round.createdById === actor.id)
+    throw new Error("Người lập đợt không được tự từ chối");
 
   await prisma.paymentRound.update({
     where: { id: roundId },

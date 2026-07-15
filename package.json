@@ -20,7 +20,9 @@
     "test:integration": "vitest run --project integration",
     "test:perf": "vitest run --project integration test/performance",
     "test:load": "vitest run --project load",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "risk:verify": "tsx scripts/verify-risk-manifest.ts",
+    "risk:classify": "tsx scripts/risk-change-classifier.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

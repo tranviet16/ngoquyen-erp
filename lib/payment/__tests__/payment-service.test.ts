@@ -92,17 +92,21 @@ describe("getActor guards", () => {
     mockDb.user.findUnique.mockResolvedValue(null);
     await expect(svc.listRounds({})).rejects.toThrow("User không tồn tại");
   });
+
+  it("fails closed for a non-admin until payment records have a department scope", async () => {
+    actAs(KETOAN);
+    await expect(svc.listRounds({})).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+  });
 });
 
 describe("createRound", () => {
-  it("admin/ketoan/canbo_vt can create; computes sequence = last + 1", async () => {
-    actAs(KETOAN);
+  it("admin can create and computes sequence = last + 1", async () => {
     mockDb.paymentRound.findFirst.mockResolvedValue({ sequence: 4 });
     mockDb.paymentRound.create.mockResolvedValue({ id: 1, sequence: 5 });
     await svc.createRound({ month: "2026-05" });
     expect(mockDb.paymentRound.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ sequence: 5, status: "draft", createdById: "kt1" }),
+        data: expect.objectContaining({ sequence: 5, status: "draft", createdById: "admin1" }),
       }),
     );
   });
@@ -116,10 +120,10 @@ describe("createRound", () => {
     );
   });
 
-  it("throws for a role without create permission", async () => {
+  it("fails closed for a non-admin role", async () => {
     actAs(VIEWER);
     await expect(svc.createRound({ month: "2026-05" })).rejects.toThrow(
-      "Không có quyền lập đợt",
+      "Dữ liệu thanh toán hiện chỉ dành cho admin",
     );
   });
 });
@@ -144,7 +148,7 @@ describe("upsertItem — guards", () => {
     mockDb.paymentRound.findUnique.mockResolvedValue({ status: "draft", createdById: "someone-else" });
     await expect(
       svc.upsertItem({ roundId: 1, supplierId: 1, entityId: 1, projectId: null, category: "vat_tu", soDeNghi: 100 }),
-    ).rejects.toThrow("Chỉ người lập đợt được sửa items");
+    ).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 
   it("throws on an invalid category (create path)", async () => {
@@ -165,7 +169,7 @@ describe("upsertItem — guards", () => {
         roundId: 1, supplierId: 1, entityId: 1, projectId: null,
         category: "vat_tu", soDeNghi: 100, override: true,
       }),
-    ).rejects.toThrow("Chỉ admin được dùng override");
+    ).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 });
 
@@ -237,7 +241,7 @@ describe("refreshItemBalances", () => {
       round: { status: "draft", createdById: "someone-else" },
     });
     await expect(svc.refreshItemBalances(1)).rejects.toThrow(
-      "Chỉ người lập đợt hoặc admin được làm mới số dư",
+      "Dữ liệu thanh toán hiện chỉ dành cho admin",
     );
   });
 
@@ -276,7 +280,7 @@ describe("deleteItem", () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
       round: { status: "draft", createdById: "someone-else" },
     });
-    await expect(svc.deleteItem(1)).rejects.toThrow("Không có quyền");
+    await expect(svc.deleteItem(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 
   it("deletes when the creator removes a draft item", async () => {
@@ -303,7 +307,7 @@ describe("submitRound", () => {
   it("throws for a non-creator non-admin", async () => {
     actAs(KETOAN);
     mockDb.paymentRound.findUnique.mockResolvedValue({ status: "draft", createdById: "someone-else" });
-    await expect(svc.submitRound(1)).rejects.toThrow("Không có quyền submit");
+    await expect(svc.submitRound(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 
   it("throws when the round has no items", async () => {
@@ -326,10 +330,17 @@ describe("submitRound", () => {
 });
 
 describe("approveItem", () => {
+  it("rejects self-approval by the round creator", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      soDeNghi: 100, round: { id: 1, status: "submitted", createdById: "admin1" },
+    });
+    await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow("Người lập đợt không được tự duyệt");
+  });
+
   it("throws when the actor cannot approve", async () => {
     actAs(KETOAN);
     await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow(
-      "Chỉ Giám đốc/admin được duyệt",
+      "Dữ liệu thanh toán hiện chỉ dành cho admin",
     );
   });
 
@@ -347,19 +358,12 @@ describe("approveItem", () => {
     );
   });
 
-  it("director can approve; defaults soDuyet to soDeNghi", async () => {
+  it("fails closed for a director until payment records have a department scope", async () => {
     actAs(DIRECTOR);
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
       soDeNghi: 250, round: { id: 1, status: "submitted" },
     });
-    mockDb.paymentRoundItem.update.mockResolvedValue({ id: 1 });
-    mockDb.paymentRoundItem.count.mockResolvedValue(2);
-    await svc.approveItem({ itemId: 1 });
-    expect(mockDb.paymentRoundItem.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ soDuyet: 250, approvedById: "dir1" }),
-      }),
-    );
+    await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 
   it("auto-approves the round once every item is resolved", async () => {
@@ -377,9 +381,16 @@ describe("approveItem", () => {
 });
 
 describe("rejectItem", () => {
+  it("rejects self-rejection by the round creator", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      round: { id: 1, status: "submitted", createdById: "admin1" },
+    });
+    await expect(svc.rejectItem(1)).rejects.toThrow("Người lập đợt không được tự từ chối");
+  });
+
   it("throws when the actor cannot approve", async () => {
     actAs(VIEWER);
-    await expect(svc.rejectItem(1)).rejects.toThrow("Chỉ Giám đốc/admin được từ chối");
+    await expect(svc.rejectItem(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 
   it("throws when the item does not exist", async () => {
@@ -404,10 +415,15 @@ describe("rejectItem", () => {
 });
 
 describe("bulkApproveAsRequested", () => {
+  it("rejects self-approval by the round creator", async () => {
+    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "submitted", createdById: "admin1" });
+    await expect(svc.bulkApproveAsRequested(1)).rejects.toThrow("Người lập đợt không được tự duyệt");
+  });
+
   it("throws when the actor cannot approve", async () => {
     actAs(KETOAN);
     await expect(svc.bulkApproveAsRequested(1)).rejects.toThrow(
-      "Chỉ Giám đốc/admin được duyệt",
+      "Dữ liệu thanh toán hiện chỉ dành cho admin",
     );
   });
 
@@ -434,10 +450,15 @@ describe("bulkApproveAsRequested", () => {
 });
 
 describe("rejectRound", () => {
+  it("rejects self-rejection by the round creator", async () => {
+    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "submitted", createdById: "admin1" });
+    await expect(svc.rejectRound(1, "no")).rejects.toThrow("Người lập đợt không được tự từ chối");
+  });
+
   it("throws when the actor cannot approve", async () => {
     actAs(KETOAN);
     await expect(svc.rejectRound(1, "no")).rejects.toThrow(
-      "Chỉ Giám đốc/admin được từ chối",
+      "Dữ liệu thanh toán hiện chỉ dành cho admin",
     );
   });
 
@@ -461,7 +482,7 @@ describe("rejectRound", () => {
 describe("closeRound", () => {
   it("throws when the actor is not an admin", async () => {
     actAs(DIRECTOR);
-    await expect(svc.closeRound(1)).rejects.toThrow("Chỉ admin được đóng đợt");
+    await expect(svc.closeRound(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
   });
 
   it("throws when the round is not approved", async () => {

@@ -42,10 +42,22 @@ export default async function Page({
 
   const actorRole: string | null = dbUser?.role ?? session.user.role ?? null;
   const isAdmin = actorRole === "admin";
+  // Prisma Decimal instances are not serializable across the Server → Client boundary.
+  // Keep the database representation in the service layer and send plain numbers to the UI.
+  const clientRound = {
+    ...round,
+    items: round.items.map((item) => ({
+      ...item,
+      congNo: Number(item.congNo),
+      luyKe: Number(item.luyKe),
+      soDeNghi: Number(item.soDeNghi),
+      soDuyet: item.soDuyet === null ? null : Number(item.soDuyet),
+    })),
+  };
 
   return (
     <RoundDetailClient
-      round={round}
+      round={clientRound}
       entities={entities}
       suppliers={suppliers}
       projects={projects}

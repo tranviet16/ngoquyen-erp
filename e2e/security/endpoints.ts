@@ -24,6 +24,7 @@ export interface SecEndpoint {
   name: string;
   method: "GET" | "POST";
   path: string;
+  body?: unknown;
   /** Why each cell is what it is — keeps the table auditable. */
   note: string;
   expect: Record<SecRole, number[] | null>;
@@ -51,8 +52,8 @@ export const SECURITY_ENDPOINTS: SecEndpoint[] = [
     name: "avatars",
     method: "GET",
     path: "/api/avatars/e2e-nonexistent.png",
-    note: "Handler: session → 401; valid session + missing file → 404.",
-    expect: { admin: [404], viewer: [404], scoped: [404], anon: ANON_BLOCKED },
+    note: "Owner/admin guard runs before storage; only admin reaches the missing-file response.",
+    expect: { admin: [404], viewer: [403], scoped: [403], anon: ANON_BLOCKED },
   },
   {
     name: "cong-no-cascade-projects",
@@ -65,8 +66,9 @@ export const SECURITY_ENDPOINTS: SecEndpoint[] = [
     name: "export-excel",
     method: "POST",
     path: "/api/export/excel",
-    note: "Session-only gate, NO role/ACL check. Empty body → 400 (invalid JSON).",
-    expect: { admin: [400], viewer: [400], scoped: [400], anon: ANON_BLOCKED },
+    body: { template: "cong-no-monthly", params: { ledgerType: "material", year: 2026, month: 1, entityId: 1 } },
+    note: "Fails closed for non-admins until ledger records have a department scope.",
+    expect: { admin: [200], viewer: [403], scoped: [403], anon: ANON_BLOCKED },
   },
   {
     name: "notifications",
@@ -93,14 +95,14 @@ export const SECURITY_ENDPOINTS: SecEndpoint[] = [
     name: "thanh-toan-cascade-suppliers",
     method: "GET",
     path: "/api/thanh-toan/cascade-suppliers?ledgerType=all&entityId=1",
-    note: "Session-only gate, NO ACL check (see SECURITY-MANUAL-REVIEW).",
-    expect: { admin: [200], viewer: [200], scoped: [200], anon: ANON_BLOCKED },
+    note: "Fails closed for non-admins until payment data has a department scope.",
+    expect: { admin: [200], viewer: [403], scoped: [403], anon: ANON_BLOCKED },
   },
   {
     name: "thanh-toan-tong-hop-export",
     method: "GET",
     path: "/api/thanh-toan/tong-hop/export",
-    note: "Session-only gate, NO ACL check (see SECURITY-MANUAL-REVIEW).",
-    expect: { admin: [200], viewer: [200], scoped: [200], anon: ANON_BLOCKED },
+    note: "Fails closed for non-admins until payment data has a department scope.",
+    expect: { admin: [200], viewer: [403], scoped: [403], anon: ANON_BLOCKED },
   },
 ];

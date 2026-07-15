@@ -26,6 +26,14 @@ DB_PORT="${PGPORT:-5432}"
 ADMIN_USER="${PGADMINUSER:-postgres}"
 COMPOSE_FILE="${COMPOSE_FILE:-/opt/ngoquyyen-erp/docker/docker-compose.prod.yml}"
 
+# A non-test restore can destroy the live database. `--force` only skips the
+# interactive prompt; it must never be sufficient on its own for production.
+if [[ ! "${DB_NAME}" =~ _test$ && "${ALLOW_PRODUCTION_RESTORE:-}" != "yes" ]]; then
+  echo "ERROR: Refusing restore to non-test database '${DB_NAME}'."
+  echo "Use a disposable *_test target for drills. A production restore requires ALLOW_PRODUCTION_RESTORE=yes."
+  exit 1
+fi
+
 echo "============================================================"
 echo " ERP Database Restore"
 echo "============================================================"

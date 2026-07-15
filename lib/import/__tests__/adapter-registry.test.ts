@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { getAdapter, listAdapters } from "@/lib/import/adapters/adapter-registry";
 
 const KNOWN = [
+  "cong-no-nhan-cong",
   "cong-no-vat-tu",
   "du-an-xay-dung",
   "tai-chinh-nq",

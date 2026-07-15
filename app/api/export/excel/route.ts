@@ -13,6 +13,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { canAccess } from "@/lib/acl";
+import type { ModuleKey } from "@/lib/acl";
+import { prisma } from "@/lib/prisma";
+import { isAdmin } from "@/lib/rbac";
 import { buildCongNoMonthlyExcel } from "@/lib/export/templates/cong-no-monthly";
 import { buildDoiChieuExcel } from "@/lib/export/templates/doi-chieu";
 import { buildDuToanExcel } from "@/lib/export/templates/du-toan";
@@ -37,6 +41,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { template, params } = body;
   if (!template || typeof template !== "string") {
     return NextResponse.json({ error: "template is required" }, { status: 400 });
+  }
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return NextResponse.json({ error: "params must be an object" }, { status: 400 });
+  }
+
+  const moduleByTemplate: Record<string, ModuleKey> = {
+    "cong-no-monthly": String(params.ledgerType ?? "material") === "labor" ? "cong-no-nc" : "cong-no-vt",
+    "doi-chieu": String(params.ledgerType ?? "material") === "labor" ? "cong-no-nc" : "cong-no-vt",
+    "du-toan": "du-an",
+    "sl-dt": "sl-dt",
+  };
+  const moduleKey = moduleByTemplate[template];
+  if (!moduleKey) return NextResponse.json({ error: "Unknown template" }, { status: 400 });
+  const allowed = await canAccess(session.user.id, moduleKey, { minLevel: "read", scope: "module" });
+  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (template === "cong-no-monthly" || template === "doi-chieu" || template === "sl-dt") {
+    const actor = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true },
+    });
+    if (!isAdmin(actor?.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let buffer: Buffer;
@@ -73,6 +98,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       case "du-toan": {
         const projectId = Number(params.projectId);
         if (!projectId) return NextResponse.json({ error: "projectId required" }, { status: 400 });
+        const projectAllowed = await canAccess(session.user.id, "du-an", {
+          minLevel: "read",
+          scope: { kind: "project", projectId },
+        });
+        if (!projectAllowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         buffer = await buildDuToanExcel(projectId);
         filename = `du-toan-da${projectId}.xlsx`;
         break;

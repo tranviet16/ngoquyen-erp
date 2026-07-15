@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { revalidatePath } from "next/cache";
 import { previewImport, commitImport, listImportRuns, getImportRun, deleteImportRun, rollbackImportRun, getRollbackInfo } from "@/lib/import/import-engine";
 import { listAdapters } from "@/lib/import/adapters/adapter-registry";
@@ -14,24 +14,26 @@ async function getSession() {
 }
 
 export async function getAdapters() {
+  const session = await getSession();
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
   return listAdapters();
 }
 
 export async function getRuns() {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
   return listImportRuns(50);
 }
 
 export async function getRun(id: number) {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
   return getImportRun(id);
 }
 
 export async function startPreview(formData: FormData) {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
 
   const file = formData.get("file") as File | null;
   const adapterName = formData.get("adapter") as string | null;
@@ -47,14 +49,14 @@ export async function startPreview(formData: FormData) {
 
 export async function deleteRun(id: number) {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
   await deleteImportRun(id);
   revalidatePath("/admin/import");
 }
 
 export async function rollbackRun(id: number) {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
   const result = await rollbackImportRun(id);
   revalidatePath("/admin/import");
   return result;
@@ -62,13 +64,13 @@ export async function rollbackRun(id: number) {
 
 export async function getRunRollbackInfo(id: number) {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
   return getRollbackInfo(id);
 }
 
 export async function doCommit(formData: FormData) {
   const session = await getSession();
-  requireRole(session?.user?.role, "admin");
+  await requireRoleModuleAccess(session?.user?.role, "admin.import", "admin");
 
   const runIdRaw = formData.get("runId");
   const file = formData.get("file") as File | null;
