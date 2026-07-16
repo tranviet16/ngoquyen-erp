@@ -14,6 +14,9 @@ vi.mock("@/lib/admin/user-grants-service", () => ({
   removeGrant: vi.fn(),
   updateUserAttributes: vi.fn(),
 }));
+vi.mock("@/lib/acl/released-module-request", () => ({
+  requireReleasedModuleRequest: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { createUserAccountAction } from "@/app/(app)/admin/nguoi-dung/actions";
 

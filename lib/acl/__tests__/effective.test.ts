@@ -6,7 +6,7 @@
  * React cache() is mocked to be a passthrough (no memoization in tests).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Mock react cache() as identity (passthrough) ────────────────────────────
 vi.mock("react", () => ({
@@ -16,6 +16,16 @@ vi.mock("react", () => ({
 // ─── Mock prisma ──────────────────────────────────────────────────────────────
 const mockFindUnique = vi.fn();
 const mockFindMany = vi.fn();
+const moduleKeys = [
+  "dashboard", "master-data", "du-an", "vat-tu-ncc", "sl-dt", "cong-no-vt",
+  "cong-no-nc", "tai-chinh", "thanh-toan.ke-hoach", "thanh-toan.tong-hop",
+  "van-hanh.cong-viec", "van-hanh.phieu-phoi-hop", "van-hanh.hieu-suat",
+  "thong-bao", "admin.import", "admin.phong-ban", "admin.nguoi-dung",
+  "admin.permissions",
+] as const;
+let availabilityRows: Array<{ moduleKey: string; status: string }> = moduleKeys.map(
+  (moduleKey) => ({ moduleKey, status: "ready" }),
+);
 
 // Stateless seed-backed stub for rolePermission.findMany — drives the role
 // fallback path (getDefaultModuleLevel). Immune to vi.resetAllMocks().
@@ -43,20 +53,27 @@ vi.mock("../../prisma", () => ({
     rolePermission: {
       findMany: (...args: unknown[]) => mockRolePermissionFindMany(...args),
     },
+    moduleAvailability: {
+      findMany: () => Promise.resolve(availabilityRows),
+    },
   },
 }));
 
 // ─── Import after mocks ───────────────────────────────────────────────────────
 import {
   canAccess,
+  canAccessEntitlement,
   assertAccess,
   checkRoleAxis,
   getViewableProjectIds,
 } from "../effective";
-import { MODULE_AVAILABILITY } from "../modules";
 import { rolePermissionFindMany } from "./_role-permission-fixture";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+beforeEach(() => {
+  availabilityRows = moduleKeys.map((moduleKey) => ({ moduleKey, status: "ready" }));
+});
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -95,12 +112,6 @@ describe("checkRoleAxis", () => {
 // ─── D1: Admin short-circuit ──────────────────────────────────────────────────
 
 describe("canAccess — admin short-circuit (D1)", () => {
-  const originalDashboardAvailability = { ...MODULE_AVAILABILITY.dashboard };
-
-  afterEach(() => {
-    MODULE_AVAILABILITY.dashboard = { ...originalDashboardAvailability };
-  });
-
   beforeEach(() => {
     vi.resetAllMocks();
     mockFindUnique.mockResolvedValue({
@@ -137,11 +148,9 @@ describe("canAccess — admin short-circuit (D1)", () => {
   });
 
   it("disabled module blocks admin too because availability is a rollout switch", async () => {
-    MODULE_AVAILABILITY.dashboard = {
-      enabled: false,
-      showInMenu: true,
-      status: "development",
-    };
+    availabilityRows = availabilityRows.map((row) =>
+      row.moduleKey === "dashboard" ? { ...row, status: "development" } : row,
+    );
 
     const result = await canAccess("admin1", "dashboard", {
       minLevel: "read",
@@ -150,6 +159,12 @@ describe("canAccess — admin short-circuit (D1)", () => {
 
     expect(result).toBe(false);
     expect(mockFindUnique).not.toHaveBeenCalled();
+
+    const entitlement = await canAccessEntitlement("admin1", "dashboard", {
+      minLevel: "read",
+      scope: "module",
+    });
+    expect(entitlement).toBe(true);
   });
 });
 
@@ -534,6 +549,17 @@ describe("canAccess — role axis (van-hanh.hieu-suat)", () => {
 // ─── getViewableProjectIds ────────────────────────────────────────────────────
 
 describe("getViewableProjectIds", () => {
+  it("returns none before loading user/project data when du-an is in development", async () => {
+    vi.resetAllMocks();
+    availabilityRows = availabilityRows.map((row) =>
+      row.moduleKey === "du-an" ? { ...row, status: "development" } : row,
+    );
+
+    await expect(getViewableProjectIds("admin1")).resolves.toEqual({ kind: "none" });
+    expect(mockFindUnique).not.toHaveBeenCalled();
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
   });

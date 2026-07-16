@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { deliverySchema, type DeliveryInput } from "./schemas";
@@ -19,6 +20,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listDeliveries(supplierId: number, opts?: { dateFrom?: string; dateTo?: string }) {
+  await requireReleasedModuleRequest("vat-tu-ncc");
   const where = {
     supplierId,
     deletedAt: null,
@@ -32,6 +34,7 @@ export async function listDeliveries(supplierId: number, opts?: { dateFrom?: str
 }
 
 export async function listDeliveriesMonthly(supplierId: number) {
+  await requireReleasedModuleRequest("vat-tu-ncc");
   // Read from the DB view via raw query
   const rows = await prisma.$queryRaw<
     { supplier_id: number; item_id: number; month: Date; qty: unknown; unit: string }[]

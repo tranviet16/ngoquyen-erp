@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { previewImport, commitImport, listImportRuns, getImportRun, deleteImportRun, rollbackImportRun, getRollbackInfo } from "@/lib/import/import-engine";
 import { listAdapters } from "@/lib/import/adapters/adapter-registry";
 import type { ResolvedMapping } from "@/lib/import/adapters/adapter-types";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 async function getSession() {
   const h = await headers();
@@ -21,21 +22,25 @@ async function requireAdminImportAccess() {
 }
 
 export async function getAdapters() {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
   return listAdapters();
 }
 
 export async function getRuns() {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
   return listImportRuns(50);
 }
 
 export async function getRun(id: number) {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
   return getImportRun(id);
 }
 
 export async function startPreview(formData: FormData) {
+  await requireReleasedModuleRequest("admin.import");
   const session = await requireAdminImportAccess();
 
   const file = formData.get("file") as File | null;
@@ -51,12 +56,14 @@ export async function startPreview(formData: FormData) {
 }
 
 export async function deleteRun(id: number) {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
   await deleteImportRun(id);
   revalidatePath("/admin/import");
 }
 
 export async function rollbackRun(id: number) {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
   const result = await rollbackImportRun(id);
   revalidatePath("/admin/import");
@@ -64,11 +71,13 @@ export async function rollbackRun(id: number) {
 }
 
 export async function getRunRollbackInfo(id: number) {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
   return getRollbackInfo(id);
 }
 
 export async function doCommit(formData: FormData) {
+  await requireReleasedModuleRequest("admin.import");
   await requireAdminImportAccess();
 
   const runIdRaw = formData.get("runId");

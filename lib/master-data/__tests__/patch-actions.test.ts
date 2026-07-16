@@ -19,11 +19,21 @@ const mockDb = vi.hoisted(() => ({
   rolePermission: { findMany: vi.fn() },
 }));
 const mockAuth = vi.hoisted(() => ({ getSession: vi.fn() }));
+const mockAvailability = vi.hoisted(() => ({
+  requireReleasedModuleRequest: vi.fn(),
+  isModuleReleased: vi.fn(),
+}));
 
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn().mockResolvedValue(new Headers()) }));
 vi.mock("@/lib/auth", () => ({ auth: { api: mockAuth } }));
+vi.mock("@/lib/acl/module-availability", () => ({
+  isModuleReleased: mockAvailability.isModuleReleased,
+}));
+vi.mock("@/lib/acl/released-module-request", () => ({
+  requireReleasedModuleRequest: mockAvailability.requireReleasedModuleRequest,
+}));
 
 import {
   patchEntity,
@@ -50,6 +60,8 @@ import { rolePermissionFindMany } from "@/lib/acl/__tests__/_role-permission-fix
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockAvailability.requireReleasedModuleRequest.mockResolvedValue({ userId: "admin-1", role: "admin" });
+  mockAvailability.isModuleReleased.mockResolvedValue(true);
   mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
   // Default: admin session — master-data/tai-chinh are admin-only modules,
   // so happy-path/whitelist/Zod tests need a role that clears the RBAC gate.

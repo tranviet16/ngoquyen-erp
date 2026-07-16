@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { prisma } from "@/lib/prisma";
 import { LedgerService } from "@/lib/ledger/ledger-service";
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
@@ -45,6 +46,7 @@ async function assertContractorExists(contractorId: number) {
 // ── Transactions ──────────────────────────────────────────────────────────────
 
 export async function listLaborTransactions(filter?: Parameters<typeof service.list>[0]) {
+  await requireReleasedModuleRequest("cong-no-nc");
   return service.list(filter);
 }
 
@@ -163,6 +165,7 @@ export async function bulkUpsertLaborTransactions(
 // ── Opening Balances ──────────────────────────────────────────────────────────
 
 export async function listLaborOpeningBalances(filter?: Parameters<typeof service.listOpeningBalances>[0]) {
+  await requireReleasedModuleRequest("cong-no-nc");
   return service.listOpeningBalances(filter);
 }
 
@@ -239,6 +242,7 @@ export async function bulkUpsertLaborOpeningBalances(
 // ── Reports ───────────────────────────────────────────────────────────────────
 
 export async function getLaborSummary(filter?: Parameters<typeof service.summary>[0]) {
+  await requireReleasedModuleRequest("cong-no-nc");
   return service.summary(filter);
 }
 
@@ -247,6 +251,7 @@ export async function getLaborMonthlyReport(
   month: number,
   entityId: number
 ): Promise<MonthlyByPartyRow[]> {
+  await requireReleasedModuleRequest("cong-no-nc");
   const rows = await service.monthlyByParty(year, month, entityId);
   if (rows.length === 0) return [];
   const partyIds = rows.map((r) => r.partyId);
@@ -261,6 +266,7 @@ export async function getLaborMonthlyReport(
 }
 
 export async function firstLaborEntityWithActivity(year: number, month: number) {
+  await requireReleasedModuleRequest("cong-no-nc");
   return service.firstEntityWithActivity(year, month);
 }
 
@@ -270,9 +276,11 @@ export async function getLaborCurrentBalance(
   projectId?: number | null,
   asOf?: Date
 ) {
+  await requireReleasedModuleRequest("cong-no-nc");
   return service.currentBalance(entityId, partyId, projectId, asOf);
 }
 
 export async function getLaborDebtMatrix(filter?: Parameters<typeof service.detailedDebtMatrix>[0]) {
+  await requireReleasedModuleRequest("cong-no-nc");
   return service.detailedDebtMatrix(filter);
 }

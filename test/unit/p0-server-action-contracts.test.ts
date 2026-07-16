@@ -37,6 +37,9 @@ vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }
 vi.mock("@/lib/acl/role-permissions", () => ({
   requireRoleModuleAccess: mocks.requireAccess,
 }));
+vi.mock("@/lib/acl/released-module-request", () => ({
+  requireReleasedModuleRequest: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
 vi.mock("@/lib/async-context", () => ({
   bypassAudit: vi.fn(async (callback: () => unknown) => callback()),

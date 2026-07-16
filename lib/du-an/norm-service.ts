@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export interface NormRow {
   estimate_id: number;
@@ -23,6 +24,10 @@ export interface NormRow {
 }
 
 export async function listNorm(projectId: number, settings?: { normYellowThreshold?: number; normRedThreshold?: number }) {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await (prisma as any).$queryRaw<NormRow[]>`
     SELECT * FROM vw_project_norm WHERE "projectId" = ${projectId}
@@ -63,6 +68,10 @@ export interface EstimateAdjustedRow {
 }
 
 export async function listEstimateAdjusted(projectId: number) {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows = await (prisma as any).$queryRaw<EstimateAdjustedRow[]>`
     SELECT * FROM vw_project_estimate_adjusted WHERE "projectId" = ${projectId}

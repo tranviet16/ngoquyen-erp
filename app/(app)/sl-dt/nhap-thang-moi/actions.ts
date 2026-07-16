@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import type { MonthRef } from "./helpers";
 import { prevMonth } from "./helpers";
 import { refreshAutoTarget } from "@/lib/sl-dt/recompute";
@@ -58,6 +59,7 @@ export async function patchMonthlyInputCell(
   year: number, month: number, lotId: number,
   patch: Record<string, unknown>,
 ): Promise<void> {
+  await requireReleasedModuleRequest("sl-dt");
   const inputPatch: Record<string, Prisma.Decimal | null> = {};
   for (const k of Object.keys(patch)) {
     if (NUM_INPUT_FIELDS.has(k)) {
@@ -128,6 +130,7 @@ export async function adminPatchMonthlyInputCell(
   year: number, month: number, lotId: number,
   patch: Record<string, unknown>,
 ): Promise<void> {
+  await requireReleasedModuleRequest("sl-dt");
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "sl-dt", "admin");
   const data: Record<string, Prisma.Decimal | null> = {};
@@ -172,6 +175,7 @@ export async function patchProgressStatusCell(
   year: number, month: number, lotId: number,
   patch: Record<string, unknown>,
 ): Promise<void> {
+  await requireReleasedModuleRequest("sl-dt");
   const data: Record<string, string | null> = {};
   for (const k of Object.keys(patch)) {
     if (PROGRESS_FIELDS.has(k)) {
@@ -215,6 +219,7 @@ export async function patchProgressStatusCell(
 export async function patchLotCell(
   lotId: number, patch: Record<string, unknown>,
 ): Promise<void> {
+  await requireReleasedModuleRequest("sl-dt");
   const data: Record<string, Prisma.Decimal | null> = {};
   if ("estimateValue" in patch) data.estimateValue = D(toN(patch.estimateValue));
   if ("contractValue" in patch) data.contractValue = D(toN(patch.contractValue));
@@ -254,6 +259,7 @@ export async function cloneFromPreviousMonth(year: number, month: number): Promi
   source: MonthRef | null;
   message: string;
 }> {
+  await requireReleasedModuleRequest("sl-dt");
   const target = { year, month };
   const source = await findLatestMonthBefore(target);
   if (!source) {
@@ -389,6 +395,7 @@ export interface SaveMonthlyPayload {
 }
 
 export async function saveMonthlyData(payload: SaveMonthlyPayload): Promise<{ saved: number }> {
+  await requireReleasedModuleRequest("sl-dt");
   const { year, month, rows } = payload;
   if (year < 2000 || year > 2100) throw new Error("Năm không hợp lệ");
   if (month < 1 || month > 12) throw new Error("Tháng phải 1–12");

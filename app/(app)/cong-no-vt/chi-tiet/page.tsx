@@ -1,6 +1,6 @@
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { prisma } from "@/lib/prisma";
-import { getMaterialDetailReport } from "@/lib/cong-no-vt/balance-report-service";
+import { getMaterialDetailReport } from "@/lib/cong-no-vt/material-detail-report-service";
 import { DetailReportTable } from "@/components/ledger/detail-report-table";
 import { DetailReportFilter } from "@/components/ledger/detail-report-filter";
 
@@ -77,7 +77,6 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
 
   // Fetch report data
   const { rows, subtotals } = await getMaterialDetailReport({
-    ledgerType: "material",
     year,
     month,
     entityIds: entityIds.length > 0 ? entityIds : undefined,

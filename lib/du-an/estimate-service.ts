@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { estimateSchema, type EstimateInput } from "./schemas";
@@ -19,6 +20,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listEstimates(projectId: number) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
   return prisma.projectEstimate.findMany({
     where: { projectId, deletedAt: null },
     orderBy: [{ categoryId: "asc" }, { itemCode: "asc" }],
@@ -26,6 +28,7 @@ export async function listEstimates(projectId: number) {
 }
 
 export async function createEstimate(input: EstimateInput) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "edit");
   const data = estimateSchema.parse(input);
@@ -50,12 +53,15 @@ export async function createEstimate(input: EstimateInput) {
 }
 
 export async function updateEstimate(id: number, input: EstimateInput) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "edit");
   const data = estimateSchema.parse(input);
+  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
+  if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
   const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.update({
-    where: { id },
+    where: { id, projectId: data.projectId },
     data: {
       categoryId: data.categoryId,
       itemCode: data.itemCode,
@@ -84,8 +90,11 @@ export async function adminPatchEstimate(
   patch: Partial<{ itemName: string; unit: string; qty: number; unitPrice: number; totalVnd: number; note: string }>,
   projectId: number,
 ) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "admin");
+  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
+  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
   const data: Prisma.ProjectEstimateUpdateInput = {};
   if (patch.itemName !== undefined) data.itemName = patch.itemName;
   if (patch.unit !== undefined) data.unit = patch.unit;
@@ -93,7 +102,7 @@ export async function adminPatchEstimate(
   if (patch.unitPrice !== undefined) data.unitPrice = new Prisma.Decimal(patch.unitPrice);
   if (patch.totalVnd !== undefined) data.totalVnd = new Prisma.Decimal(patch.totalVnd);
   if (patch.note !== undefined) data.note = patch.note;
-  const record = await prisma.projectEstimate.update({ where: { id }, data });
+  const record = await prisma.projectEstimate.update({ where: { id, projectId }, data });
   revalidatePath(`/du-an/${projectId}/du-toan`);
   revalidatePath(`/du-an/${projectId}/dinh-muc`);
   revalidatePath(`/du-an/${projectId}/du-toan-dieu-chinh`);
@@ -101,10 +110,13 @@ export async function adminPatchEstimate(
 }
 
 export async function softDeleteEstimate(id: number, projectId: number) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "admin");
+  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
+  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
   const record = await prisma.projectEstimate.update({
-    where: { id },
+    where: { id, projectId },
     data: { deletedAt: new Date() },
   });
   revalidatePath(`/du-an/${projectId}/du-toan`);

@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { listCashflows, getCashflowSummary } from "@/lib/du-an/cashflow-service";
 import { serializeDecimals } from "@/lib/serialize";
 import { DongTien3BenClient } from "./dong-tien-3-ben-client";
+import { requireModuleAccess } from "@/lib/acl/guards";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -14,6 +15,10 @@ export default async function DongTien3BenPage({ params }: Props) {
   const { id } = await params;
   const projectId = Number(id);
   if (isNaN(projectId)) notFound();
+  await requireModuleAccess("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
 
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });

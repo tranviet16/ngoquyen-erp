@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { prisma } from "@/lib/prisma";
 import { getChiTieuReport } from "@/lib/sl-dt/report-service";
 import { suggestMonthlySlDtTargets } from "@/lib/sl-dt/compute";
@@ -59,6 +60,7 @@ export async function adminPatchChiTieuRow(
   lotId: number,
   patch: Record<string, unknown>,
 ): Promise<{ futureMonthsCount: number }> {
+  await requireReleasedModuleRequest("sl-dt");
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "sl-dt", "admin");
 
@@ -155,6 +157,7 @@ export async function cascadeRecomputeLuyKe(
   year: number,
   month: number,
 ): Promise<{ cascaded: number }> {
+  await requireReleasedModuleRequest("sl-dt");
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "sl-dt", "admin");
 
@@ -174,6 +177,7 @@ export async function calculateMonthlyTargets(
   year: number,
   month: number,
 ): Promise<{ updated: number; skipped: number }> {
+  await requireReleasedModuleRequest("sl-dt");
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "sl-dt", "admin");
 
@@ -259,6 +263,7 @@ export async function setSubtotalLabel(
   key: string,
   label: string,
 ): Promise<void> {
+  await requireReleasedModuleRequest("sl-dt");
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "sl-dt", "admin");
   const trimmed = label.trim();
@@ -291,6 +296,7 @@ export async function setSubtotalLabel(
 export async function updateProgressStatus(
   input: ProgressStatusInput,
 ): Promise<{ resolvedTargetMilestone: string | null; futureMonthsCount: number }> {
+  await requireReleasedModuleRequest("sl-dt");
   const data = progressStatusSchema.parse(input);
   const fields: Partial<Omit<ProgressStatusInput, "lotId" | "year" | "month">> = {};
   const progressKeys = [

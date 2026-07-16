@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { cleanHierarchyLabel } from "@/lib/sl-dt/hierarchy";
 import { lotCatalogSchema } from "@/lib/sl-dt/schemas";
 
@@ -120,6 +121,7 @@ function revalidateSlDt() {
 }
 
 export async function patchLotCatalogRow(id: number, patch: Record<string, unknown>) {
+  await requireReleasedModuleRequest("sl-dt");
   await assertAdmin();
   if (!id || id < 1) throw new Error("Lô không hợp lệ");
 
@@ -186,6 +188,7 @@ export async function patchLotCatalogRow(id: number, patch: Record<string, unkno
 }
 
 export async function createLotCatalogRow(input: Record<string, unknown>) {
+  await requireReleasedModuleRequest("sl-dt");
   await assertAdmin();
   const data = lotCatalogSchema.parse({
     code: input.code,
@@ -232,6 +235,7 @@ export async function createLotCatalogRow(input: Record<string, unknown>) {
 }
 
 export async function deleteLotCatalogRows(ids: number[]) {
+  await requireReleasedModuleRequest("sl-dt");
   await assertAdmin();
   if (!ids.length) return;
 

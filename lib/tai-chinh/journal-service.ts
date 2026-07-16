@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import {
@@ -66,6 +67,7 @@ export interface JournalAggregate {
 }
 
 export async function listJournalEntries(filter: JournalFilter = {}) {
+  await requireReleasedModuleRequest("tai-chinh");
   const { dateFrom, dateTo, entryType, costBehavior, expenseCategoryId, q, page = 1, pageSize = 50 } = filter;
   const where: Prisma.JournalEntryWhereInput = {
     deletedAt: null,

@@ -7,6 +7,7 @@ const mockFindFirst = vi.fn();
 const mockRequireAccess = vi.fn();
 const mockBulkUpsert = vi.fn();
 const mockSoftDelete = vi.fn();
+const mockAssertModuleReleased = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -20,6 +21,9 @@ vi.mock("@/lib/prisma", () => ({
 
 vi.mock("@/lib/acl/role-permissions", () => ({
   requireRoleModuleAccess: (...args: unknown[]) => mockRequireAccess(...args),
+}));
+vi.mock("@/lib/acl/released-module-request", () => ({
+  requireReleasedModuleRequest: (...args: unknown[]) => mockAssertModuleReleased(...args),
 }));
 
 vi.mock("@/lib/tai-chinh/state-obligation-internal", () => ({
@@ -76,6 +80,7 @@ function rawRow(over: Partial<RawMatrixRow> = {}): RawMatrixRow {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockAssertModuleReleased.mockResolvedValue(undefined);
   mockQueryRaw.mockResolvedValue([]);
   mockFindFirst.mockResolvedValue(null);
   mockFindMany.mockResolvedValue([]);

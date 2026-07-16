@@ -8,15 +8,18 @@ const mockDb = vi.hoisted(() => ({
   project3WayCashflow: { groupBy: vi.fn() },
   projectContract: { findMany: vi.fn() },
 }));
-const mockProject = vi.hoisted(() => ({ getProjectById: vi.fn() }));
+const mockProject = vi.hoisted(() => ({ queryProjectById: vi.fn() }));
+const mockAvailability = vi.hoisted(() => ({ requireReleasedModuleRequest: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
-vi.mock("@/lib/master-data/project-service", () => mockProject);
+vi.mock("@/lib/master-data/project-query", () => mockProject);
+vi.mock("@/lib/acl/released-module-request", () => mockAvailability);
 
 import { getProjectDashboard } from "@/lib/du-an/dashboard-service";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mockProject.getProjectById.mockResolvedValue({ id: 1, name: "Dự án A" });
+  mockAvailability.requireReleasedModuleRequest.mockResolvedValue({ userId: "admin-1", role: "admin" });
+  mockProject.queryProjectById.mockResolvedValue({ id: 1, name: "Dự án A" });
 });
 
 describe("getProjectDashboard", () => {
@@ -34,6 +37,11 @@ describe("getProjectDashboard", () => {
     mockDb.projectContract.findMany.mockResolvedValue([{ id: 9, docName: "HĐ" }]);
 
     const d = await getProjectDashboard(1);
+    expect(mockAvailability.requireReleasedModuleRequest).toHaveBeenCalledWith("du-an", {
+      minLevel: "read",
+      scope: { kind: "project", projectId: 1 },
+    });
+    expect(mockProject.queryProjectById).toHaveBeenCalledWith(1);
     expect(d.warningDays).toBe(30);
     expect(d.schedule).toEqual({ pending: 2, in_progress: 0, done: 3, delayed: 0 });
     expect(d.estimateTotal).toBe(5000);

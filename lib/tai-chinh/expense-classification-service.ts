@@ -6,6 +6,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export interface ExpenseClassificationRow {
   id: number;
@@ -34,6 +35,7 @@ interface Filters {
 export async function listExpenseClassifications(
   filters: Filters = {},
 ): Promise<ExpenseClassificationRow[]> {
+  await requireReleasedModuleRequest("tai-chinh");
   const rows = await prisma.expenseClassification.findMany({
     where: {
       deletedAt: null,
@@ -76,6 +78,7 @@ export async function listExpenseClassifications(
 export async function getExpenseClassificationSummary(
   filters: Filters = {},
 ): Promise<ExpenseClassificationSummary> {
+  await requireReleasedModuleRequest("tai-chinh");
   const grouped = await prisma.expenseClassification.groupBy({
     by: ["categoryName"],
     where: {

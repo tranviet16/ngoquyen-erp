@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { projectSchema, categorySchema, type ProjectInput, type CategoryInput } from "./schemas";
 import { serializeDecimal } from "@/lib/utils/serialize-decimal";
+import { queryProjectById } from "./project-query";
 
 async function getSessionRole(): Promise<string | null> {
   try {
@@ -19,6 +21,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listProjects(opts?: { search?: string; status?: string; includeDeleted?: boolean; page?: number; pageSize?: number; ids?: number[] }) {
+  await requireReleasedModuleRequest("master-data");
   const { search = "", status, includeDeleted = false, page = 1, pageSize = 20, ids } = opts ?? {};
   const where = {
     ...(includeDeleted ? {} : { deletedAt: null }),
@@ -47,16 +50,8 @@ export async function listProjects(opts?: { search?: string; status?: string; in
 }
 
 export async function getProjectById(id: number) {
-  const row = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      categories: {
-        where: { deletedAt: null },
-        orderBy: { sortOrder: "asc" },
-      },
-    },
-  });
-  return row ? serializeDecimal(row) : null;
+  await requireReleasedModuleRequest("master-data");
+  return queryProjectById(id);
 }
 
 export async function createProject(input: ProjectInput) {
@@ -144,6 +139,7 @@ export async function patchProject(id: number, patch: Record<string, unknown>) {
 
 // patchDuAn aliases patchProject — same Prisma model, both paths revalidated
 export async function patchDuAn(id: number, patch: Record<string, unknown>) {
+  await requireReleasedModuleRequest("master-data");
   return patchProject(id, patch);
 }
 

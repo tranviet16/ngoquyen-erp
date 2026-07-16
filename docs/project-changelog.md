@@ -5,6 +5,12 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ## [Unreleased]
 
 ### Added
+- Added global module release control backed by `ModuleAvailability`, with all 18 registered modules backfilled to `ready` and `dashboard` plus `admin.permissions` permanently protected from being moved to development.
+- Added an admin release-status panel under `/admin/permissions/modules` and an accessible synthetic blurred shell for entitled users opening a module marked `development`; the shell never loads or renders business data.
+- Added fail-closed release checks across page guards, project visibility, bespoke APIs and server actions. Entitlement is resolved before rollout so unauthorized users remain hidden/Forbidden while entitled users are redirected to the development screen.
+- Added project-scoped authorization to all project pages and Server Actions, including record-to-project verification, project-bound mutations and runtime allowlists that prevent cross-project IDOR and admin patch field injection.
+- Added database triggers that prevent core availability rows from being deleted, plus real integration fault injection proving availability changes roll back when audit persistence fails.
+- Added atomic audit records for release-status changes in the same database transaction as each availability update.
 - Added an admin-only account creation dialog on the Người dùng page with server-side role/department validation, 12-character initial passwords, username/email duplicate protection, inactive-admin denial, and exact-ID compensation when provisioning fails.
 - Deployed private HTTPS hosting through Tailscale Serve, self-hosted GlitchTip error tracking, and Uptime Kuma availability monitoring with DPAPI-protected credentials and 30-day observability retention.
 - Added strict CSP nonces, HSTS, browser isolation/security headers, versioned ZAP classifications, and repeatable active/passive DAST evidence with zero final warnings.
@@ -39,6 +45,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - Added `.dockerignore` to keep Docker build context small and exclude local dotenv/log/build artifacts.
 
 ### Notes
+- Module release-status implementation is locally verified: unit `676/676`, integration `35/35`, E2E `16/16`, TypeScript, lint, Prisma, risk-manifest verification, production build and independent security review all pass with zero known findings. PR checks and production deployment/smoke remain pending.
 - `NgoQuyen ERP 3001 Watchdog` Scheduled Task is now disabled. Docker container `ngoquyen-erp-3001` is the active supervisor for port 3001.
 
 ### Planned

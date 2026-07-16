@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getProjectDashboard } from "@/lib/du-an/dashboard-service";
 import { formatVND, formatDate, formatNumber } from "@/lib/utils/format";
 import { AlertTriangle } from "lucide-react";
+import { requireModuleAccess } from "@/lib/acl/guards";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -41,6 +42,10 @@ export default async function ProjectDashboardPage({ params }: Props) {
   const { id } = await params;
   const projectId = Number(id);
   if (isNaN(projectId)) notFound();
+  await requireModuleAccess("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
 
   const dash = await getProjectDashboard(projectId);
 

@@ -16,6 +16,7 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
+import { MODULE_KEYS } from "@/lib/acl/modules";
 
 const url = process.env.DATABASE_URL ?? "";
 
@@ -40,6 +41,9 @@ export async function truncateAll(): Promise<void> {
   await rawClient.$executeRawUnsafe(
     `TRUNCATE ${tables} RESTART IDENTITY CASCADE`,
   );
+  await rawClient.moduleAvailability.createMany({
+    data: MODULE_KEYS.map((moduleKey) => ({ moduleKey, status: "ready" })),
+  });
 }
 
 /** Closes the raw connection — call in a global afterAll if needed. */

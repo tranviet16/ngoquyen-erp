@@ -1,5 +1,3 @@
-"use server";
-
 /**
  * balance-report-service.ts — Cumulative debt report for Công nợ Vật tư ("Công nợ lũy kế").
  *
@@ -99,7 +97,7 @@ function isZeroStr(s: string): boolean {
  * Rows are serialized as strings (Decimal→string) so they cross the server→client
  * boundary inside RSC props without JSON issues.
  */
-export async function getMaterialDetailReport(
+export async function queryDetailReport(
   filters: DetailReportFilters
 ): Promise<DetailReportResult> {
   const { ledgerType, year, month, entityIds, projectIds, showZero } = filters;

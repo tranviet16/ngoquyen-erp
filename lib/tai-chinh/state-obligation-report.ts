@@ -9,6 +9,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export type PeriodKind = "month" | "quarter" | "year";
 
@@ -65,6 +66,7 @@ interface RawRow {
 export async function getObligationReport(
   params: ObligationReportParams,
 ): Promise<ObligationReportRow[]> {
+  await requireReleasedModuleRequest("tai-chinh");
   const { start, end } = periodBounds(params);
   const rows = await prisma.$queryRaw<RawRow[]>`
     SELECT

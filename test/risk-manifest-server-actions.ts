@@ -34,6 +34,7 @@ export const SERVER_ACTION_RISK_MANIFEST: readonly RiskManifestRecord[] = [
   action("action-payment", "app/(app)/thanh-toan/actions.ts", "P0", "finance", defined("payment role, approval separation, and resource scope")),
   action("action-import", "app/(app)/admin/import/import-actions.ts", "P0", "administration", defined("authorized administrator import, rollback, and audit policy")),
   action("action-permissions", "app/(app)/admin/permissions/actions.ts", "P0", "administration", defined("authorized administrator module and project grant policy")),
+  action("action-module-availability", "app/(app)/admin/permissions/modules/availability-actions.ts", "P0", "administration", defined("active administrator, protected core module, atomic availability update, and audit policy")),
   action("action-role-permissions", "app/(app)/admin/permissions/roles/actions.ts", "P0", "administration", defined("authorized administrator role definition, module grant, and audit policy")),
   action("action-user-grants", "app/(app)/admin/nguoi-dung/actions.ts", "P0", "administration", defined("authorized administrator user and department grant policy")),
   action("action-finance-pr-sync", "app/(app)/tai-chinh/phai-thu-tra/actions.ts", "P0", "finance", defined("finance module edit or administrator policy with audited sync, override, exclusion, and recovery operations")),
