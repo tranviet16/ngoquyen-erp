@@ -4,9 +4,13 @@
 
 The active instance is private to the Tailscale network:
 
-- ERP: `https://admin-pc.tail8998df.ts.net` → `127.0.0.1:3001`
+- ERP primary: `http://100.116.178.88:3001`
+- ERP short-host alternative: `http://admin-pc:3001`
+- ERP HTTPS fallback: `https://admin-pc.tail8998df.ts.net`
 - Uptime Kuma: `https://admin-pc.tail8998df.ts.net:8443` → `127.0.0.1:8002`
 - GlitchTip: `https://admin-pc.tail8998df.ts.net:8444` → security-header proxy on `127.0.0.1:8003`
+
+ERP remains bound to `127.0.0.1:3001`; a Tailscale TCP forwarder exposes tailnet port 3001 without opening Docker on LAN/public interfaces. Configure it with `tailscale serve --bg --tcp=3001 tcp://127.0.0.1:3001`. Because direct HTTP is the primary URL, Better Auth cookies cannot carry the browser `Secure` flag; transport remains encrypted inside Tailscale, and port 3001 must never be exposed outside the tailnet. Switching between the HTTP endpoints and HTTPS fallback creates separate browser sessions.
 
 Run `npx prisma migrate deploy` against the production database before declaring a fresh database healthy; `/api/health` proves connectivity but does not replace migration verification. Provision the bootstrap admin with `powershell -File scripts/manage-erp-admin-local.ps1 provision`; the idempotent command generates a random password, DPAPI-encrypts it for the current Windows user at `%LOCALAPPDATA%\NgoQuyenERP\erp-admin-secrets.json`, and never prints it. Check access with the same script's `status` action. If the store is missing while the admin already exists, provisioning fails closed and removes the unverified new store; reset/recover the existing account before provisioning again. Never commit the secret store; rotate the password after the first login.
 
