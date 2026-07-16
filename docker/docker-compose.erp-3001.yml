@@ -4,9 +4,9 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
       args:
-        BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3001}"
-        NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:3001}"
-        TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-}"
+        BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://100.116.178.88:3001}"
+        NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://100.116.178.88:3001}"
+        TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-http://admin-pc:3001,https://admin-pc.tail8998df.ts.net}"
         NEXT_PUBLIC_SENTRY_DSN: "${SENTRY_DSN:-}"
       secrets:
         - database_url
@@ -16,9 +16,9 @@ services:
     environment:
       DATABASE_URL: "postgresql://nqerp:${POSTGRES_PASSWORD}@postgres:5432/ngoquyyen_erp?schema=public"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
-      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://localhost:3001}"
-      NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://localhost:3001}"
-      TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://100.116.178.88:3001}"
+      NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://100.116.178.88:3001}"
+      TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-http://admin-pc:3001,https://admin-pc.tail8998df.ts.net}"
       SENTRY_DSN: "${SENTRY_DSN:-}"
       NODE_ENV: production
     ports:

@@ -4,11 +4,11 @@
 
 | Service | Private URL | Local binding | Purpose |
 |---|---|---|---|
-| ERP | `https://admin-pc.tail8998df.ts.net` | `127.0.0.1:3001` | Application and `/api/health` |
+| ERP | `http://100.116.178.88:3001` (primary), `http://admin-pc:3001` (alternative), `https://admin-pc.tail8998df.ts.net` (fallback) | `127.0.0.1:3001` through Tailscale TCP forwarding | Application and `/api/health` |
 | Uptime Kuma | `https://admin-pc.tail8998df.ts.net:8443` | `127.0.0.1:8002` | Availability and TLS monitoring |
 | GlitchTip | `https://admin-pc.tail8998df.ts.net:8444` | `127.0.0.1:8003` security-header proxy (`8001` upstream) | Sentry-compatible error tracking |
 
-Tailscale Serve terminates TLS for ERP and Kuma. Both are tailnet-only; Docker ports are not exposed on LAN/public interfaces.
+Tailscale Serve terminates TLS for the ERP fallback and Kuma, and separately forwards tailnet TCP port 3001 to the loopback-only ERP port. Docker ports are not exposed on LAN/public interfaces. Direct HTTP sessions do not use `Secure` cookies and are permitted only because the Tailscale tunnel encrypts transport; never expose port 3001 with Funnel or router port forwarding.
 
 ## Ownership and access
 
