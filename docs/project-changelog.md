@@ -45,7 +45,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - Added `.dockerignore` to keep Docker build context small and exclude local dotenv/log/build artifacts.
 
 ### Notes
-- Module release-status implementation is locally verified: unit `676/676`, integration `35/35`, E2E `16/16`, TypeScript, lint, Prisma, risk-manifest verification, production build and independent security review all pass with zero known findings. PR checks and production deployment/smoke remain pending.
+- Module release-status implementation is verified and deployed from merged SHA `04bdc97bb653`: unit `676/676`, integration `35/35`, E2E `16/16`, TypeScript, lint, Prisma, risk-manifest, production build, independent review and all GitHub checks pass with zero known findings. Production has 48/48 migrations, 18/18 module rows ready and successful smoke on IP HTTP, hostname HTTP and Tailscale HTTPS.
 - `NgoQuyen ERP 3001 Watchdog` Scheduled Task is now disabled. Docker container `ngoquyen-erp-3001` is the active supervisor for port 3001.
 
 ### Planned
