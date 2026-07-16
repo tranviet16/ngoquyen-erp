@@ -1,21 +1,8 @@
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
 import { LEVEL_ORDER, type AccessLevel } from "@/lib/dept-access";
-
-async function assertAdmin(): Promise<string> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) throw new Error("Phiên đăng nhập đã hết hạn");
-  if (session.user.role !== "admin") throw new Error("Chỉ admin được thao tác");
-  const active = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { isActive: true },
-  });
-  if (!active?.isActive) throw new Error("Tài khoản đã bị vô hiệu hóa");
-  return session.user.id;
-}
+import { requireActiveAdmin } from "./require-active-admin";
 
 function isAccessLevel(s: string): s is AccessLevel {
   return LEVEL_ORDER.includes(s as AccessLevel);
@@ -24,6 +11,7 @@ function isAccessLevel(s: string): s is AccessLevel {
 export interface UserWithGrants {
   id: string;
   name: string | null;
+  username: string | null;
   email: string;
   role: string;
   departmentId: number | null;
@@ -35,7 +23,7 @@ export interface UserWithGrants {
 }
 
 export async function listUsersWithGrants(): Promise<UserWithGrants[]> {
-  await assertAdmin();
+  await requireActiveAdmin();
   const users = await prisma.user.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -48,6 +36,7 @@ export async function listUsersWithGrants(): Promise<UserWithGrants[]> {
   return users.map((u) => ({
     id: u.id,
     name: u.name,
+    username: u.username,
     email: u.email,
     role: u.role ?? "viewer",
     departmentId: u.departmentId,
@@ -70,7 +59,7 @@ export async function setGrant(
   deptId: number,
   level: AccessLevel,
 ): Promise<void> {
-  const adminId = await assertAdmin();
+  const adminId = await requireActiveAdmin();
   if (!isAccessLevel(level)) throw new Error("Cấp quyền không hợp lệ");
 
   const user = await prisma.user.findUnique({
@@ -105,7 +94,7 @@ export async function setGrant(
 }
 
 export async function removeGrant(userId: string, deptId: number): Promise<void> {
-  const adminId = await assertAdmin();
+  const adminId = await requireActiveAdmin();
   const existing = await prisma.userDeptAccess.findUnique({
     where: { userId_deptId: { userId, deptId } },
   });
@@ -134,7 +123,7 @@ export interface UpdateUserAttributesInput {
 export async function updateUserAttributes(
   input: UpdateUserAttributesInput,
 ): Promise<void> {
-  const adminId = await assertAdmin();
+  const adminId = await requireActiveAdmin();
 
   const roleExists = await prisma.role.findUnique({
     where: { id: input.role },

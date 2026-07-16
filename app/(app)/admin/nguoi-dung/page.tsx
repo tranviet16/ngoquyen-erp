@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { hasRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { prisma } from "@/lib/prisma";
 import { listUsersWithGrants } from "@/lib/admin/user-grants-service";
 import { listDepartments } from "@/lib/department-service";
@@ -11,10 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (
-    !session?.user ||
-    !(await hasRoleModuleAccess(session.user.role, "admin.nguoi-dung", "admin"))
-  ) {
+  if (!session?.user || session.user.role !== "admin") {
     redirect("/dashboard");
   }
   const [users, depts, roles] = await Promise.all([

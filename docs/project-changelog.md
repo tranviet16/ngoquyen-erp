@@ -5,6 +5,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ## [Unreleased]
 
 ### Added
+- Added an admin-only account creation dialog on the Người dùng page with server-side role/department validation, 12-character initial passwords, username/email duplicate protection, inactive-admin denial, and exact-ID compensation when provisioning fails.
 - Deployed private HTTPS hosting through Tailscale Serve, self-hosted GlitchTip error tracking, and Uptime Kuma availability monitoring with DPAPI-protected credentials and 30-day observability retention.
 - Added strict CSP nonces, HSTS, browser isolation/security headers, versioned ZAP classifications, and repeatable active/passive DAST evidence with zero final warnings.
 - Added validated GlitchTip backups and local monitoring runbooks covering ownership, secret access, retention, and alert severity.

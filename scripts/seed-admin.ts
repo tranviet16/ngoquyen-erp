@@ -10,7 +10,7 @@
  * Idempotent: exits 0 if user already exists.
  */
 
-import { auth } from "../lib/auth";
+import { userProvisioningAuth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 async function main(): Promise<void> {
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const result = await auth.api.signUpEmail({
+  const result = await userProvisioningAuth.api.signUpEmail({
     body: { email, password, name },
   });
   if (!result?.user) throw new Error("Better Auth did not return the created admin");

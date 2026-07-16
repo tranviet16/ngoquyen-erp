@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { auth } from "../lib/auth";
+import { userProvisioningAuth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 /**
@@ -101,7 +101,7 @@ async function main() {
   for (const e of EMPLOYEES) {
     const username = slugifyName(e.name);
     const email = `${username}@nq.local`;
-    const result = await auth.api.signUpEmail({
+    const result = await userProvisioningAuth.api.signUpEmail({
       body: { email, password: temporaryPassword, name: e.name, username, displayUsername: username },
     });
     if (!result?.user) throw new Error(`Failed to create ${email}`);

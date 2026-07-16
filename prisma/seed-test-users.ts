@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { auth } from "../lib/auth";
+import { userProvisioningAuth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 const TEST_USERS = [
@@ -18,7 +18,7 @@ async function main() {
       console.log(`SKIP ${u.email} (already exists, role=${existing.role})`);
       continue;
     }
-    const result = await auth.api.signUpEmail({
+    const result = await userProvisioningAuth.api.signUpEmail({
       body: { email: u.email, password: PASSWORD, name: u.name },
     });
     if (!result?.user) throw new Error(`Failed to create ${u.email}`);
