@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-🚧 In progress — local verification và cập nhật tài liệu đã hoàn tất; PR, required checks, merge, deployment và production smoke còn pending.
+✅ Complete — local/CI verification, merge, migration, deployment và production smoke đã hoàn tất ngày 2026-07-16.
 
 ## Tests
 
@@ -30,8 +30,11 @@
 - ✅ Risk-manifest verification
 - ✅ Production build
 - ✅ Independent review: zero known P0/P1/P2 findings
-- ⏳ PR và required checks
-- ⏳ Merge, deployment và production smoke
+- ✅ PR #7 và toàn bộ required checks
+- ✅ Squash merge `04bdc97bb653bb350888da13c4d123b6b61c2df1`
+- ✅ Production migrations: 48/48; 18/18 availability rows ready; core delete trigger active
+- ✅ Production image/container `ngoquyen-erp-3001-erp-3001:sha-04bdc97bb653`
+- ✅ Smoke: Tailscale IP HTTP, `admin-pc:3001`, Tailscale HTTPS và auth redirect
 
 ## Rollback
 
