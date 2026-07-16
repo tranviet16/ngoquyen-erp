@@ -1273,6 +1273,14 @@ model ModulePermission {
   @@map("module_permissions")
 }
 
+model ModuleAvailability {
+  moduleKey String   @id
+  status    String
+  updatedAt DateTime @updatedAt
+
+  @@map("module_availability")
+}
+
 model ProjectPermission {
   userId    String
   projectId Int

@@ -2,12 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { MODULE_KEYS } from "@/lib/acl/modules";
 import type { ModuleKey, AccessLevel } from "@/lib/acl/modules";
 import { MODULE_LABELS } from "@/lib/acl/module-labels";
+import { loadModuleAvailabilityMap } from "@/lib/acl";
 import { ModulePermissionGrid } from "./module-permission-grid";
+import { ReleaseStatusCard } from "./release-status-card";
 
 export const dynamic = "force-dynamic";
 
 export default async function ModulePermissionsPage() {
-  const [users, permRows] = await Promise.all([
+  const [users, permRows, availabilityMap] = await Promise.all([
     prisma.user.findMany({
       orderBy: { name: "asc" },
       select: {
@@ -20,6 +22,7 @@ export default async function ModulePermissionsPage() {
     prisma.modulePermission.findMany({
       select: { userId: true, moduleKey: true, level: true },
     }),
+    loadModuleAvailabilityMap(),
   ]);
 
   // Build Map<userId, Map<ModuleKey, AccessLevel>>
@@ -51,6 +54,12 @@ export default async function ModulePermissionsPage() {
           giao dịch.
         </p>
       </div>
+
+      <ReleaseStatusCard
+        key={MODULE_KEYS.map((moduleKey) => availabilityMap[moduleKey]).join(":")}
+        initialStatuses={availabilityMap}
+        moduleLabels={MODULE_LABELS}
+      />
 
       <ModulePermissionGrid
         users={userRows}

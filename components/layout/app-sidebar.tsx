@@ -1,6 +1,9 @@
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { canAccess, getModuleAvailability, shouldShowModuleInMenu } from "@/lib/acl";
+import {
+  canAccessEntitlement,
+  loadModuleAvailabilityMap,
+} from "@/lib/acl";
 import type { ModuleKey } from "@/lib/acl";
 import { AppSidebarClient, type NavGroupData, type NavItemData } from "./app-sidebar-client";
 
@@ -61,11 +64,17 @@ export async function AppSidebar() {
 
   // Flatten all items, resolve access in parallel, then re-group
   const allItems = NAV_GROUPS.flatMap((g) => g.items.map((item) => ({ group: g, item })));
-  const accessResults = await Promise.all(
-    allItems.map(({ item }) =>
-      canAccess(userId, item.moduleKey, { minLevel: "read", scope: "module" }),
+  const [accessResults, availability] = await Promise.all([
+    Promise.all(
+      allItems.map(({ item }) =>
+        canAccessEntitlement(userId, item.moduleKey, {
+          minLevel: "read",
+          scope: "module",
+        }),
+      ),
     ),
-  );
+    loadModuleAvailabilityMap(),
+  ]);
 
   // Re-group by original group order, preserving only visible items
   const groupMap = new Map<string, NavItemData[]>();
@@ -74,17 +83,13 @@ export async function AppSidebar() {
   }
   for (let i = 0; i < allItems.length; i++) {
     const { group, item } = allItems[i];
-    const availability = getModuleAvailability(item.moduleKey);
-    const isVisible = availability.enabled
-      ? accessResults[i]
-      : shouldShowModuleInMenu(item.moduleKey);
-    if (!isVisible) continue;
+    if (!accessResults[i]) continue;
 
     groupMap.get(group.label)!.push({
       label: item.label,
       href: item.href,
       icon: item.icon,
-      status: availability.status,
+      status: availability[item.moduleKey],
     });
   }
 

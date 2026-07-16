@@ -115,14 +115,18 @@ export function AppSidebarClient({ groups }: Props) {
                           <Link href={item.href} className="flex items-center gap-2.5" />
                         }
                         isActive={isActive}
-                        tooltip={item.label}
-                        className="h-9 rounded-md px-2.5 text-[13px] font-medium text-sidebar-foreground/76 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:font-bold hover:bg-sidebar-accent/78 hover:text-sidebar-foreground"
+                        tooltip={
+                          item.status === "development"
+                            ? `${item.label} — Đang phát triển`
+                            : item.label
+                        }
+                        className="min-h-11 rounded-md px-2.5 text-[13px] font-medium text-sidebar-foreground/76 data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:font-bold hover:bg-sidebar-accent/78 hover:text-sidebar-foreground"
                       >
                         <Icon className="size-4 shrink-0 text-sidebar-foreground/58 group-data-[active=true]/menu-button:text-sidebar-primary" aria-hidden="true" />
                         <span className="truncate">{item.label}</span>
                         {item.status === "development" ? (
-                          <span className="ml-auto rounded-full border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-sidebar-foreground/72 group-data-[collapsible=icon]:hidden">
-                            Dev
+                          <span className="ml-auto rounded-full border border-sidebar-border bg-sidebar-accent/70 px-1.5 py-1 text-[10px] font-semibold leading-none text-sidebar-foreground/72 group-data-[collapsible=icon]:hidden">
+                            Đang phát triển
                           </span>
                         ) : null}
                       </SidebarMenuButton>

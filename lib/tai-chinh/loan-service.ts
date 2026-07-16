@@ -10,6 +10,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 
@@ -110,6 +111,7 @@ function addMonths(date: Date, months: number): Date {
 }
 
 export async function listLoanContracts() {
+  await requireReleasedModuleRequest("tai-chinh");
   return prisma.loanContract.findMany({
     where: { deletedAt: null },
     orderBy: { startDate: "desc" },
@@ -118,6 +120,7 @@ export async function listLoanContracts() {
 }
 
 export async function getLoanContract(id: number) {
+  await requireReleasedModuleRequest("tai-chinh");
   return prisma.loanContract.findFirst({
     where: { id, deletedAt: null },
     include: { payments: { where: { deletedAt: null }, orderBy: { dueDate: "asc" } } },

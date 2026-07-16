@@ -7,10 +7,10 @@
 import {
   LEVEL_RANK,
   MODULE_AXIS,
-  isModuleEnabled,
   type AccessLevel,
   type ModuleKey,
 } from "./modules";
+import { isModuleReleased } from "./module-availability";
 import { getEffectiveModuleLevel } from "./module-access";
 import {
   getProjectAccessMap,
@@ -60,13 +60,11 @@ export function checkRoleAxis(
  *   2. Trục 1: effective module level check (explicit row || role fallback)
  *   3. Trục 2: axis-specific check based on scope
  */
-export async function canAccess(
+export async function canAccessEntitlement(
   userId: string,
   moduleKey: ModuleKey,
   opts: CanAccessOpts,
 ): Promise<boolean> {
-  if (!isModuleEnabled(moduleKey)) return false;
-
   const user = await loadUser(userId);
 
   // D1: admin short-circuit — must be before null check to avoid false negatives
@@ -122,6 +120,16 @@ export async function canAccess(
   }
 }
 
+/** Checks both the global rollout state and the user's ACL entitlement. */
+export async function canAccess(
+  userId: string,
+  moduleKey: ModuleKey,
+  opts: CanAccessOpts,
+): Promise<boolean> {
+  if (!(await isModuleReleased(moduleKey))) return false;
+  return canAccessEntitlement(userId, moduleKey, opts);
+}
+
 /**
  * Throws an error if canAccess returns false.
  */
@@ -156,6 +164,8 @@ export type ViewableProjectIds =
 export async function getViewableProjectIds(
   userId: string,
 ): Promise<ViewableProjectIds> {
+  if (!(await isModuleReleased("du-an"))) return { kind: "none" };
+
   const user = await loadUser(userId);
   if (!user) return { kind: "none" };
 

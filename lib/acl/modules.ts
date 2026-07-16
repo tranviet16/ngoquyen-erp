@@ -56,59 +56,6 @@ export const MODULE_AXIS: Record<ModuleKey, AxisType> = {
   "admin.permissions": "admin-only",
 };
 
-export type ModuleAvailabilityStatus = "ready" | "development";
-
-export type ModuleAvailabilityConfig = {
-  /**
-   * False blocks direct URL/API access through canAccess()/requireModuleAccess().
-   * Admin users are blocked too; this is a product rollout switch, not RBAC.
-   */
-  enabled: boolean;
-  /**
-   * Keep true for disabled modules that should still appear in the sidebar as
-   * a preview with a status badge. Set false to hide the module entirely.
-   */
-  showInMenu: boolean;
-  status: ModuleAvailabilityStatus;
-};
-
-export const MODULE_AVAILABILITY: Record<ModuleKey, ModuleAvailabilityConfig> = {
-  dashboard: { enabled: true, showInMenu: true, status: "ready" },
-  "master-data": { enabled: true, showInMenu: true, status: "ready" },
-  "du-an": { enabled: true, showInMenu: true, status: "ready" },
-  "vat-tu-ncc": { enabled: true, showInMenu: true, status: "ready" },
-  "sl-dt": { enabled: true, showInMenu: true, status: "ready" },
-  "cong-no-vt": { enabled: true, showInMenu: true, status: "ready" },
-  "cong-no-nc": { enabled: true, showInMenu: true, status: "ready" },
-  "tai-chinh": { enabled: true, showInMenu: true, status: "ready" },
-  "thanh-toan.ke-hoach": { enabled: true, showInMenu: true, status: "ready" },
-  "thanh-toan.tong-hop": { enabled: true, showInMenu: true, status: "ready" },
-  "van-hanh.cong-viec": { enabled: true, showInMenu: true, status: "ready" },
-  "van-hanh.phieu-phoi-hop": { enabled: true, showInMenu: true, status: "ready" },
-  "van-hanh.hieu-suat": { enabled: true, showInMenu: true, status: "ready" },
-  "thong-bao": { enabled: true, showInMenu: true, status: "ready" },
-  "admin.import": { enabled: true, showInMenu: true, status: "ready" },
-  "admin.phong-ban": { enabled: true, showInMenu: true, status: "ready" },
-  "admin.nguoi-dung": { enabled: true, showInMenu: true, status: "ready" },
-  "admin.permissions": { enabled: true, showInMenu: true, status: "ready" },
-};
-
-export function getModuleAvailability(moduleKey: ModuleKey): ModuleAvailabilityConfig {
-  return MODULE_AVAILABILITY[moduleKey];
-}
-
-export function isModuleEnabled(moduleKey: ModuleKey): boolean {
-  return getModuleAvailability(moduleKey).enabled;
-}
-
-export function shouldShowModuleInMenu(moduleKey: ModuleKey): boolean {
-  return getModuleAvailability(moduleKey).showInMenu;
-}
-
-export function isModuleInDevelopment(moduleKey: ModuleKey): boolean {
-  const availability = getModuleAvailability(moduleKey);
-  return !availability.enabled && availability.status === "development";
-}
 // D4: per-module valid level domain. Admin UI dropdown filters by this.
 export const MODULE_LEVELS: Record<ModuleKey, readonly AccessLevel[]> = {
   dashboard: ["read"],

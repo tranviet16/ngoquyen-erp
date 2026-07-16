@@ -6,6 +6,19 @@ import type { FullConfig } from "@playwright/test";
 import { Pool } from "pg";
 import { E2E_PASSWORD, E2E_USERS } from "./constants";
 import { ROLES } from "../scripts/roles-seed-data";
+import { MODULE_KEYS } from "../lib/acl/modules";
+
+async function seedModuleAvailability(pool: Pool): Promise<void> {
+  for (const moduleKey of MODULE_KEYS) {
+    await pool.query(
+      `INSERT INTO module_availability ("moduleKey", status, "updatedAt")
+       VALUES ($1, 'ready', now())
+       ON CONFLICT ("moduleKey") DO UPDATE
+       SET status = 'ready', "updatedAt" = now()`,
+      [moduleKey],
+    );
+  }
+}
 
 /**
  * Seeds the dynamic-RBAC tables (`roles` + `role_permissions`) idempotently.
@@ -47,6 +60,7 @@ async function globalSetup(config: FullConfig): Promise<void> {
 
   const pool = new Pool({ connectionString: url });
   try {
+    await seedModuleAvailability(pool);
     await seedRoles(pool);
     for (const u of E2E_USERS) {
       const { rows } = await pool.query<{ id: string; role: string }>(
@@ -70,6 +84,12 @@ async function globalSetup(config: FullConfig): Promise<void> {
         [u.role, u.username, u.email],
       );
     }
+    await pool.query(
+      `INSERT INTO module_permissions ("userId", "moduleKey", level, "grantedAt")
+       SELECT id, 'du-an', 'read', now() FROM users WHERE email = $1
+       ON CONFLICT ("userId", "moduleKey") DO UPDATE SET level = 'read'`,
+      ["e2e-project@nq.local"],
+    );
   } finally {
     await pool.end();
   }

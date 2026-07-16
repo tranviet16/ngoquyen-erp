@@ -1,16 +1,21 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { getProjectById } from "@/lib/master-data/project-service";
+import { queryProjectById } from "@/lib/master-data/project-query";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export async function getProjectDashboard(projectId: number) {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
   // Fetch settings first to get contractWarningDays; fall back to 90
   const settings = await prisma.projectSettings.findUnique({ where: { projectId } });
   const warningDays = settings?.contractWarningDays ?? 90;
 
   const [project, scheduleStats, estimateSum, transactionSum, cashflowSum, contractWarnings] =
     await Promise.all([
-      getProjectById(projectId),
+      queryProjectById(projectId),
 
       // Schedule: count by status
       prisma.projectSchedule.groupBy({

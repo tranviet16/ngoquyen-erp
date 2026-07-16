@@ -13,11 +13,15 @@ import { Prisma } from "@prisma/client";
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockQueryRaw = vi.fn();
+const mockAssertModuleReleased = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
   prisma: { $queryRaw: (...args: unknown[]) => mockQueryRaw(...args) },
 }));
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
+vi.mock("@/lib/acl/released-module-request", () => ({
+  requireReleasedModuleRequest: (...args: unknown[]) => mockAssertModuleReleased(...args),
+}));
 
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 
@@ -91,6 +95,7 @@ function interpolatedDates(): Date[] {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockAssertModuleReleased.mockResolvedValue(undefined);
   mockTx.cashAccount.findUnique.mockResolvedValue({ name: "Quỹ tiền mặt" });
   mockTx.journalEntry.create.mockResolvedValue({ id: 99 });
   mockTx.journalEntry.update.mockResolvedValue({});

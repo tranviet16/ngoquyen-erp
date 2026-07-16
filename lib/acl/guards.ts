@@ -6,10 +6,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { canAccess } from "./effective";
+import { canAccessEntitlement } from "./effective";
 import type { CanAccessOpts } from "./effective";
-import { isModuleInDevelopment } from "./modules";
 import type { AccessLevel, ModuleKey } from "./modules";
+import { isModuleReleased } from "./module-availability";
 
 export type GuardOpts =
   | { minLevel?: AccessLevel; scope?: "module" }
@@ -36,11 +36,6 @@ export async function requireModuleAccess(
   const { id: userId, role } = session.user;
   const minLevel: AccessLevel = opts.minLevel ?? "read";
 
-  if (isModuleInDevelopment(moduleKey)) {
-    const params = new URLSearchParams({ m: moduleKey });
-    redirect(`/dang-phat-trien?${params.toString()}`);
-  }
-
   // Build CanAccessOpts from GuardOpts
   let aclOpts: CanAccessOpts;
   if (!opts.scope || opts.scope === "module") {
@@ -49,10 +44,15 @@ export async function requireModuleAccess(
     aclOpts = { minLevel, scope: opts.scope } as CanAccessOpts;
   }
 
-  const allowed = await canAccess(userId, moduleKey, aclOpts);
+  const allowed = await canAccessEntitlement(userId, moduleKey, aclOpts);
   if (!allowed) {
     const params = new URLSearchParams({ m: moduleKey, need: minLevel });
     redirect(`/forbidden?${params.toString()}`);
+  }
+
+  if (!(await isModuleReleased(moduleKey))) {
+    const params = new URLSearchParams({ m: moduleKey });
+    redirect(`/dang-phat-trien?${params.toString()}`);
   }
 
   return { userId, role: role ?? "viewer" };

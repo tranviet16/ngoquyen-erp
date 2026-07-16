@@ -170,7 +170,7 @@ export function CommentSection({ taskId, currentUserId, members = [] }: Props) {
 
   useEffect(() => {
     void Promise.resolve().then(load);
-    const es = new EventSource("/api/notifications/stream");
+    const es = new EventSource("/api/notifications/stream?channel=comments");
     esRef.current = es;
     es.addEventListener("message", (event) => {
       try {

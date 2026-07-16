@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { itemSchema, type ItemInput } from "./schemas";
 
@@ -18,6 +19,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listItems(opts?: { search?: string; type?: string; includeDeleted?: boolean; page?: number; pageSize?: number }) {
+  await requireReleasedModuleRequest("master-data");
   const { search = "", type, includeDeleted = false, page = 1, pageSize = 20 } = opts ?? {};
   const where = {
     ...(includeDeleted ? {} : { deletedAt: null }),
@@ -44,6 +46,7 @@ export async function listItems(opts?: { search?: string; type?: string; include
 }
 
 export async function getItemById(id: number) {
+  await requireReleasedModuleRequest("master-data");
   return prisma.item.findUnique({ where: { id } });
 }
 

@@ -22,6 +22,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
@@ -68,6 +69,7 @@ function isValidModuleKey(key: string): key is ModuleKey {
 export async function setModulePermission(
   change: ModulePermissionChange,
 ): Promise<void> {
+  await requireReleasedModuleRequest("admin.permissions");
   const adminId = await assertAdmin();
   const { userId, moduleKey, level } = change;
 
@@ -127,6 +129,7 @@ export async function setModulePermission(
 export async function bulkApplyModulePermissionChanges(
   changes: ModulePermissionChange[],
 ): Promise<BulkResult> {
+  await requireReleasedModuleRequest("admin.permissions");
   const adminId = await assertAdmin();
 
   const applied: ModulePermissionChange[] = [];
@@ -235,6 +238,7 @@ export async function setProjectPermission(
   projectId: number,
   level: AccessLevel | "default",
 ): Promise<void> {
+  await requireReleasedModuleRequest("admin.permissions");
   const adminId = await assertAdmin();
 
   if (level !== "default" && !isValidLevelForModule("du-an", level)) {
@@ -287,6 +291,7 @@ export async function setProjectGrantAll(
   userId: string,
   level: AccessLevel | "default",
 ): Promise<void> {
+  await requireReleasedModuleRequest("admin.permissions");
   const adminId = await assertAdmin();
 
   if (level !== "default" && !isValidLevelForModule("du-an", level)) {

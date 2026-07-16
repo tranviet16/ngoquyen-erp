@@ -9,9 +9,10 @@
  */
 
 import {
-  getMaterialDetailReport,
+  queryDetailReport,
   type DetailReportResult,
 } from "@/lib/cong-no-vt/balance-report-service";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export type {
   DetailRow,
@@ -30,8 +31,6 @@ export interface LaborDetailReportFilters {
 export async function getLaborDetailReport(
   filters: LaborDetailReportFilters
 ): Promise<DetailReportResult> {
-  return getMaterialDetailReport({
-    ledgerType: "labor",
-    ...filters,
-  });
+  await requireReleasedModuleRequest("cong-no-nc");
+  return queryDetailReport({ ...filters, ledgerType: "labor" });
 }

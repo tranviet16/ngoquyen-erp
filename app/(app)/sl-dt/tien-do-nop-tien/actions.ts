@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { paymentPlanSchema, type PaymentPlanInput } from "@/lib/sl-dt/schemas";
 
 export async function upsertPaymentPlan(input: PaymentPlanInput) {
+  await requireReleasedModuleRequest("sl-dt");
   const data = paymentPlanSchema.parse(input);
 
   await prisma.slDtPaymentPlan.upsert({
@@ -39,6 +41,7 @@ export async function upsertPaymentPlan(input: PaymentPlanInput) {
 }
 
 export async function patchPaymentPlanByLot(lotId: number, patch: Record<string, unknown>) {
+  await requireReleasedModuleRequest("sl-dt");
   if (!lotId || lotId < 1) throw new Error("Invalid lotId");
   const current = await prisma.slDtPaymentPlan.findUnique({ where: { lotId } });
   const num = (k: string, fallback: number) =>
@@ -63,6 +66,7 @@ export async function patchPaymentPlanByLot(lotId: number, patch: Record<string,
 export async function bulkUpsertPaymentPlans(
   rows: Array<Record<string, unknown> & { id?: number; lotId?: number }>,
 ) {
+  await requireReleasedModuleRequest("sl-dt");
   for (const row of rows) {
     const lotId = (row.lotId as number | undefined) ?? (row.id as number | undefined);
     if (!lotId) continue;
@@ -73,6 +77,7 @@ export async function bulkUpsertPaymentPlans(
 }
 
 export async function deletePaymentPlansByLot(lotIds: number[]) {
+  await requireReleasedModuleRequest("sl-dt");
   if (!lotIds.length) return;
   await prisma.slDtPaymentPlan.deleteMany({ where: { lotId: { in: lotIds } } });
   revalidatePath("/sl-dt/tien-do-nop-tien");
@@ -80,6 +85,7 @@ export async function deletePaymentPlansByLot(lotIds: number[]) {
 }
 
 export async function deletePaymentPlan(lotId: number) {
+  await requireReleasedModuleRequest("sl-dt");
   if (!lotId || lotId < 1) throw new Error("Invalid lotId");
 
   await prisma.slDtPaymentPlan.delete({ where: { lotId } });

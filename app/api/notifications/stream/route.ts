@@ -7,18 +7,37 @@
  *
  * Closes from server when client disconnects (controller throws on enqueue).
  */
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import {
+  moduleRequestStatus,
+  requireReleasedModuleRequest,
+} from "@/lib/acl/released-module-request";
 import { subscribeUser, type SsePayload } from "@/lib/notification/sse-emitter";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(): Promise<Response> {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user) return new Response("Unauthorized", { status: 401 });
+export async function GET(request: Request): Promise<Response> {
+  const channel = new URL(request.url).searchParams.get("channel") ?? "notifications";
+  if (channel !== "notifications" && channel !== "comments") {
+    return new Response("Bad request", { status: 400 });
+  }
 
-  const userId = session.user.id;
+  const moduleKey = channel === "comments" ? "van-hanh.cong-viec" : "thong-bao";
+  let userId: string;
+  try {
+    ({ userId } = await requireReleasedModuleRequest(moduleKey));
+  } catch (error) {
+    const status = moduleRequestStatus(error);
+    const message =
+      status === 503
+        ? "Module đang phát triển"
+        : status === 500
+          ? "Lỗi hệ thống"
+          : status === 403
+            ? "Forbidden"
+            : "Unauthorized";
+    return new Response(message, { status });
+  }
   const encoder = new TextEncoder();
 
   let unsubscribe: (() => void) | null = null;
@@ -49,6 +68,8 @@ export async function GET(): Promise<Response> {
       safeEnqueue(encoder.encode(`event: ready\ndata: {"userId":"${userId}"}\n\n`));
 
       unsubscribe = subscribeUser(userId, (payload: SsePayload) => {
+        if (channel === "comments" && payload.type !== "comment") return;
+        if (channel === "notifications" && payload.type !== "notification") return;
         safeEnqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       });
 

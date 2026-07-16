@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { entitySchema, type EntityInput } from "./schemas";
 
@@ -18,6 +19,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listEntities(opts?: { search?: string; includeDeleted?: boolean; page?: number; pageSize?: number }) {
+  await requireReleasedModuleRequest("master-data");
   const { search = "", includeDeleted = false, page = 1, pageSize = 20 } = opts ?? {};
   const where = {
     ...(includeDeleted ? {} : { deletedAt: null }),
@@ -36,6 +38,7 @@ export async function listEntities(opts?: { search?: string; includeDeleted?: bo
 }
 
 export async function getEntityById(id: number) {
+  await requireReleasedModuleRequest("master-data");
   return prisma.entity.findUnique({ where: { id } });
 }
 

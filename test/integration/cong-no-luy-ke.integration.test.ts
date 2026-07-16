@@ -7,11 +7,18 @@
  * `queryMonthlyByParty` (báo cáo tháng). Also asserts the year/month cutoff
  * and HĐ-vs-TT column independence.
  */
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
+
+vi.mock("@/lib/acl/released-module-request", () => ({
+  requireReleasedModuleRequest: vi.fn().mockResolvedValue({
+    userId: "integration-admin",
+    role: "admin",
+  }),
+}));
 
 import { prisma } from "@/lib/prisma";
 import { truncateAll, closeTestDb } from "@/test/helpers/test-db";
-import { getMaterialDetailReport } from "@/lib/cong-no-vt/balance-report-service";
+import { getMaterialDetailReport } from "@/lib/cong-no-vt/material-detail-report-service";
 import { getLaborDetailReport } from "@/lib/cong-no-nc/balance-report-service";
 import { queryMonthlyByParty } from "@/lib/ledger/ledger-aggregations";
 
@@ -75,7 +82,6 @@ describe("getMaterialDetailReport — cumulative report (integration)", () => {
     await seed();
 
     const { rows } = await getMaterialDetailReport({
-      ledgerType: "material",
       year: 2026,
       month: 5,
       showZero: false,
@@ -101,7 +107,6 @@ describe("getMaterialDetailReport — cumulative report (integration)", () => {
     await seed();
 
     const cutoff = await getMaterialDetailReport({
-      ledgerType: "material",
       year: 2026,
       month: 5,
       showZero: false,
@@ -109,7 +114,6 @@ describe("getMaterialDetailReport — cumulative report (integration)", () => {
     expect(cutoff.rows[0].phatSinhTt).toBe("550"); // June lay_hang excluded
 
     const noCutoff = await getMaterialDetailReport({
-      ledgerType: "material",
       showZero: false,
     });
     expect(noCutoff.rows[0].phatSinhTt).toBe("10549"); // 500 + 50 + 9999
@@ -119,7 +123,6 @@ describe("getMaterialDetailReport — cumulative report (integration)", () => {
   it("keeps TT and HĐ columns independent", async () => {
     await seed();
     const { rows } = await getMaterialDetailReport({
-      ledgerType: "material",
       year: 2026,
       month: 5,
       showZero: false,
@@ -133,7 +136,6 @@ describe("getMaterialDetailReport — cumulative report (integration)", () => {
     const { entityId, supplierId } = await seed();
 
     const { rows } = await getMaterialDetailReport({
-      ledgerType: "material",
       year: 2026,
       month: 5,
       showZero: false,

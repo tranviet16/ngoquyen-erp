@@ -8,6 +8,23 @@ This document describes the high-level architecture of the ngoquyyen-erp system,
 
 The system implements a **2-axis ACL model** layered on top of a **dynamic role foundation** (`Role` + `RolePermission` tables + UserDeptAccess). Roles are data-driven rows in the `roles` table — admins can create, edit, and delete roles and their per-module permission grants from the UI; there is no hardcoded role hierarchy or `rank` integer.
 
+### Global Module Availability
+
+Release state is an independent, global gate stored in `ModuleAvailability(moduleKey, status, updatedAt)`. The PostgreSQL migration backfills all 18 registered module keys to `ready`; `dashboard` and `admin.permissions` are protected core modules and cannot be changed to `development` or deleted through the admin UI, Server Action or database constraints/triggers.
+
+The resolver bulk-loads availability once per request. Missing rows, invalid values and database errors resolve to `development` (fail closed). The compile-time module catalog remains the contract for keys, labels, axes and levels; the database stores only mutable rollout state.
+
+Access is evaluated in this order:
+
+1. Authenticate the user.
+2. Resolve raw ACL entitlement through `canAccessEntitlement`; unauthorized users remain hidden or receive Forbidden.
+3. Resolve rollout availability. An entitled user opening a development module is redirected to `/dang-phat-trien`.
+4. For a ready module, continue with the existing resource-axis checks and business handler.
+
+`canAccess`, shared role guards, project visibility, bespoke APIs and server actions all enforce rollout state. Project pages repeat their project-scoped guard locally because App Router layouts and child pages may render in parallel. Project Server Actions independently enforce project scope and bind ID mutations to the record's owning project. Admins may bypass ACL entitlement according to the existing role policy, but they do not bypass a module's development status. The development page renders only an inert, synthetic blurred shell and never loads the destination component or business data.
+
+Release-status writes are allowlisted, require an active admin, reject protected core modules, and write the availability change plus its before/after `AuditLog` entry atomically in one serializable interactive transaction. Stale multi-admin baselines are rejected, serialization conflicts receive one bounded retry, and revalidation occurs only after commit. Integration fault injection verifies that an audit insert failure rolls back the availability update.
+
 ### Axis 1: Module Access (Trục 1 — Module Permissions)
 
 Gating mechanism for per-user visibility and route access at the module level.
@@ -17,7 +34,7 @@ Gating mechanism for per-user visibility and route access at the module level.
 - **Levels:** `"read"`, `"comment"`, `"edit"`, `"admin"` (per-module valid sets; some modules have fewer options)
 - **Semantics:** Determines whether a user can see a module on the sidebar and access routes within that module
 - **Fallback:** If no `ModulePermission` row exists, the system falls back to the user's role grants in the `RolePermission` table, resolved by `lib/acl/role-permissions.ts`
-- **Admin Short-Circuit (D1):** Users with `role = "admin"` bypass all module-level checks and can always access
+- **Admin ACL Short-Circuit (D1):** Users with `role = "admin"` bypass ACL entitlement checks, but remain subject to global module availability
 
 ### Axis 2: Resource Access (Trục 2 — Per-Module Axis Dispatch)
 
@@ -38,8 +55,8 @@ Once module-level gate passes, per-module dispatch rules apply:
 
 ```
 canAccess(userId, moduleKey, options) = 
-  (if user.role === "admin") return true;  // D1 short-circuit
-  
+  if moduleAvailability(moduleKey) !== "ready": return false;
+  // canAccessEntitlement handles the existing D1 ACL short-circuit.
   moduleLevel = modulePermission(userId, moduleKey) ?? appRole_default(user.role, moduleKey);
   if moduleLevel < "read": return false;
   

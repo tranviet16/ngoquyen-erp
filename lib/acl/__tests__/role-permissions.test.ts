@@ -16,11 +16,22 @@ vi.mock("react", () => ({
 
 // ─── Mock prisma ──────────────────────────────────────────────────────────────
 const mockFindMany = vi.fn();
+const moduleKeys = [
+  "dashboard", "master-data", "du-an", "vat-tu-ncc", "sl-dt", "cong-no-vt",
+  "cong-no-nc", "tai-chinh", "thanh-toan.ke-hoach", "thanh-toan.tong-hop",
+  "van-hanh.cong-viec", "van-hanh.phieu-phoi-hop", "van-hanh.hieu-suat",
+  "thong-bao", "admin.import", "admin.phong-ban", "admin.nguoi-dung",
+  "admin.permissions",
+] as const;
+let availabilityRows = moduleKeys.map((moduleKey) => ({ moduleKey, status: "ready" }));
 
 vi.mock("../../prisma", () => ({
   prisma: {
     rolePermission: {
       findMany: (...args: unknown[]) => mockFindMany(...args),
+    },
+    moduleAvailability: {
+      findMany: () => Promise.resolve(availabilityRows),
     },
   },
 }));
@@ -42,6 +53,7 @@ function setupRolePermissions(
 
 beforeEach(() => {
   mockFindMany.mockReset();
+  availabilityRows = moduleKeys.map((moduleKey) => ({ moduleKey, status: "ready" }));
 });
 
 // ─── getRolePermissionMap ─────────────────────────────────────────────────────
@@ -101,6 +113,15 @@ describe("hasRoleModuleAccess", () => {
   it("admin always passes, every module/level", async () => {
     expect(await hasRoleModuleAccess("admin", "tai-chinh", "admin")).toBe(true);
     expect(await hasRoleModuleAccess("admin", "du-an", "edit")).toBe(true);
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
+  it("development rollout blocks admin without reading role permissions", async () => {
+    availabilityRows = availabilityRows.map((row) =>
+      row.moduleKey === "du-an" ? { ...row, status: "development" } : row,
+    );
+
+    expect(await hasRoleModuleAccess("admin", "du-an", "admin")).toBe(false);
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 

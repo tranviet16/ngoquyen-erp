@@ -14,6 +14,7 @@ import {
   type ModuleKey,
   type AccessLevel,
 } from "./modules";
+import { isModuleReleased } from "./module-availability";
 
 function isAccessLevel(s: string): s is AccessLevel {
   return (ACCESS_LEVELS as readonly string[]).includes(s);
@@ -62,6 +63,7 @@ export async function hasRoleModuleAccess(
   minLevel: AccessLevel,
 ): Promise<boolean> {
   if (!role) return false;
+  if (!(await isModuleReleased(moduleKey))) return false;
   if (role === "admin") return true;
   const level = await getRoleModuleLevel(role, moduleKey);
   if (!level) return false;

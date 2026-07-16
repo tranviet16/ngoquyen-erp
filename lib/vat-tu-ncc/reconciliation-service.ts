@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { reconciliationSchema, type ReconciliationInput } from "./schemas";
@@ -19,6 +20,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listReconciliations(supplierId: number) {
+  await requireReleasedModuleRequest("vat-tu-ncc");
   return prisma.supplierReconciliation.findMany({
     where: { supplierId, deletedAt: null },
     orderBy: { periodFrom: "desc" },

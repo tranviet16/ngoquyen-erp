@@ -9,6 +9,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export interface SupplierDebtRow {
   id: number;
@@ -100,6 +101,10 @@ export async function listProjectSupplierDebts(
   projectId: number,
   suppliers?: string[],
 ): Promise<SupplierDebtRow[]> {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
   return aggregateFromTransactions(projectId, suppliers);
 }
 
@@ -107,6 +112,10 @@ export async function getProjectSupplierDebtSummary(
   projectId: number,
   suppliers?: string[],
 ): Promise<SupplierDebtSummary> {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
   const rows = await aggregateFromTransactions(projectId, suppliers);
   let totalTaken = 0;
   let totalPaid = 0;
@@ -135,6 +144,10 @@ export async function getProjectSupplierDebtSummary(
 }
 
 export async function listProjectSupplierNames(projectId: number): Promise<string[]> {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT DISTINCT COALESCE(NULLIF(TRIM("partyName"), ''), '(Không xác định)') AS name
        FROM project_transactions

@@ -3,6 +3,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import {
   bulkUpsertObligationTxns,
   softDeleteObligationTxns,
@@ -76,6 +77,7 @@ function count(v: bigint | number): number {
 }
 
 export async function getObligationMatrix(params: MatrixPeriod): Promise<ObligationMatrixRow[]> {
+  await requireReleasedModuleRequest("tai-chinh");
   const { start, end } = periodBounds(params);
   const rows = await prisma.$queryRaw<RawMatrixRow[]>`
     SELECT

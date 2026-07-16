@@ -10,6 +10,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import {
   getRole,
   revalidateObligation,
@@ -60,6 +61,7 @@ function normCategory(v: unknown): ObligationCategory {
 // ─── StateObligationType CRUD ─────────────────────────────────────────────────
 
 export async function listObligationTypes() {
+  await requireReleasedModuleRequest("tai-chinh");
   return prisma.stateObligationType.findMany({
     where: { deletedAt: null },
     orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
@@ -133,6 +135,7 @@ export async function softDeleteObligationTypes(ids: number[]) {
 // ─── StateObligationTxn CRUD ──────────────────────────────────────────────────
 
 export async function listObligationTxns() {
+  await requireReleasedModuleRequest("tai-chinh");
   return prisma.stateObligationTxn.findMany({
     where: { deletedAt: null },
     orderBy: [{ date: "desc" }, { id: "desc" }],

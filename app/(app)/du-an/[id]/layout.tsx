@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProjectById } from "@/lib/master-data/project-service";
+import { queryProjectById } from "@/lib/master-data/project-query";
 import { requireModuleAccess } from "@/lib/acl/guards";
 
 const TABS = [
@@ -29,13 +29,13 @@ export default async function ProjectLayout({ params, children }: Props) {
 
   if (isNaN(projectId)) notFound();
 
-  const project = await getProjectById(projectId);
-  if (!project) notFound();
-
   await requireModuleAccess("du-an", {
     minLevel: "read",
     scope: { kind: "project", projectId },
   });
+
+  const project = await queryProjectById(projectId);
+  if (!project) notFound();
 
   const basePath = `/du-an/${projectId}`;
 

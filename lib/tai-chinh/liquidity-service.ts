@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 
 export interface CashAccountBalance {
   id: number;
@@ -24,6 +25,7 @@ interface RawFlowRow {
  *           - Σ(chi where fromAccountId=ca.id) - Σ(chuyen_khoan where fromAccountId=ca.id)
  */
 export async function getCashAccountBalances(): Promise<CashAccountBalance[]> {
+  await requireReleasedModuleRequest("tai-chinh");
   const accounts = await prisma.cashAccount.findMany({
     where: { deletedAt: null },
     orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
@@ -72,6 +74,7 @@ export async function getCashAccountBalances(): Promise<CashAccountBalance[]> {
 }
 
 export async function getTotalCashPosition(): Promise<Prisma.Decimal> {
+  await requireReleasedModuleRequest("tai-chinh");
   const balances = await getCashAccountBalances();
   return balances.reduce((s, b) => s.add(b.closingVnd), new Prisma.Decimal(0));
 }

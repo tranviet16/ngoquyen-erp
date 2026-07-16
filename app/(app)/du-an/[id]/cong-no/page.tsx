@@ -6,6 +6,7 @@ import {
 } from "@/lib/du-an/supplier-debt-service";
 import { CongNoClient } from "./cong-no-client";
 import { serializeDecimals } from "@/lib/serialize";
+import { requireModuleAccess } from "@/lib/acl/guards";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -17,6 +18,10 @@ export default async function CongNoPage({ params, searchParams }: Props) {
   const sp = await searchParams;
   const projectId = Number(id);
   if (isNaN(projectId)) notFound();
+  await requireModuleAccess("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
 
   const suppliers = sp.suppliers
     ? sp.suppliers.split(",").map((s) => s.trim()).filter(Boolean)

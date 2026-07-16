@@ -14,6 +14,7 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
@@ -79,6 +80,7 @@ function permsToJson(
 }
 
 export async function createRole(input: RoleInput): Promise<void> {
+  await requireReleasedModuleRequest("admin.permissions");
   const adminId = await assertPermissionsAdmin();
   const id = input.id.trim().toLowerCase();
   const name = input.name.trim();
@@ -135,6 +137,7 @@ export async function updateRole(
     permissions: RolePermissionInput[];
   },
 ): Promise<void> {
+  await requireReleasedModuleRequest("admin.permissions");
   const adminId = await assertPermissionsAdmin();
   const name = input.name.trim();
   if (!name) throw new Error("Tên vai trò không được để trống");
@@ -187,6 +190,7 @@ export async function updateRole(
 }
 
 export async function deleteRole(id: string): Promise<void> {
+  await requireReleasedModuleRequest("admin.permissions");
   await assertPermissionsAdmin();
 
   const role = await prisma.role.findUnique({

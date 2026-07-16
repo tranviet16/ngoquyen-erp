@@ -10,19 +10,33 @@ export {
   LEVEL_RANK,
   MODULE_AXIS,
   MODULE_LEVELS,
-  getModuleAvailability,
-  isModuleEnabled,
-  isModuleInDevelopment,
   isValidLevelForModule,
-  shouldShowModuleInMenu,
 } from "./modules";
 export type {
   ModuleKey,
   AccessLevel,
   AxisType,
-  ModuleAvailabilityConfig,
-  ModuleAvailabilityStatus,
 } from "./modules";
+
+// Global module rollout status
+export {
+  MODULE_AVAILABILITY_STATUSES,
+  loadModuleAvailabilityMap,
+  getModuleAvailability,
+  isModuleReleased,
+  isModuleInDevelopment,
+  assertModuleReleased,
+} from "./module-availability";
+export type {
+  ModuleAvailabilityMap,
+  ModuleAvailabilityStatus,
+} from "./module-availability";
+export {
+  ModuleRequestError,
+  moduleRequestStatus,
+  requireReleasedModuleRequest,
+} from "./released-module-request";
+export type { ModuleRequestDenial } from "./released-module-request";
 
 // Role defaults (used by admin UI + seed scripts)
 export { getDefaultModuleLevel } from "./role-defaults";
@@ -43,6 +57,7 @@ export type { ProjectAccessMap } from "./project-access";
 // Effective resolver (primary entry point)
 export {
   canAccess,
+  canAccessEntitlement,
   assertAccess,
   checkRoleAxis,
   getViewableProjectIds,

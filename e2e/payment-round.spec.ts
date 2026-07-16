@@ -45,6 +45,7 @@ test.describe("payment round", () => {
     await expect(page.getByText("Đã thêm")).toBeVisible();
 
     await page.getByRole("button", { name: "Gửi duyệt" }).click();
+    await expect(page.getByText("Đã gửi", { exact: true })).toBeVisible();
     await asApprover.goto(page.url());
     asApprover.on("dialog", (dialog) => dialog.accept());
     await asApprover.getByRole("button", { name: "Duyệt tất cả = đề xuất" }).click();

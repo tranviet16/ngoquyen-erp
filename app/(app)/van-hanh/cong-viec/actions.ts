@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import {
   assignTask,
   createTaskManual,
@@ -51,6 +52,7 @@ function diffJson(
 }
 
 export async function createTaskAction(input: CreateTaskInput) {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   const t = await createTaskManual(input);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
@@ -58,34 +60,40 @@ export async function createTaskAction(input: CreateTaskInput) {
 }
 
 export async function listDeptMembersAction(deptId: number) {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   return listDeptMembers(deptId);
 }
 
 export async function updateTaskAction(id: number, input: UpdateTaskInput) {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   await updateTask(id, input);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function assignTaskAction(id: number, assigneeId: string | null) {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   await assignTask(id, assigneeId);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function moveTaskAction(id: number, toStatus: TaskStatus, toOrder?: number) {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   await moveTask(id, toStatus, toOrder);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function deleteTaskAction(id: number) {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   await deleteTask(id);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function getTaskActivity(taskId: number): Promise<TaskActivityEntry[]> {
+  await requireReleasedModuleRequest("van-hanh.cong-viec");
   const logs = await prisma.auditLog.findMany({
     where: { tableName: "Task", recordId: String(taskId) },
     orderBy: { createdAt: "desc" },

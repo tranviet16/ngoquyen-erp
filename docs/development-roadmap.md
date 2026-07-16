@@ -7,7 +7,34 @@ This document tracks the project's development phases, milestones, and progress 
 ## Current Status
 
 **Date:** 2026-07-16
-**Active Phases:** Product-wide iteration feedback loop ✅ Complete (2026-07-15); Plan A (ACL) ✅ Complete; Comprehensive Test Suite ✅ Complete; Công nợ Lũy Kế ✅ Complete; State Obligations ✅ Complete
+**Active Phases:** Module release status 🚧 Phase 3 in progress (implementation and local gates complete; PR/deployment pending); Product-wide iteration feedback loop ✅ Complete (2026-07-15); Plan A (ACL) ✅ Complete; Comprehensive Test Suite ✅ Complete; Công nợ Lũy Kế ✅ Complete; State Obligations ✅ Complete
+
+## Module Release Status (IN PROGRESS)
+
+**Status:** 🚧 Phase 1 and Phase 2 complete; Phase 3 in progress
+**Started:** 2026-07-16
+**Priority:** P1
+
+### Delivered
+
+- Added global `ModuleAvailability` persistence with a `ready|development` constraint and a migration that backfills all 18 registered modules to `ready`.
+- Protected `dashboard` and `admin.permissions` at both UI and server-action boundaries to prevent administrative self-lockout.
+- Split raw ACL entitlement from rollout availability. Page guards authenticate and evaluate entitlement first, then redirect entitled users of development modules to `/dang-phat-trien`; unauthorized users remain hidden or Forbidden.
+- Applied fail-closed rollout enforcement to shared ACL checks, project visibility, bespoke APIs and server actions. Missing, invalid or unreadable availability state resolves to development.
+- Enforced project scope locally on all 12 project pages and every project Server Action; record mutations verify and bind the owning project, and admin patches use runtime field allowlists.
+- Protected both core rows against UPDATE and DELETE at the database layer and verified audit rollback with real integration fault injection.
+- Added the release-status admin UI and an accessible synthetic blurred development shell that does not fetch, import or render destination business data.
+- Persisted each release-status update and its before/after audit row atomically in one transaction.
+
+### Verification and remaining work
+
+- ✅ Unit tests: `676/676`
+- ✅ Integration tests: `35/35`
+- ✅ E2E tests: `16/16`
+- ✅ TypeScript, lint, Prisma, risk-manifest verification, production build and independent security review (zero known findings)
+- ⏳ PR creation/required checks, merge, deployment and production smoke
+
+---
 
 ## Product-wide Quality Feedback Loop (COMPLETE)
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { transactionSchema, type TransactionInput } from "./schemas";
@@ -19,6 +20,7 @@ async function getSessionRole(): Promise<string | null> {
 }
 
 export async function listTransactions(projectId: number) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
   return prisma.projectTransaction.findMany({
     where: { projectId, deletedAt: null },
     orderBy: [{ date: "desc" }, { id: "desc" }],
@@ -26,6 +28,7 @@ export async function listTransactions(projectId: number) {
 }
 
 export async function createTransaction(input: TransactionInput) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "edit");
   const data = transactionSchema.parse(input);
@@ -58,14 +61,17 @@ export async function createTransaction(input: TransactionInput) {
 }
 
 export async function updateTransaction(id: number, input: TransactionInput) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "edit");
   const data = transactionSchema.parse(input);
+  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: { projectId: true } });
+  if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
   const qtyDecimal = new Prisma.Decimal(data.qty);
   const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
   const amountTt = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceTt));
   const record = await prisma.projectTransaction.update({
-    where: { id },
+    where: { id, projectId: data.projectId },
     data: {
       date: new Date(data.date),
       transactionType: data.transactionType,
@@ -97,22 +103,28 @@ export async function adminPatchTransaction(
   patch: Partial<{ amountHd: number; amountTt: number }>,
   projectId: number,
 ) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "admin");
+  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: { projectId: true } });
+  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
   const data: Record<string, unknown> = {};
   if (patch.amountHd !== undefined) data.amountHd = new Prisma.Decimal(patch.amountHd);
   if (patch.amountTt !== undefined) data.amountTt = new Prisma.Decimal(patch.amountTt);
-  const record = await prisma.projectTransaction.update({ where: { id }, data });
+  const record = await prisma.projectTransaction.update({ where: { id, projectId }, data });
   revalidatePath(`/du-an/${projectId}/giao-dich`);
   revalidatePath(`/du-an/${projectId}/dinh-muc`);
   return record;
 }
 
 export async function softDeleteTransaction(id: number, projectId: number) {
+  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
   const role = await getSessionRole();
   await requireRoleModuleAccess(role, "du-an", "admin");
+  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: { projectId: true } });
+  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
   const record = await prisma.projectTransaction.update({
-    where: { id },
+    where: { id, projectId },
     data: { deletedAt: new Date() },
   });
   revalidatePath(`/du-an/${projectId}/giao-dich`);
