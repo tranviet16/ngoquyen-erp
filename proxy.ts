@@ -12,7 +12,7 @@ const PUBLIC_PATHS = [
 // Must match the cookiePrefix set in lib/auth.ts advanced.cookiePrefix
 const COOKIE_PREFIX = "nqerp";
 
-function createContentSecurityPolicy(nonce: string): string {
+function createContentSecurityPolicy(nonce: string, isSecureRequest: boolean): string {
   const isDevelopment = process.env.NODE_ENV === "development";
   const scriptSource = isDevelopment
     ? `'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`
@@ -24,7 +24,7 @@ function createContentSecurityPolicy(nonce: string): string {
     ? "'self' http://127.0.0.1:8001 https://admin-pc.tail8998df.ts.net:8444 ws: wss:"
     : "'self' https://admin-pc.tail8998df.ts.net:8444";
 
-  return [
+  const directives = [
     "default-src 'self'",
     "base-uri 'self'",
     "font-src 'self' data:",
@@ -37,8 +37,26 @@ function createContentSecurityPolicy(nonce: string): string {
     "style-src-attr 'unsafe-inline'",
     `connect-src ${connectSource}`,
     "worker-src 'self' blob:",
-    "upgrade-insecure-requests",
-  ].join("; ");
+  ];
+  if (isSecureRequest) directives.push("upgrade-insecure-requests");
+  return directives.join("; ");
+}
+
+function requestUsesHttps(request: NextRequest): boolean {
+  const requestHost = (request.headers.get("host") ?? request.nextUrl.host).toLowerCase();
+  const configuredOrigins = [
+    process.env.BETTER_AUTH_URL,
+    ...(process.env.TRUSTED_ORIGINS?.split(",") ?? []),
+  ];
+
+  return configuredOrigins.some((origin) => {
+    try {
+      const url = new URL(origin?.trim() ?? "");
+      return url.protocol === "https:" && url.host.toLowerCase() === requestHost;
+    } catch {
+      return false;
+    }
+  });
 }
 
 function isPublicPath(pathname: string): boolean {
@@ -53,10 +71,13 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
   const isDocumentRequest = !pathname.startsWith("/api/");
+  const isSecureRequest = requestUsesHttps(request);
   const nonce = isDocumentRequest
     ? Buffer.from(crypto.randomUUID()).toString("base64")
     : null;
-  const contentSecurityPolicy = nonce ? createContentSecurityPolicy(nonce) : null;
+  const contentSecurityPolicy = nonce
+    ? createContentSecurityPolicy(nonce, isSecureRequest)
+    : null;
   if (contentSecurityPolicy) {
     requestHeaders.set("x-nonce", nonce!);
     requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
@@ -69,6 +90,12 @@ export async function proxy(request: NextRequest) {
     }
     if (contentSecurityPolicy) {
       response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+    }
+    if (isSecureRequest) {
+      response.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+      if (isDocumentRequest) {
+        response.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+      }
     }
     return response;
   };
