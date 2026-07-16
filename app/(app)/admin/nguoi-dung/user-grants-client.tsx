@@ -13,6 +13,7 @@ import {
   removeGrantAction,
   updateUserAttributesAction,
 } from "./actions";
+import { CreateUserAccountDialog } from "./create-user-account-dialog";
 
 interface DeptOpt {
   id: number;
@@ -49,27 +50,33 @@ export function UserGrantsClient({
     return users.filter(
       (u) =>
         u.email.toLowerCase().includes(q) ||
+        (u.username ?? "").toLowerCase().includes(q) ||
         (u.name ?? "").toLowerCase().includes(q),
     );
   }, [users, search]);
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 p-4 sm:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <h1 className="text-2xl font-semibold">Người dùng & Quyền xem phòng</h1>
-        <Input
-          placeholder="Tìm theo tên hoặc email"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-xs"
-        />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <CreateUserAccountDialog roles={roles} departments={departments} />
+          <Input
+            placeholder="Tìm theo tên, username hoặc email"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="text-base sm:w-80 md:text-sm"
+          />
+        </div>
       </div>
 
-      <div className="rounded border bg-card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-hidden rounded border bg-card">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[1100px] text-sm">
           <thead className="bg-muted/50">
             <tr>
               <th className="px-3 py-2 text-left">Tên</th>
+              <th className="px-3 py-2 text-left">Tên đăng nhập</th>
               <th className="px-3 py-2 text-left">Email</th>
               <th className="px-3 py-2 text-left">Trạng thái</th>
               <th className="px-3 py-2 text-left">Role</th>
@@ -94,13 +101,14 @@ export function UserGrantsClient({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                   Không có user
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -276,6 +284,7 @@ function UserRow({
         onClick={onToggle}
       >
         <td className="px-3 py-2 font-medium">{user.name ?? "-"}</td>
+        <td className="px-3 py-2 text-muted-foreground">{user.username ?? "-"}</td>
         <td className="px-3 py-2 text-muted-foreground">{user.email}</td>
         <td className="px-3 py-2">
           <span
@@ -389,7 +398,7 @@ function UserRow({
       </tr>
       {isOpen && (
         <tr className="border-t bg-muted/20">
-          <td colSpan={8} className="px-3 py-3">
+          <td colSpan={9} className="px-3 py-3">
             {isPrivileged ? (
               <p className="text-sm text-muted-foreground">
                 User này có quyền xem tất cả phòng (admin/director).

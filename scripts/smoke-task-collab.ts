@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prisma } from "../lib/prisma";
-import { auth } from "../lib/auth";
+import { userProvisioningAuth } from "../lib/auth";
 import { canDeleteComment, canEditComment, COMMENT_EDIT_WINDOW_MS } from "../lib/task/comment-rbac";
 import { canDeleteAttachment } from "../lib/task/attachment-rbac";
 import { ALLOWED_MIME, MAX_ATTACHMENT_BYTES } from "../lib/task/attachment-service";
@@ -39,7 +39,7 @@ function check(name: string, ok: boolean, detail?: string) {
 async function ensureUser(email: string, name: string, role: string): Promise<{ id: string }> {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) return { id: existing.id };
-  const r = await auth.api.signUpEmail({ body: { email, password: PASSWORD, name } });
+  const r = await userProvisioningAuth.api.signUpEmail({ body: { email, password: PASSWORD, name } });
   if (!r?.user) throw new Error(`signUp failed: ${email}`);
   await prisma.user.update({ where: { id: r.user.id }, data: { role } });
   return { id: r.user.id };

@@ -12,66 +12,88 @@ const useSecureCookies = env.BETTER_AUTH_URL.startsWith("https://");
 // auth endpoints and would trip the 429 limit. Disable it for automated test
 // runs — both CI and the local Playwright server (which sets E2E=true).
 const isTestRun = process.env.CI === "true" || process.env.E2E === "true";
+const isE2ERun = process.env.E2E === "true";
 
-export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
-    provider: "postgresql",
-  }),
-  secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [
-    env.BETTER_AUTH_URL,
-    ...(env.TRUSTED_ORIGINS?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
-  ],
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-  },
-  rateLimit: {
-    enabled: !isTestRun,
-  },
-  session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
-    cookieCache: {
+function createAuthInstance({
+  signUpEnabled,
+  autoSignIn = true,
+}: {
+  signUpEnabled: boolean;
+  autoSignIn?: boolean;
+}) {
+  return betterAuth({
+    database: prismaAdapter(prisma, {
+      provider: "postgresql",
+    }),
+    secret: env.BETTER_AUTH_SECRET,
+    baseURL: env.BETTER_AUTH_URL,
+    trustedOrigins: [
+      env.BETTER_AUTH_URL,
+      ...(env.TRUSTED_ORIGINS?.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean) ?? []),
+    ],
+    emailAndPassword: {
       enabled: true,
-      maxAge: 60 * 5,
+      requireEmailVerification: false,
+      disableSignUp: !signUpEnabled,
+      autoSignIn,
     },
-  },
-  advanced: {
-    cookiePrefix: "nqerp",
-    useSecureCookies,
-    defaultCookieAttributes: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: useSecureCookies,
-      path: "/",
+    rateLimit: {
+      enabled: !isTestRun,
     },
-  },
-  user: {
-    additionalFields: {
-      role: {
-        type: "string",
-        required: false,
-        defaultValue: "viewer",
-        // role is NOT settable by users on signup — only admin can change it
-        input: false,
-      },
-      title: {
-        // Org-position label (chức danh) — display only, set by admin.
-        type: "string",
-        required: false,
-        input: false,
-      },
-      isActive: {
-        type: "boolean",
-        required: false,
-        defaultValue: true,
-        input: false,
+    session: {
+      expiresIn: 60 * 60 * 24 * 7,
+      updateAge: 60 * 60 * 24,
+      cookieCache: {
+        enabled: true,
+        maxAge: 60 * 5,
       },
     },
-  },
-  plugins: [username()],
+    advanced: {
+      cookiePrefix: "nqerp",
+      useSecureCookies,
+      defaultCookieAttributes: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: useSecureCookies,
+        path: "/",
+      },
+    },
+    user: {
+      additionalFields: {
+        role: {
+          type: "string",
+          required: false,
+          defaultValue: "viewer",
+          // role is NOT settable by users on signup — only admin can change it
+          input: false,
+        },
+        title: {
+          // Org-position label (chức danh) — display only, set by admin.
+          type: "string",
+          required: false,
+          input: false,
+        },
+        isActive: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+        },
+      },
+    },
+    plugins: [username()],
+  });
+}
+
+export const auth = createAuthInstance({ signUpEnabled: isE2ERun });
+
+// Server-only account provisioning. This instance is never mounted as an HTTP
+// handler and deliberately skips auto sign-in so an admin keeps their session.
+export const userProvisioningAuth = createAuthInstance({
+  signUpEnabled: true,
+  autoSignIn: false,
 });
 
 export type Session = typeof auth.$Infer.Session;

@@ -8,6 +8,16 @@ import {
   type UpdateUserAttributesInput,
 } from "@/lib/admin/user-grants-service";
 import type { AccessLevel } from "@/lib/dept-access";
+import {
+  createUserAccount,
+  type CreateUserAccountInput,
+} from "@/lib/admin/user-account-service";
+
+export async function createUserAccountAction(input: CreateUserAccountInput) {
+  const result = await createUserAccount(input);
+  revalidatePath("/admin/nguoi-dung");
+  return result;
+}
 
 export async function setGrantAction(
   userId: string,

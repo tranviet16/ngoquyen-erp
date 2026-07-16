@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { auth } from "../lib/auth";
+import { userProvisioningAuth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 // Seed runs as a system process with no authenticated user.
@@ -27,7 +27,7 @@ async function main() {
     return;
   }
 
-  const result = await auth.api.signUpEmail({
+  const result = await userProvisioningAuth.api.signUpEmail({
     body: {
       email,
       password,

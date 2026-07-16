@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { auth } from "../lib/auth";
+import { userProvisioningAuth } from "../lib/auth";
 import { prisma } from "../lib/prisma";
 
 const DIRECTOR = {
@@ -14,7 +14,7 @@ async function main() {
   }
   let user = await prisma.user.findUnique({ where: { email: DIRECTOR.email } });
   if (!user) {
-    const result = await auth.api.signUpEmail({
+    const result = await userProvisioningAuth.api.signUpEmail({
       body: { email: DIRECTOR.email, password, name: DIRECTOR.name },
     });
     if (!result?.user) throw new Error(`Failed to create ${DIRECTOR.email}`);
