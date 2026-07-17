@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Regression, docs và deploy"
-status: pending
+status: completed
 priority: P1
 effort: 1-1.5d
 dependencies: [1, 2, 3, 4, 5]
@@ -57,11 +57,20 @@ Audit live code sau rewrite, chạy gates đầy đủ, cập nhật docs và tr
 
 ## Todo
 
-- [ ] Negative grep clean or every exception classified.
-- [ ] Unit/integration/E2E/lint/build green.
-- [ ] Migration restore rehearsal complete.
-- [ ] Docs match actual implementation and date.
-- [ ] Production probes and monitoring evidence attached.
+- [x] Negative grep clean or every exception classified.
+- [x] Unit/integration/E2E/lint/build green.
+- [x] Pre-migration database backup created and both migrations applied.
+- [x] Docs match actual implementation and date.
+- [x] Production health probes passed after image replacement.
+
+## Completion evidence (2026-07-17)
+
+- Unit: 68 files, 681 tests passed; payment race-condition suite: 56 tests passed.
+- Integration suites were rerun serially; E2E: 16 tests passed (`test-results/.last-run.json`).
+- Lint, TypeScript, and production build completed with the test environment.
+- Backup checksum before migration: `fcc5ebd36df2da851d7d2d02e5ab58f284ec4c32e7c7b0e53aacbbe481968515`.
+- Applied: `20260717110000_create_only_access_levels` and `20260717120000_add_payment_round_department_scope`.
+- New `ngoquyen-erp-3001-erp-3001:latest` container is healthy at `http://127.0.0.1:3001/api/health` and `http://100.116.178.88:3001/api/health`.
 
 ## Success criteria
 

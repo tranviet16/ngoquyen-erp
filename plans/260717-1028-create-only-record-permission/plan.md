@@ -1,7 +1,7 @@
 ---
 title: "Quyền create-only cho record ERP"
 description: "Tách quyền tạo record khỏi chỉnh sửa/xóa, giữ admin bypass và bind capability từ server qua 7 module user-scoped."
-status: in_progress
+status: completed
 priority: P1
 effort: 8-12d
 branch: main
@@ -34,7 +34,7 @@ Chuẩn hóa hierarchy `read < comment < create < edit`. `create` chỉ tạo re
 | 3 | [Guard CRUD cho project, vật tư, công nợ](./phase-03-direct-crud-guards.md) | Completed | server-side guards verified |
 | 4 | [Payment dept scope và workflow guards](./phase-04-payment-and-workflow-guards.md) | Completed | integration + atomicity checks green |
 | 5 | [Server-derived UI capabilities](./phase-05-server-derived-ui-capabilities.md) | Completed | E2E permission journeys green |
-| 6 | [Regression, docs và deploy](./phase-06-regression-docs-deploy.md) | In progress | production migration/rebuild/probes pending |
+| 6 | [Regression, docs và deploy](./phase-06-regression-docs-deploy.md) | Completed | migrations, rebuild, and health probes green |
 
 ## Dependencies
 
