@@ -125,7 +125,7 @@ describe("canAccess — admin short-circuit (D1)", () => {
 
   it("admin can access any module at any level — module scope", async () => {
     const result = await canAccess("admin1", "admin.permissions", {
-      minLevel: "admin",
+      minLevel: "read",
       scope: "module",
     });
     expect(result).toBe(true);
@@ -145,6 +145,26 @@ describe("canAccess — admin short-circuit (D1)", () => {
       scope: "module",
     });
     expect(result).toBe(true);
+  });
+
+  it("inactive admin is denied before the role bypass", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "admin1", role: "admin", isActive: false, isLeader: false, isDirector: false,
+    });
+
+    await expect(canAccess("admin1", "admin.permissions", {
+      minLevel: "read", scope: "module",
+    })).resolves.toBe(false);
+  });
+
+  it("admin entitlement bypasses explicit grants and resource-axis loaders", async () => {
+    const result = await canAccessEntitlement("admin1", "du-an", {
+      minLevel: "edit",
+      scope: { kind: "project", projectId: 99 },
+    });
+
+    expect(result).toBe(true);
+    expect(mockFindMany).not.toHaveBeenCalled();
   });
 
   it("disabled module blocks admin too because availability is a rollout switch", async () => {
@@ -672,7 +692,7 @@ describe("assertAccess", () => {
 
   it("throws when access is denied", async () => {
     await expect(
-      assertAccess("v1", "admin.permissions", { minLevel: "admin", scope: "module" }),
+      assertAccess("v1", "admin.permissions", { minLevel: "read", scope: "module" }),
     ).rejects.toThrow("Forbidden");
   });
 
@@ -681,7 +701,7 @@ describe("assertAccess", () => {
       assertAccess(
         "v1",
         "admin.permissions",
-        { minLevel: "admin", scope: "module" },
+        { minLevel: "read", scope: "module" },
         "Custom error",
       ),
     ).rejects.toThrow("Custom error");
@@ -788,8 +808,8 @@ describe("canAccess — D3 concurrency", () => {
     mockFindMany.mockResolvedValue([]);
 
     const [adminResult, viewerResult] = await Promise.all([
-      canAccess("concurrent-admin", "admin.permissions", { minLevel: "admin", scope: "module" }),
-      canAccess("concurrent-viewer", "admin.permissions", { minLevel: "admin", scope: "module" }),
+      canAccess("concurrent-admin", "admin.permissions", { minLevel: "read", scope: "module" }),
+      canAccess("concurrent-viewer", "admin.permissions", { minLevel: "read", scope: "module" }),
     ]);
 
     expect(adminResult).toBe(true);
@@ -812,7 +832,7 @@ describe("canAccess — D3 concurrency", () => {
 
     const calls = Array.from({ length: 100 }, (_, i) =>
       canAccess(i % 2 === 0 ? "ca" : "cv", "admin.permissions", {
-        minLevel: "admin",
+        minLevel: "read",
         scope: "module",
       }),
     );

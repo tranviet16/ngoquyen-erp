@@ -16,6 +16,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Prisma } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { authMock, mockSession, clearSession } from "@/test/helpers/session-mock";
 
 // Built inside vi.hoisted so the reference exists when the (hoisted) vi.mock
@@ -57,6 +59,13 @@ vi.mock("@/lib/ledger/balance-service", () => ({
   getOutstandingDebt: vi.fn(),
   getCumulativePaid: vi.fn(),
 }));
+const aclMock = vi.hoisted(() => ({ canAccessEntitlement: vi.fn() }));
+const deptMock = vi.hoisted(() => ({ getDeptAccessMap: vi.fn() }));
+vi.mock("@/lib/acl/effective", () => aclMock);
+vi.mock("@/lib/dept-access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/dept-access")>();
+  return { ...actual, getDeptAccessMap: deptMock.getDeptAccessMap };
+});
 
 import * as svc from "../payment-service";
 import { getOutstandingDebt, getCumulativePaid } from "@/lib/ledger/balance-service";
@@ -73,11 +82,18 @@ function actAs(user: { id: string; role: string; isDirector: boolean; isLeader: 
     isDirector: user.isDirector,
     isLeader: user.isLeader,
     role: user.role,
+    departmentId: 1,
+    isActive: true,
   });
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
+  aclMock.canAccessEntitlement.mockResolvedValue(true);
+  deptMock.getDeptAccessMap.mockResolvedValue({
+    scope: "scoped",
+    grants: new Map([[1, "edit"]]),
+  });
   actAs(ADMIN);
 });
 
@@ -93,9 +109,24 @@ describe("getActor guards", () => {
     await expect(svc.listRounds({})).rejects.toThrow("User không tồn tại");
   });
 
-  it("fails closed for a non-admin until payment records have a department scope", async () => {
-    actAs(KETOAN);
+  it("rejects an inactive admin before every payment access path", async () => {
+    mockSession({ id: "admin1", role: "admin" });
+    mockDb.user.findUnique.mockResolvedValue({
+      isDirector: false, isLeader: false, role: "admin", departmentId: null, isActive: false,
+    });
     await expect(svc.listRounds({})).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+  });
+
+  it("allows a non-admin list when module and department read grants exist", async () => {
+    actAs(KETOAN);
+    await expect(svc.listRounds({})).resolves.toBeUndefined();
+  });
+
+  it("stores immutable department scope on PaymentRound", () => {
+    const schema = readFileSync(join(process.cwd(), "prisma/schema.prisma"), "utf8");
+    const paymentRound = schema.match(/model PaymentRound \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(paymentRound).toMatch(/departmentId\s+Int\?/);
+    expect(paymentRound).toMatch(/@@index\(\[departmentId, month, status\]\)/);
   });
 });
 
@@ -122,9 +153,35 @@ describe("createRound", () => {
 
   it("fails closed for a non-admin role", async () => {
     actAs(VIEWER);
+    deptMock.getDeptAccessMap.mockResolvedValue({
+      scope: "scoped", grants: new Map([[1, "read"]]),
+    });
     await expect(svc.createRound({ month: "2026-05" })).rejects.toThrow(
-      "Dữ liệu thanh toán hiện chỉ dành cho admin",
+      "Forbidden payment department",
     );
+  });
+});
+
+describe("department-scoped payment grants", () => {
+  it("allows a custom create grant to create a round in its department", async () => {
+    actAs(KETOAN);
+    deptMock.getDeptAccessMap.mockResolvedValue({
+      scope: "scoped", grants: new Map([[1, "create"]]),
+    });
+    mockDb.paymentRound.findFirst.mockResolvedValue(null);
+    mockDb.paymentRound.create.mockResolvedValue({ id: 7, departmentId: 1 });
+    await svc.createRound({ month: "2026-07" });
+    expect(mockDb.paymentRound.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ departmentId: 1, createdById: "kt1" }),
+    }));
+  });
+
+  it("does not disclose a legacy null-department round to a non-admin", async () => {
+    actAs(KETOAN);
+    mockDb.paymentRound.findFirst.mockResolvedValue({
+      id: 8, status: "draft", createdById: "admin1", departmentId: null,
+    });
+    await expect(svc.getRound(8)).rejects.toThrow("Legacy payment rounds are admin-only");
   });
 });
 
@@ -148,7 +205,7 @@ describe("upsertItem — guards", () => {
     mockDb.paymentRound.findUnique.mockResolvedValue({ status: "draft", createdById: "someone-else" });
     await expect(
       svc.upsertItem({ roundId: 1, supplierId: 1, entityId: 1, projectId: null, category: "vat_tu", soDeNghi: 100 }),
-    ).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    ).rejects.toThrow("Forbidden payment department");
   });
 
   it("throws on an invalid category (create path)", async () => {
@@ -169,7 +226,7 @@ describe("upsertItem — guards", () => {
         roundId: 1, supplierId: 1, entityId: 1, projectId: null,
         category: "vat_tu", soDeNghi: 100, override: true,
       }),
-    ).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    ).rejects.toThrow("Forbidden payment department");
   });
 });
 
@@ -241,7 +298,7 @@ describe("refreshItemBalances", () => {
       round: { status: "draft", createdById: "someone-else" },
     });
     await expect(svc.refreshItemBalances(1)).rejects.toThrow(
-      "Dữ liệu thanh toán hiện chỉ dành cho admin",
+      "Forbidden payment department",
     );
   });
 
@@ -259,6 +316,23 @@ describe("refreshItemBalances", () => {
         data: expect.objectContaining({ congNo: 777, luyKe: 333, balancesRefreshedAt: expect.any(Date) }),
       }),
     );
+  });
+});
+
+describe("refreshAllItemBalances", () => {
+  it("rolls back before item writes when the draft round changed state", async () => {
+    mockDb.paymentRound.findFirst.mockResolvedValue({
+      id: 1, status: "draft", createdById: "admin1", departmentId: 1,
+    });
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([
+      { id: 1, category: "khac", entityId: 1, supplierId: 1, projectId: null },
+    ]);
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(svc.refreshAllItemBalances(1)).rejects.toThrow(
+      "Chỉ có thể làm mới số dư khi đợt ở trạng thái nháp",
+    );
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
   });
 });
 
@@ -280,7 +354,7 @@ describe("deleteItem", () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
       round: { status: "draft", createdById: "someone-else" },
     });
-    await expect(svc.deleteItem(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    await expect(svc.deleteItem(1)).rejects.toThrow("Forbidden payment department");
   });
 
   it("deletes when the creator removes a draft item", async () => {
@@ -307,7 +381,7 @@ describe("submitRound", () => {
   it("throws for a non-creator non-admin", async () => {
     actAs(KETOAN);
     mockDb.paymentRound.findUnique.mockResolvedValue({ status: "draft", createdById: "someone-else" });
-    await expect(svc.submitRound(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    await expect(svc.submitRound(1)).rejects.toThrow("Forbidden payment department");
   });
 
   it("throws when the round has no items", async () => {
@@ -340,7 +414,7 @@ describe("approveItem", () => {
   it("throws when the actor cannot approve", async () => {
     actAs(KETOAN);
     await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow(
-      "Dữ liệu thanh toán hiện chỉ dành cho admin",
+      "Chỉ Giám đốc/admin được duyệt",
     );
   });
 
@@ -363,7 +437,7 @@ describe("approveItem", () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
       soDeNghi: 250, round: { id: 1, status: "submitted" },
     });
-    await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow("Forbidden payment department");
   });
 
   it("auto-approves the round once every item is resolved", async () => {
@@ -390,7 +464,7 @@ describe("rejectItem", () => {
 
   it("throws when the actor cannot approve", async () => {
     actAs(VIEWER);
-    await expect(svc.rejectItem(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    await expect(svc.rejectItem(1)).rejects.toThrow("Chỉ Giám đốc/admin được từ chối");
   });
 
   it("throws when the item does not exist", async () => {
@@ -423,7 +497,7 @@ describe("bulkApproveAsRequested", () => {
   it("throws when the actor cannot approve", async () => {
     actAs(KETOAN);
     await expect(svc.bulkApproveAsRequested(1)).rejects.toThrow(
-      "Dữ liệu thanh toán hiện chỉ dành cho admin",
+      "Chỉ Giám đốc/admin được duyệt",
     );
   });
 
@@ -440,12 +514,24 @@ describe("bulkApproveAsRequested", () => {
     ]);
     mockDb.paymentRoundItem.update.mockResolvedValue({ id: 1 });
     mockDb.paymentRoundItem.count.mockResolvedValue(2);
-    mockDb.paymentRound.update.mockResolvedValue({ id: 1 });
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
     await svc.bulkApproveAsRequested(1);
     expect(mockDb.paymentRoundItem.update).toHaveBeenCalledTimes(2);
-    expect(mockDb.paymentRound.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "approved" }) }),
+    expect(mockDb.paymentRound.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 1, status: "submitted" },
+        data: expect.objectContaining({ status: "approved" }),
+      }),
     );
+  });
+
+  it("rolls back before approving items when the round status changes concurrently", async () => {
+    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "submitted", createdById: "other" });
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(svc.bulkApproveAsRequested(1)).rejects.toThrow("Đợt phải ở trạng thái đã gửi");
+    expect(mockDb.paymentRoundItem.findMany).not.toHaveBeenCalled();
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
   });
 });
 
@@ -458,7 +544,7 @@ describe("rejectRound", () => {
   it("throws when the actor cannot approve", async () => {
     actAs(KETOAN);
     await expect(svc.rejectRound(1, "no")).rejects.toThrow(
-      "Dữ liệu thanh toán hiện chỉ dành cho admin",
+      "Chỉ Giám đốc/admin được từ chối",
     );
   });
 
@@ -482,7 +568,7 @@ describe("rejectRound", () => {
 describe("closeRound", () => {
   it("throws when the actor is not an admin", async () => {
     actAs(DIRECTOR);
-    await expect(svc.closeRound(1)).rejects.toThrow("Dữ liệu thanh toán hiện chỉ dành cho admin");
+    await expect(svc.closeRound(1)).rejects.toThrow("Chỉ admin được đóng đợt");
   });
 
   it("throws when the round is not approved", async () => {

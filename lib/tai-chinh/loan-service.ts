@@ -7,22 +7,10 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
-
-async function getRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export interface LoanContractInput {
   lenderName: string;
@@ -128,8 +116,8 @@ export async function getLoanContract(id: number) {
 }
 
 export async function createLoanContract(input: LoanContractInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const principal = new Prisma.Decimal(input.principalVnd);
   const annualRate = new Prisma.Decimal(input.interestRatePct);
@@ -161,8 +149,8 @@ export async function createLoanContract(input: LoanContractInput) {
 }
 
 export async function updateLoanContract(id: number, input: Partial<LoanContractInput>) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const contract = await prisma.loanContract.update({
     where: { id },
@@ -180,8 +168,8 @@ export async function updateLoanContract(id: number, input: Partial<LoanContract
 }
 
 export async function softDeleteLoanContract(id: number) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   await prisma.loanContract.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/tai-chinh/vay");
   revalidatePath("/tai-chinh");
@@ -202,8 +190,8 @@ const patchLoanSchema = z.object({
 });
 
 export async function patchLoan(id: number, patch: Record<string, unknown>) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   for (const k of Object.keys(patch)) {
     if (!(LOAN_PATCH_WHITELIST as readonly string[]).includes(k)) {
@@ -224,8 +212,8 @@ export async function recordLoanPayment(
   principalPaid: string,
   interestPaid: string
 ) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const payment = await prisma.loanPayment.update({
     where: { id: paymentId },

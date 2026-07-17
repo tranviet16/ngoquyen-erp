@@ -41,7 +41,7 @@ export { loadUser };
  * - all: directors only (admin already short-circuited)
  */
 export function checkRoleAxis(
-  user: UserRecord,
+  user: Pick<UserRecord, "isLeader" | "isDirector">,
   scope: "self" | "dept" | "all",
 ): boolean {
   if (scope === "self") return true;
@@ -67,9 +67,10 @@ export async function canAccessEntitlement(
 ): Promise<boolean> {
   const user = await loadUser(userId);
 
-  // D1: admin short-circuit — must be before null check to avoid false negatives
-  if (user?.role === "admin") return true;
+  // Inactive users fail closed before the active-admin bypass.
   if (!user) return false;
+  if (user.isActive === false) return false;
+  if (user.role === "admin") return true;
 
   // Trục 1: module-level gate
   const moduleLevel = await getEffectiveModuleLevel(userId, moduleKey);
@@ -100,7 +101,7 @@ export async function canAccessEntitlement(
     case "dept": {
       if (typeof scope !== "object" || scope.kind !== "dept") return false;
       const deptMap = await getDeptAccessMap(userId);
-      return hasDeptAccess(deptMap, scope.deptId, opts.minLevel as "read" | "comment" | "edit");
+      return hasDeptAccess(deptMap, scope.deptId, opts.minLevel);
     }
 
     case "project": {
@@ -167,7 +168,7 @@ export async function getViewableProjectIds(
   if (!(await isModuleReleased("du-an"))) return { kind: "none" };
 
   const user = await loadUser(userId);
-  if (!user) return { kind: "none" };
+  if (!user || user.isActive === false) return { kind: "none" };
 
   // D1: admin sees all projects
   if (user.role === "admin") return { kind: "all" };

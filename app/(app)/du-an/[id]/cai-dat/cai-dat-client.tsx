@@ -23,9 +23,10 @@ type SettingsRow = {
 interface Props {
   projectId: number;
   initialSettings: SettingsRow | null;
+  canEdit: boolean;
 }
 
-export function CaiDatClient({ projectId, initialSettings }: Props) {
+export function CaiDatClient({ projectId, initialSettings, canEdit }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -43,6 +44,7 @@ export function CaiDatClient({ projectId, initialSettings }: Props) {
   });
 
   async function onSubmit(data: SettingsInput) {
+    if (!canEdit) return;
     await upsertSettings(data);
     startTransition(() => router.refresh());
   }
@@ -52,6 +54,7 @@ export function CaiDatClient({ projectId, initialSettings }: Props) {
       <h2 className="text-lg font-semibold">Cài Đặt Dự Án</h2>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <fieldset disabled={!canEdit || isPending} className="space-y-4">
           <FormField control={form.control} name="vatPct" render={({ field }) => (
             <FormItem>
               <FormLabel>Thuế VAT (%)</FormLabel>
@@ -122,10 +125,11 @@ export function CaiDatClient({ projectId, initialSettings }: Props) {
           )} />
 
           <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={isPending}>
+            {canEdit && <Button type="submit" disabled={isPending}>
               {isPending ? "Đang lưu..." : "Lưu cài đặt"}
-            </Button>
+            </Button>}
           </div>
+          </fieldset>
         </form>
       </Form>
     </div>

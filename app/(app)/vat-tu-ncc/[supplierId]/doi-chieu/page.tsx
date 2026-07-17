@@ -4,6 +4,8 @@ import { listReconciliations } from "@/lib/vat-tu-ncc/reconciliation-service";
 import { serializeDecimals } from "@/lib/serialize";
 import { DoiChieuClient } from "./doi-chieu-client";
 import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
+import { requireModuleAccess } from "@/lib/acl/guards";
+import { canAccessEntitlement } from "@/lib/acl/effective";
 
 interface Props {
   params: Promise<{ supplierId: string }>;
@@ -15,8 +17,13 @@ export default async function DoiChieuPage({ params }: Props) {
   const { supplierId } = await params;
   const id = Number(supplierId);
   if (isNaN(id)) notFound();
+  const { userId } = await requireModuleAccess("vat-tu-ncc", { minLevel: "read", scope: "module" });
 
-  const reconciliations = await listReconciliations(id);
+  const [reconciliations, canCreate, canEdit] = await Promise.all([
+    listReconciliations(id),
+    canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "create", scope: "module" }),
+    canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "edit", scope: "module" }),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -33,7 +40,7 @@ export default async function DoiChieuPage({ params }: Props) {
         </div>
       </div>
       <Suspense>
-        <DoiChieuClient supplierId={id} initialData={serializeDecimals(reconciliations)} />
+        <DoiChieuClient supplierId={id} initialData={serializeDecimals(reconciliations)} canCreate={canCreate} canEdit={canEdit} canDelete={canEdit} />
       </Suspense>
       {/* Signature section for print */}
       <div className="print-signatures hidden">

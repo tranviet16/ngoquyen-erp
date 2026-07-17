@@ -52,7 +52,7 @@ function diffJson(
 }
 
 export async function createTaskAction(input: CreateTaskInput) {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "create", scope: "module" });
   const t = await createTaskManual(input);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
@@ -60,40 +60,40 @@ export async function createTaskAction(input: CreateTaskInput) {
 }
 
 export async function listDeptMembersAction(deptId: number) {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "read", scope: "module" });
   return listDeptMembers(deptId);
 }
 
 export async function updateTaskAction(id: number, input: UpdateTaskInput) {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "edit", scope: "module" });
   await updateTask(id, input);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function assignTaskAction(id: number, assigneeId: string | null) {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "edit", scope: "module" });
   await assignTask(id, assigneeId);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function moveTaskAction(id: number, toStatus: TaskStatus, toOrder?: number) {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "edit", scope: "module" });
   await moveTask(id, toStatus, toOrder);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function deleteTaskAction(id: number) {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "edit", scope: "module" });
   await deleteTask(id);
   revalidatePath("/van-hanh/cong-viec");
   revalidatePath("/van-hanh/hieu-suat");
 }
 
 export async function getTaskActivity(taskId: number): Promise<TaskActivityEntry[]> {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "read", scope: "module" });
   const logs = await prisma.auditLog.findMany({
     where: { tableName: "Task", recordId: String(taskId) },
     orderBy: { createdAt: "desc" },

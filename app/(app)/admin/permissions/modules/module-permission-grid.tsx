@@ -2,14 +2,6 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { MODULE_KEYS, MODULE_LEVELS } from "@/lib/acl/modules";
 import type { ModuleKey, AccessLevel } from "@/lib/acl/modules";
 import {
@@ -36,6 +28,10 @@ type Props = {
   moduleLabels: Record<ModuleKey, string>;
 };
 
+const GRANTABLE_MODULE_KEYS = MODULE_KEYS.filter(
+  (moduleKey) => MODULE_LEVELS[moduleKey].length > 0,
+);
+
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function cellKey(userId: string, moduleKey: ModuleKey): CellKey {
@@ -50,8 +46,8 @@ function levelLabel(level: AccessLevel | "default"): string {
   if (level === "default") return "Mặc định";
   if (level === "read") return "Xem";
   if (level === "comment") return "Bình luận";
+  if (level === "create") return "Tạo mới";
   if (level === "edit") return "Chỉnh sửa";
-  if (level === "admin") return "Admin";
   return level;
 }
 
@@ -66,7 +62,6 @@ export function ModulePermissionGrid({
     new Map(),
   );
   const [isPending, startTransition] = useTransition();
-  const [showConfirm, setShowConfirm] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -120,17 +115,10 @@ export function ModulePermissionGrid({
   }
 
   function handleSaveClick() {
-    // Check if any pending change grants admin level
-    const hasAdminGrant = Array.from(pending.values()).some((v) => v === "admin");
-    if (hasAdminGrant) {
-      setShowConfirm(true);
-    } else {
-      commitChanges();
-    }
+    commitChanges();
   }
 
   function commitChanges() {
-    setShowConfirm(false);
     const changes: ModulePermissionChange[] = [];
     for (const [key, level] of pending.entries()) {
       const [userId, ...rest] = key.split(":");
@@ -196,6 +184,9 @@ export function ModulePermissionGrid({
       )}
 
       {/* Matrix table */}
+      <p className="text-sm text-muted-foreground">
+        Các module quản trị chỉ dành cho tài khoản admin đang hoạt động nên không xuất hiện trong ma trận phân quyền này.
+      </p>
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -203,7 +194,7 @@ export function ModulePermissionGrid({
               <th className="sticky left-0 z-10 min-w-[160px] bg-muted/50 px-3 py-2 text-left font-medium">
                 Người dùng
               </th>
-              {MODULE_KEYS.map((mk) => (
+              {GRANTABLE_MODULE_KEYS.map((mk) => (
                 <th
                   key={mk}
                   className="min-w-[120px] px-2 py-2 text-center text-xs font-medium"
@@ -234,7 +225,7 @@ export function ModulePermissionGrid({
                 </td>
 
                 {/* Module cells */}
-                {MODULE_KEYS.map((mk) => {
+                {GRANTABLE_MODULE_KEYS.map((mk) => {
                   const dirty = isDirty(user.id, mk);
                   const value = getValue(user.id, mk);
                   const options = getLevelOptions(mk);
@@ -269,31 +260,6 @@ export function ModulePermissionGrid({
           </tbody>
         </table>
       </div>
-
-      {/* Admin grant confirm dialog */}
-      <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Xác nhận cấp quyền Admin</DialogTitle>
-            <DialogDescription>
-              Một hoặc nhiều thay đổi đang cấp quyền mức <strong>Admin</strong>.
-              Quyền Admin cho phép truy cập toàn bộ chức năng của module. Bạn có
-              chắc muốn tiếp tục?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowConfirm(false)}
-            >
-              Hủy
-            </Button>
-            <Button onClick={commitChanges} disabled={isPending}>
-              Xác nhận lưu
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -1,22 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
-
-async function getRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export interface CashAccountInput {
   name: string;
@@ -33,8 +21,8 @@ export async function listCashAccounts() {
 }
 
 export async function createCashAccount(input: CashAccountInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const name = input.name.trim();
   if (!name) throw new Error("Tên nguồn tiền là bắt buộc");
@@ -54,8 +42,8 @@ export async function createCashAccount(input: CashAccountInput) {
 }
 
 export async function updateCashAccount(id: number, input: CashAccountInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const name = input.name.trim();
   if (!name) throw new Error("Tên nguồn tiền là bắt buộc");
@@ -76,8 +64,8 @@ export async function updateCashAccount(id: number, input: CashAccountInput) {
 }
 
 export async function softDeleteCashAccount(id: number) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const refCount = await prisma.journalEntry.count({
     where: {

@@ -1,11 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { cleanHierarchyLabel } from "@/lib/sl-dt/hierarchy";
 import { lotCatalogSchema } from "@/lib/sl-dt/schemas";
@@ -30,11 +28,7 @@ export interface LotCatalogRow {
   contractValue: number | null;
 }
 
-async function assertAdmin() {
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  await requireRoleModuleAccess(session?.user?.role ?? null, "sl-dt", "admin");
-}
+const assertAdmin = requireActiveAdmin;
 
 function num(v: unknown) {
   return v == null || v === "" ? 0 : Number(v);

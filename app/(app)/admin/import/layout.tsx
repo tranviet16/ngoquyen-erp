@@ -1,6 +1,6 @@
-import { requireModuleAccess } from "@/lib/acl/guards";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 
 export default async function AdminImportLayout({ children }: { children: React.ReactNode }) {
-  await requireModuleAccess("admin.import", { minLevel: "admin", scope: "module" });
+  await requireActiveAdmin();
   return <>{children}</>;
 }

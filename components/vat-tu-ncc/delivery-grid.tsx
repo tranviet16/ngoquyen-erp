@@ -58,9 +58,12 @@ interface Props {
   initialData: DeliveryRow[];
   items: ItemOption[];
   projects: ProjectOption[];
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
-export function DeliveryGrid({ supplierId, initialData, items, projects }: Props) {
+export function DeliveryGrid({ supplierId, initialData, items, projects, canCreate, canEdit, canDelete }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<DeliveryRow | null>(null);
@@ -115,7 +118,7 @@ export function DeliveryGrid({ supplierId, initialData, items, projects }: Props
   };
 
   const handlers: DataGridHandlers<DeliveryGridRow> = {
-    onCellEdit: async (id, col, value) => {
+    ...(canEdit ? { onCellEdit: async (id: number, col: string, value: unknown) => {
       try {
         await patchDelivery(id, { [col]: value } as Partial<DeliveryGridRow>);
         toast.success("Đã lưu");
@@ -124,13 +127,13 @@ export function DeliveryGrid({ supplierId, initialData, items, projects }: Props
         toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
         startTransition(() => router.refresh());
       }
-    },
-    onDeleteRows: async (ids) => {
+    } } : {}),
+    ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
       for (const id of ids) {
         await softDeleteDelivery(id, supplierId);
       }
       startTransition(() => router.refresh());
-    },
+    } } : {}),
   };
 
   const editSelected = () => {
@@ -170,10 +173,10 @@ export function DeliveryGrid({ supplierId, initialData, items, projects }: Props
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Vật tư ngày</h2>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa đầy đủ
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>Thêm phiếu nhập</Button>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm phiếu nhập</Button>
         </div>
       </div>
 

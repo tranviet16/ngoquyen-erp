@@ -55,11 +55,10 @@ interface Props {
   projectId: number;
   initialData: EstimateRow[];
   categories: CategoryOption[];
-  role?: string;
+  canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean;
 }
 
-export function DuToanClient({ projectId, initialData, categories, role }: Props) {
-  const isAdmin = role === "admin";
+export function DuToanClient({ projectId, initialData, categories, canCreate, canEdit, canDelete, isAdmin = false }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EstimateRow | null>(null);
@@ -165,10 +164,10 @@ export function DuToanClient({ projectId, initialData, categories, role }: Props
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa đầy đủ
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>Thêm hạng mục</Button>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm hạng mục</Button>
         </div>
       </div>
 
@@ -179,8 +178,8 @@ export function DuToanClient({ projectId, initialData, categories, role }: Props
       <DataGrid<EstimateGridRow>
         columns={columns}
         rows={rows}
-        handlers={handlers}
-        role={role}
+        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
+        role={isAdmin ? "admin" : undefined}
         height={520}
         onSelectionChange={setSelectedIds}
       />

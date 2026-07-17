@@ -2,13 +2,13 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import {
   bulkUpsertObligationTxns,
   softDeleteObligationTxns,
 } from "@/lib/tai-chinh/state-obligation-service";
-import { getRole, type ObligationKind } from "./state-obligation-internal";
+import { type ObligationKind } from "./state-obligation-internal";
 import { endOfPeriodDate, periodBounds, type MatrixPeriod } from "./state-obligation-matrix-period";
 export type { MatrixPeriod } from "./state-obligation-matrix-period";
 
@@ -163,8 +163,8 @@ async function canonicalTxnId(
 }
 
 export async function saveObligationMatrix(params: MatrixPeriod, rows: ObligationMatrixSaveRow[]) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   if (!rows.length) return;
 
   for (const row of rows) {

@@ -1,21 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
-
-async function getRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export interface ExpenseCategoryInput {
   code: string;
@@ -32,8 +20,8 @@ export async function listExpenseCategories() {
 }
 
 export async function createExpenseCategory(input: ExpenseCategoryInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   let level = 0;
   if (input.parentId) {
@@ -55,8 +43,8 @@ export async function createExpenseCategory(input: ExpenseCategoryInput) {
 }
 
 export async function updateExpenseCategory(id: number, input: ExpenseCategoryInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const record = await prisma.expenseCategory.update({
     where: { id },
@@ -68,8 +56,8 @@ export async function updateExpenseCategory(id: number, input: ExpenseCategoryIn
 }
 
 export async function softDeleteExpenseCategory(id: number) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   // Guard: cannot delete if journal entries reference it
   const refCount = await prisma.journalEntry.count({ where: { expenseCategoryId: id, deletedAt: null } });

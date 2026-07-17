@@ -1,6 +1,4 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
 import { listUsersWithGrants } from "@/lib/admin/user-grants-service";
 import { listDepartments } from "@/lib/department-service";
@@ -9,10 +7,7 @@ import { UserGrantsClient } from "./user-grants-client";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user || session.user.role !== "admin") {
-    redirect("/dashboard");
-  }
+  await requireActiveAdmin();
   const [users, depts, roles] = await Promise.all([
     listUsersWithGrants(),
     listDepartments({ activeOnly: true }),

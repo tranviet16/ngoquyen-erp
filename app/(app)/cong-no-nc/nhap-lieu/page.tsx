@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import {
   listLaborTransactions,
   patchLaborTransaction,
@@ -6,15 +5,14 @@ import {
   bulkUpsertLaborTransactions,
   softDeleteLaborTransactions,
 } from "@/lib/cong-no-nc/labor-ledger-service";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { LedgerTransactionGrid, type TxRow } from "@/components/ledger-grid/transaction-grid";
+import { requireModuleAccess } from "@/lib/acl/guards";
+import { canAccessEntitlement } from "@/lib/acl/effective";
 
 export default async function NhapLieuNcPage() {
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  const role = session?.user?.role ?? undefined;
-  const [txResult, entities, contractors, projects, items] = await Promise.all([
+  const { userId, role } = await requireModuleAccess("cong-no-nc", { minLevel: "read", scope: "module" });
+  const [txResult, entities, contractors, projects, items, canCreate, canEdit] = await Promise.all([
     listLaborTransactions({ pageSize: 200 }),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.contractor.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -24,6 +22,8 @@ export default async function NhapLieuNcPage() {
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    canAccessEntitlement(userId, "cong-no-nc", { minLevel: "create", scope: "module" }),
+    canAccessEntitlement(userId, "cong-no-nc", { minLevel: "edit", scope: "module" }),
   ]);
 
   const rows: TxRow[] = txResult.items.map((t) => ({
@@ -71,7 +71,10 @@ export default async function NhapLieuNcPage() {
           bulkUpsert: bulkUpsertLaborTransactions,
           softDeleteMany: softDeleteLaborTransactions,
         }}
-        role={role}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canEdit}
+        isAdmin={role === "admin"}
       />
     </div>
   );

@@ -43,6 +43,9 @@ interface Props {
   partyLabel: string;
   defaults: { entityId: number; partyId: number };
   actions: OpeningActions;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   role?: string;
 }
 
@@ -68,7 +71,9 @@ export function LedgerOpeningGrid({
   partyLabel,
   defaults,
   actions,
-  role,
+  canCreate,
+  canEdit,
+  canDelete,
 }: Props) {
   const router = useRouter();
 
@@ -87,19 +92,18 @@ export function LedgerOpeningGrid({
   );
 
   const handlers: DataGridHandlers<OpeningRow> = {
-    onCellEdit: async (rowId, col, value) => {
+    ...(canEdit ? { onCellEdit: async (rowId: number, col: string, value: unknown) => {
       const updated = await actions.patch(rowId, { [col]: value });
       router.refresh();
       return dbObToRow(updated as Record<string, unknown>);
-    },
-    onBulkPaste: async (patches) => {
+    }, onBulkPaste: async (patches: Array<Partial<OpeningRow>>) => {
       const result = await actions.bulkUpsert(
         patches.map((p) => p as Record<string, unknown> & { id?: number }),
       );
       router.refresh();
       return (result as Record<string, unknown>[]).map(dbObToRow);
-    },
-    onAddRow: async (template) => {
+    } } : {}),
+    ...(canCreate ? { onAddRow: async (template: Partial<OpeningRow>) => {
       const today = new Date().toISOString().slice(0, 10);
       const stub: Record<string, unknown> = {
         entityId: defaults.entityId,
@@ -119,11 +123,11 @@ export function LedgerOpeningGrid({
         toast.error(err instanceof Error ? err.message : "Lỗi tạo dòng — chọn Chủ thể & đối tác trước");
         throw err;
       }
-    },
-    onDeleteRows: async (ids) => {
+    } } : {}),
+    ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
       await actions.deleteMany(ids);
       router.refresh();
-    },
+    } } : {}),
   };
 
   return (
@@ -132,7 +136,6 @@ export function LedgerOpeningGrid({
       rows={initialData}
       handlers={handlers}
       height={500}
-      role={role}
     />
   );
 }

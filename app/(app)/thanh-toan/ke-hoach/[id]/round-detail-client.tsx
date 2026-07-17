@@ -68,6 +68,7 @@ interface Item {
 }
 interface Round {
   id: number;
+  departmentId: number | null;
   month: string;
   sequence: number;
   status: string;
@@ -83,7 +84,10 @@ interface Props {
   suppliers: Supplier[];
   projects: Project[];
   isAdmin: boolean;
-  currentUser: { id: string; role: string | null; isDirector: boolean };
+  canCreateItem: boolean;
+  canEdit: boolean;
+  canApprove: boolean;
+  canClose: boolean;
 }
 
 // ── Cascade helpers ──────────────────────────────────────────────────────────
@@ -113,11 +117,13 @@ async function fetchCascadeSuppliers(
   entityId: number,
   projectId: number | null,
   ledgerType: "material" | "labor" | "all",
+  departmentId: number | null,
   signal: AbortSignal
 ): Promise<Supplier[]> {
   const params = new URLSearchParams({
     ledgerType,
     entityId: String(entityId),
+    departmentId: String(departmentId ?? ""),
   });
   if (projectId !== null) params.set("projectId", String(projectId));
   const res = await fetch(`/api/thanh-toan/cascade-suppliers?${params}`, { signal });
@@ -134,16 +140,15 @@ export function RoundDetailClient({
   suppliers,
   projects,
   isAdmin,
-  currentUser,
+  canCreateItem,
+  canEdit,
+  canApprove,
+  canClose,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const isCreator = round.createdBy?.id === currentUser.id;
-  const canEdit = round.status === "draft" && (isCreator || isAdmin);
   const canSubmit = canEdit && round.items.length > 0;
-  const canApprove = round.status === "submitted" && (currentUser.isDirector || isAdmin);
-  const canClose = round.status === "approved" && isAdmin;
 
   // Table: Loại | STT | Chủ thể | Công trình | NCC | Công nợ | Luỹ kế | Cập nhật | Số đề nghị | Số duyệt | Ghi chú | Actions
   const COL_COUNT = 12;
@@ -259,7 +264,7 @@ export function RoundDetailClient({
             Đóng đợt
           </Button>
         )}
-        {round.status === "draft" && (
+        {canEdit && (
           <Button variant="outline" onClick={onRefreshAllBalances} disabled={pending}>
             Cập nhật số dư
           </Button>
@@ -291,6 +296,7 @@ export function RoundDetailClient({
                 idx={idx + 1}
                 item={item}
                 roundId={round.id}
+                departmentId={round.departmentId}
                 roundStatus={round.status}
                 entities={entities}
                 suppliers={suppliers}
@@ -307,9 +313,10 @@ export function RoundDetailClient({
                 </td>
               </tr>
             )}
-            {canEdit && (
+            {canCreateItem && (
               <NewItemRow
                 roundId={round.id}
+                departmentId={round.departmentId}
                 entities={entities}
                 suppliers={suppliers}
                 projects={projects}
@@ -344,6 +351,7 @@ function ItemRow({
   idx,
   item,
   roundId,
+  departmentId,
   roundStatus,
   entities,
   suppliers,
@@ -355,6 +363,7 @@ function ItemRow({
   idx: number;
   item: Item;
   roundId: number;
+  departmentId: number | null;
   roundStatus: string;
   entities: Entity[];
   suppliers: Supplier[];
@@ -426,7 +435,7 @@ function ItemRow({
     abortSuppliers.current = ctrl;
     setLoadingSuppliers(true);
     setSuppliersFetched(false);
-    fetchCascadeSuppliers(eid, pid, lt, ctrl.signal)
+    fetchCascadeSuppliers(eid, pid, lt, departmentId, ctrl.signal)
       .then((ss) => { setAvailableSuppliers(ss); setSuppliersFetched(true); })
       .catch(() => { /* aborted — ignore */ })
       .finally(() => { setLoadingSuppliers(false); });
@@ -807,6 +816,7 @@ function ItemRow({
 
 function NewItemRow({
   roundId,
+  departmentId,
   entities,
   suppliers,
   projects,
@@ -814,6 +824,7 @@ function NewItemRow({
   isAdmin,
 }: {
   roundId: number;
+  departmentId: number | null;
   entities: Entity[];
   suppliers: Supplier[];
   projects: Project[];
@@ -877,7 +888,7 @@ function NewItemRow({
     abortSuppliers.current = ctrl;
     setLoadingSuppliers(true);
     setSuppliersFetched(false);
-    fetchCascadeSuppliers(eid, pid, lt, ctrl.signal)
+    fetchCascadeSuppliers(eid, pid, lt, departmentId, ctrl.signal)
       .then((ss) => { setAvailableSuppliers(ss); setSuppliersFetched(true); })
       .catch(() => { /* aborted */ })
       .finally(() => { setLoadingSuppliers(false); });

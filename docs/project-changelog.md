@@ -5,6 +5,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ## [Unreleased]
 
 ### Added
+- Added the canonical `read < comment < create < edit` record-permission hierarchy across project, debt, materials, payment and task workflows, including active-admin bypass, immutable payment department scope, transactional bulk approval/refresh, and server-derived create/edit/delete UI capabilities.
 - Added global module release control backed by `ModuleAvailability`, with all 18 registered modules backfilled to `ready` and `dashboard` plus `admin.permissions` permanently protected from being moved to development.
 - Added an admin release-status panel under `/admin/permissions/modules` and an accessible synthetic blurred shell for entitled users opening a module marked `development`; the shell never loads or renders business data.
 - Added fail-closed release checks across page guards, project visibility, bespoke APIs and server actions. Entitlement is resolved before rollout so unauthorized users remain hidden/Forbidden while entitled users are redirected to the development screen.

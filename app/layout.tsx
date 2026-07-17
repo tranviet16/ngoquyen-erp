@@ -1,22 +1,7 @@
 import type { Metadata } from "next";
-import { Be_Vietnam_Pro, Noto_Sans } from "next/font/google";
 import { cookies } from "next/headers";
 import { Toaster } from "sonner";
 import "./globals.css";
-
-const beVietnamPro = Be_Vietnam_Pro({
-  variable: "--font-heading",
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
-
-const notoSans = Noto_Sans({
-  variable: "--font-sans",
-  subsets: ["latin", "vietnamese"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "ERP Ngô Quyền",
@@ -33,7 +18,7 @@ export default async function RootLayout({
   return (
     <html
       lang="vi"
-      className={`${beVietnamPro.variable} ${notoSans.variable} h-full antialiased ${theme}`}
+      className={`h-full antialiased ${theme}`}
       suppressHydrationWarning
     >
       <body className="min-h-full bg-background text-foreground">

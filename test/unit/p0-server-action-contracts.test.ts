@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
-  requireAccess: vi.fn(),
+  requireActiveAdmin: vi.fn(),
   writeAuditLog: vi.fn(),
   revalidatePath: vi.fn(),
   role: {
@@ -34,8 +34,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/headers", () => ({ headers: vi.fn(async () => new Headers()) }));
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
-vi.mock("@/lib/acl/role-permissions", () => ({
-  requireRoleModuleAccess: mocks.requireAccess,
+vi.mock("@/lib/admin/require-active-admin", () => ({
+  requireActiveAdmin: mocks.requireActiveAdmin,
 }));
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: vi.fn().mockResolvedValue(undefined),
@@ -73,7 +73,7 @@ beforeEach(() => {
   mocks.getSession.mockResolvedValue({
     user: { id: "admin-1", role: "admin" },
   });
-  mocks.requireAccess.mockResolvedValue(undefined);
+  mocks.requireActiveAdmin.mockResolvedValue("admin-1");
   mocks.writeAuditLog.mockResolvedValue(undefined);
   mocks.role.findUnique.mockResolvedValue(null);
   mocks.role.create.mockResolvedValue({ id: "ke-toan" });
@@ -83,29 +83,25 @@ beforeEach(() => {
 
 describe("P0 role-permission action contract", () => {
   it("denies an unauthenticated role mutation before database access", async () => {
-    mocks.getSession.mockResolvedValue(null);
+    mocks.requireActiveAdmin.mockRejectedValueOnce(new Error("Session expired"));
 
     await expect(createRole({
       id: "ke-toan",
       name: "Kế toán",
       permissions: [],
-    })).rejects.toThrow(/Phiên đăng nhập/);
+    })).rejects.toThrow("Session expired");
 
     expect(mocks.role.create).not.toHaveBeenCalled();
   });
 
-  it("enforces the admin.permissions scope and writes the permission audit", async () => {
+  it("enforces active-admin access and writes the permission audit", async () => {
     await createRole({
       id: "ke-toan",
       name: "Kế toán",
-      permissions: [{ moduleKey: "tai-chinh", level: "admin" }],
+      permissions: [{ moduleKey: "du-an", level: "create" }],
     });
 
-    expect(mocks.requireAccess).toHaveBeenCalledWith(
-      "admin",
-      "admin.permissions",
-      "admin",
-    );
+    expect(mocks.requireActiveAdmin).toHaveBeenCalled();
     expect(mocks.role.create).toHaveBeenCalled();
     expect(mocks.rolePermission.createMany).toHaveBeenCalled();
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
@@ -126,19 +122,19 @@ describe("P0 role-permission action contract", () => {
 });
 
 describe("P0 finance payable/receivable action contract", () => {
-  it("denies an override when the finance edit guard rejects", async () => {
-    mocks.requireAccess.mockRejectedValueOnce(new Error("Forbidden"));
+  it("denies an override when the active-admin guard rejects", async () => {
+    mocks.requireActiveAdmin.mockRejectedValueOnce(new Error("Forbidden"));
 
     await expect(updateFinancePrLineOverride(7, null)).rejects.toThrow("Forbidden");
     expect(mocks.financePrLine.update).not.toHaveBeenCalled();
   });
 
-  it("enforces finance admin scope and audits destructive row recovery", async () => {
+  it("enforces active admin access and audits destructive row recovery", async () => {
     mocks.payableReceivableAdjustment.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(deleteFinancePrRows(["manual-7"])).resolves.toEqual({ deleted: 1 });
 
-    expect(mocks.requireAccess).toHaveBeenCalledWith("admin", "tai-chinh", "admin");
+    expect(mocks.requireActiveAdmin).toHaveBeenCalled();
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({
       tableName: "finance_pr_lines",
       action: "delete_pr_rows",

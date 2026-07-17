@@ -1,17 +1,10 @@
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { hasRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { getRuns, getAdapters } from "./import-actions";
 import { ImportUploadForm } from "./import-upload-form";
 import { DeleteRunButton } from "./delete-run-button";
 
 export default async function AdminImportPage() {
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  if (!session?.user || !(await hasRoleModuleAccess(session.user.role, "admin.import", "admin"))) {
-    redirect("/dashboard");
-  }
+  await requireActiveAdmin();
 
   const [runs, adapters] = await Promise.all([getRuns(), getAdapters()]);
   const rollbackByAdapter = new Map(adapters.map((a) => [a.name, a.supportsRollback]));

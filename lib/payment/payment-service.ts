@@ -2,6 +2,9 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/rbac";
+import { canAccessEntitlement } from "@/lib/acl/effective";
+import { getDeptAccessMap, hasDeptAccess } from "@/lib/dept-access";
+import type { AccessLevel } from "@/lib/acl/modules";
 import { getOutstandingDebt, getCumulativePaid } from "@/lib/ledger/balance-service";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
 
@@ -29,6 +32,7 @@ const CATEGORY_LEDGER_TYPE: Partial<Record<PaymentCategory, LedgerType>> = {
 export interface CreateRoundInput {
   month: string;
   note?: string;
+  departmentId?: number | null;
 }
 
 export interface UpsertItemInput {
@@ -53,6 +57,8 @@ interface Actor {
   role: string | null;
   isDirector: boolean;
   isLeader: boolean;
+  departmentId: number | null;
+  isActive: boolean;
 }
 
 async function getActor(): Promise<Actor> {
@@ -61,12 +67,10 @@ async function getActor(): Promise<Actor> {
   // isDirector/isLeader không nằm trong session — lookup từ DB
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { isDirector: true, isLeader: true, role: true },
+    select: { isDirector: true, isLeader: true, role: true, departmentId: true, isActive: true },
   });
   if (!dbUser) throw new Error("User không tồn tại");
-  // Payment data has no department key yet, so a non-admin request cannot be
-  // filtered through its configured department ACL axis without leaking data.
-  if (!isAdmin(dbUser.role ?? session.user.role ?? null)) {
+  if (dbUser.isActive === false) {
     throw new Error("Dữ liệu thanh toán hiện chỉ dành cho admin cho đến khi hoàn tất phân quyền theo phòng ban");
   }
   return {
@@ -74,11 +78,37 @@ async function getActor(): Promise<Actor> {
     role: dbUser.role ?? session.user.role ?? null,
     isDirector: dbUser.isDirector,
     isLeader: dbUser.isLeader,
+    departmentId: dbUser.departmentId,
+    isActive: true,
   };
 }
 
-function canCreate(role: string | null) {
-  return role === "admin" || role === "ketoan" || role === "canbo_vt";
+function isActiveAdmin(actor: Actor): boolean {
+  return actor.isActive && actor.role === "admin";
+}
+
+async function requirePaymentModule(actor: Actor, level: AccessLevel): Promise<void> {
+  if (isActiveAdmin(actor)) return;
+  const allowed = await canAccessEntitlement(actor.id, "thanh-toan.ke-hoach", { minLevel: level, scope: "module" });
+  if (!allowed) throw new Error("Forbidden payment module");
+}
+
+async function requirePaymentDept(actor: Actor, departmentId: number | null, level: AccessLevel): Promise<void> {
+  await requirePaymentModule(actor, level);
+  if (isActiveAdmin(actor)) return;
+  if (departmentId === null) throw new Error("Legacy payment rounds are admin-only");
+  const map = await getDeptAccessMap(actor.id);
+  if (!hasDeptAccess(map, departmentId, level)) throw new Error("Forbidden payment department");
+}
+
+async function loadRoundFor(actor: Actor, roundId: number, level: AccessLevel) {
+  const round = await prisma.paymentRound.findFirst({
+    where: { id: roundId, deletedAt: null },
+    select: { id: true, status: true, createdById: true, departmentId: true },
+  });
+  if (!round) throw new Error("Round not found");
+  await requirePaymentDept(actor, round.departmentId, level);
+  return round;
 }
 function canApprove(actor: Actor) {
   return isAdmin(actor.role) || actor.isDirector;
@@ -88,12 +118,17 @@ export async function listRounds(filter: {
   month?: string;
   status?: RoundStatus;
 }) {
-  await getActor();
+  const actor = await getActor();
+  await requirePaymentModule(actor, "read");
+  const accessMap = isActiveAdmin(actor) ? null : await getDeptAccessMap(actor.id);
+  const map = accessMap?.scope === "all" ? null : accessMap;
+  const departmentFilter = map === null ? {} : { departmentId: { in: [...map.grants.keys()] } };
   return prisma.paymentRound.findMany({
     where: {
       deletedAt: null,
       month: filter.month,
       status: filter.status,
+      ...departmentFilter,
     },
     include: {
       _count: { select: { items: true } },
@@ -105,7 +140,8 @@ export async function listRounds(filter: {
 }
 
 export async function getRound(id: number) {
-  await getActor();
+  const actor = await getActor();
+  await loadRoundFor(actor, id, "read");
   return prisma.paymentRound.findFirst({
     where: { id, deletedAt: null },
     include: {
@@ -126,24 +162,26 @@ export async function getRound(id: number) {
 
 export async function createRound(input: CreateRoundInput) {
   const actor = await getActor();
-  if (!canCreate(actor.role)) throw new Error("Không có quyền lập đợt");
-
+  const departmentId = input.departmentId === undefined ? actor.departmentId : input.departmentId;
+  await requirePaymentDept(actor, departmentId, "create");
   // Sequence = last sequence in the same month (across ALL categories) + 1
-  const last = await prisma.paymentRound.findFirst({
-    where: { month: input.month, deletedAt: null },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
-  const sequence = (last?.sequence ?? 0) + 1;
-
-  return prisma.paymentRound.create({
-    data: {
-      month: input.month,
-      sequence,
-      status: "draft",
-      createdById: actor.id,
-      note: input.note,
-    },
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.month}))`;
+    const last = await tx.paymentRound.findFirst({
+      where: { month: input.month, deletedAt: null },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    return tx.paymentRound.create({
+      data: {
+        month: input.month,
+        sequence: (last?.sequence ?? 0) + 1,
+        status: "draft",
+        createdById: actor.id,
+        departmentId,
+        note: input.note,
+      },
+    });
   });
 }
 
@@ -180,9 +218,10 @@ export async function upsertItem(input: UpsertItemInput) {
   const actor = await getActor();
   const round = await prisma.paymentRound.findUnique({
     where: { id: input.roundId },
-    select: { status: true, createdById: true },
+    select: { status: true, createdById: true, departmentId: true },
   });
   if (!round) throw new Error("Không tìm thấy đợt");
+  await requirePaymentDept(actor, round.departmentId, input.id ? "edit" : "create");
   if (round.status !== "draft")
     throw new Error("Chỉ sửa được khi đợt ở trạng thái nháp");
   if (round.createdById !== actor.id && !isAdmin(actor.role))
@@ -191,6 +230,12 @@ export async function upsertItem(input: UpsertItemInput) {
   // ── UPDATE path ───────────────────────────────────────────────────────────
   // Patch only the fields the caller sent. Do NOT re-pull balances.
   if (input.id) {
+    const existing = await prisma.paymentRoundItem.findUnique({
+      where: { id: input.id }, select: { roundId: true },
+    });
+    if (!existing || existing.roundId !== input.roundId) {
+      throw new Error("Payment item does not belong to the selected round");
+    }
     if (input.override && !isAdmin(actor.role))
       throw new Error("Chỉ admin được dùng override");
 
@@ -294,11 +339,12 @@ export async function refreshItemBalances(itemId: number) {
   const item = await prisma.paymentRoundItem.findUnique({
     where: { id: itemId },
     include: {
-      round: { select: { status: true, createdById: true } },
+      round: { select: { status: true, createdById: true, departmentId: true } },
     },
   });
   if (!item) throw new Error("Không tìm thấy dòng");
 
+  await requirePaymentDept(actor, item.round.departmentId, "edit");
   if (item.round.status !== "draft") {
     throw new Error(
       `Chỉ có thể làm mới số dư khi đợt ở trạng thái nháp (hiện tại: ${item.round.status})`
@@ -322,7 +368,8 @@ export async function refreshItemBalances(itemId: number) {
 }
 
 export async function listItemIdsForRound(roundId: number): Promise<number[]> {
-  await getActor();
+  const actor = await getActor();
+  await loadRoundFor(actor, roundId, "edit");
   const rows = await prisma.paymentRoundItem.findMany({
     where: { roundId },
     select: { id: true },
@@ -331,13 +378,44 @@ export async function listItemIdsForRound(roundId: number): Promise<number[]> {
   return rows.map((r) => r.id);
 }
 
+/** Refresh every item in a draft round atomically after one parent-scope check. */
+export async function refreshAllItemBalances(roundId: number) {
+  const actor = await getActor();
+  const round = await loadRoundFor(actor, roundId, "edit");
+  if (round.status !== "draft") throw new Error("Chỉ có thể làm mới số dư khi đợt ở trạng thái nháp");
+  if (round.createdById !== actor.id && !isAdmin(actor.role)) throw new Error("Không có quyền làm mới số dư");
+  const items = await prisma.paymentRoundItem.findMany({
+    where: { roundId },
+    select: { id: true, category: true, entityId: true, supplierId: true, projectId: true },
+  });
+  const refreshed = await Promise.all(items.map(async (item) => ({
+    id: item.id,
+    balances: await autoFillBalances(item.category as PaymentCategory, item.entityId, item.supplierId, item.projectId),
+  })));
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const locked = await tx.paymentRound.updateMany({
+      where: { id: roundId, status: "draft" },
+      data: { updatedAt: now },
+    });
+    if (locked.count !== 1) {
+      throw new Error("Chỉ có thể làm mới số dư khi đợt ở trạng thái nháp");
+    }
+    await Promise.all(refreshed.map((item) => tx.paymentRoundItem.update({
+      where: { id: item.id },
+      data: { congNo: item.balances.congNo, luyKe: item.balances.luyKe, balancesRefreshedAt: now },
+    })));
+  });
+}
+
 export async function deleteItem(itemId: number) {
   const actor = await getActor();
   const item = await prisma.paymentRoundItem.findUnique({
     where: { id: itemId },
-    include: { round: { select: { status: true, createdById: true } } },
+    include: { round: { select: { status: true, createdById: true, departmentId: true } } },
   });
   if (!item) throw new Error("Không tìm thấy dòng");
+  await requirePaymentDept(actor, item.round.departmentId, "edit");
   if (item.round.status !== "draft")
     throw new Error("Chỉ xoá được khi nháp");
   if (item.round.createdById !== actor.id && !isAdmin(actor.role))
@@ -349,9 +427,10 @@ export async function submitRound(roundId: number) {
   const actor = await getActor();
   const round = await prisma.paymentRound.findUnique({
     where: { id: roundId },
-    select: { status: true, createdById: true },
+    select: { status: true, createdById: true, departmentId: true },
   });
   if (!round) throw new Error("Không tìm thấy đợt");
+  await requirePaymentDept(actor, round.departmentId, "edit");
   if (round.status !== "draft")
     throw new Error("Chỉ submit được từ trạng thái nháp");
   if (round.createdById !== actor.id && !isAdmin(actor.role))
@@ -374,9 +453,10 @@ export async function approveItem(input: {
 
   const item = await prisma.paymentRoundItem.findUnique({
     where: { id: input.itemId },
-    include: { round: { select: { id: true, status: true, createdById: true } } },
+    include: { round: { select: { id: true, status: true, createdById: true, departmentId: true } } },
   });
   if (!item) throw new Error("Không tìm thấy dòng");
+  await requirePaymentDept(actor, item.round.departmentId, "edit");
   if (item.round.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi mới được duyệt");
   if (item.round.createdById === actor.id)
@@ -398,9 +478,10 @@ export async function rejectItem(itemId: number) {
 
   const item = await prisma.paymentRoundItem.findUnique({
     where: { id: itemId },
-    include: { round: { select: { id: true, status: true, createdById: true } } },
+    include: { round: { select: { id: true, status: true, createdById: true, departmentId: true } } },
   });
   if (!item) throw new Error("Không tìm thấy dòng");
+  await requirePaymentDept(actor, item.round.departmentId, "edit");
   if (item.round.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi");
   if (item.round.createdById === actor.id)
@@ -420,25 +501,36 @@ export async function bulkApproveAsRequested(roundId: number) {
 
   const round = await prisma.paymentRound.findUnique({
     where: { id: roundId },
-    select: { status: true, createdById: true },
+    select: { status: true, createdById: true, departmentId: true },
   });
   if (round?.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi");
+  await requirePaymentDept(actor, round.departmentId, "edit");
   if (round.createdById === actor.id)
     throw new Error("Người lập đợt không được tự duyệt");
 
-  const items = await prisma.paymentRoundItem.findMany({
-    where: { roundId, approvedAt: null },
-    select: { id: true, soDeNghi: true },
-  });
   const now = new Date();
-  for (const it of items) {
-    await prisma.paymentRoundItem.update({
-      where: { id: it.id },
-      data: { soDuyet: it.soDeNghi, approvedAt: now, approvedById: actor.id },
+  await prisma.$transaction(async (tx) => {
+    const transitioned = await tx.paymentRound.updateMany({
+      where: { id: roundId, status: "submitted" },
+      data: { status: "approved", approvedAt: now, approvedById: actor.id },
     });
-  }
-  await maybeAutoApproveRound(roundId, actor);
+    if (transitioned.count !== 1) {
+      throw new Error("Đợt phải ở trạng thái đã gửi");
+    }
+    const total = await tx.paymentRoundItem.count({ where: { roundId } });
+    if (total === 0) return;
+    const pendingItems = await tx.paymentRoundItem.findMany({
+      where: { roundId, approvedAt: null },
+      select: { id: true, soDeNghi: true },
+    });
+    for (const item of pendingItems) {
+      await tx.paymentRoundItem.update({
+        where: { id: item.id },
+        data: { soDuyet: item.soDeNghi, approvedAt: now, approvedById: actor.id },
+      });
+    }
+  });
 }
 
 async function maybeAutoApproveRound(roundId: number, actor: Actor) {
@@ -466,10 +558,11 @@ export async function rejectRound(roundId: number, reason: string) {
     throw new Error("Chỉ Giám đốc/admin được từ chối");
   const round = await prisma.paymentRound.findUnique({
     where: { id: roundId },
-    select: { status: true, createdById: true },
+    select: { status: true, createdById: true, departmentId: true },
   });
   if (round?.status !== "submitted")
     throw new Error("Đợt phải ở trạng thái đã gửi");
+  await requirePaymentDept(actor, round.departmentId, "edit");
   if (round.createdById === actor.id)
     throw new Error("Người lập đợt không được tự từ chối");
 
@@ -503,9 +596,10 @@ export async function deleteRound(roundId: number) {
   const actor = await getActor();
   const round = await prisma.paymentRound.findFirst({
     where: { id: roundId, deletedAt: null },
-    select: { status: true, createdById: true },
+    select: { status: true, createdById: true, departmentId: true },
   });
   if (!round) throw new Error("Không tìm thấy đợt");
+  await requirePaymentDept(actor, round.departmentId, "edit");
   if (round.status === "approved" || round.status === "closed")
     throw new Error("Không xoá được đợt đã duyệt hoặc đã đóng");
   if (round.createdById !== actor.id && !isAdmin(actor.role))
@@ -527,7 +621,11 @@ export interface AggregateRow {
 }
 
 export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
-  await getActor();
+  const actor = await getActor();
+  await requirePaymentModule(actor, "read");
+  const accessMap = isActiveAdmin(actor) ? null : await getDeptAccessMap(actor.id);
+  const map = accessMap?.scope === "all" ? null : accessMap;
+  const departmentIds = map === null ? null : [...map.grants.keys()];
   const rows = await prisma.$queryRaw<
     Array<{
       supplier_id: number;
@@ -554,6 +652,7 @@ export async function aggregateMonth(month: string): Promise<AggregateRow[]> {
     WHERE r."month" = ${month}
       AND r.status IN ('approved', 'closed')
       AND r."deletedAt" IS NULL
+      AND (${departmentIds}::int[] IS NULL OR r."departmentId" = ANY(${departmentIds}::int[]))
     GROUP BY i."supplierId", s.name, i.category, i."entityId", e.name
     ORDER BY s.name, i.category, e.name;
   `;

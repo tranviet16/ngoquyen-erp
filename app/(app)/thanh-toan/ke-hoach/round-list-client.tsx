@@ -39,9 +39,11 @@ interface RoundRow {
 interface Props {
   initialRounds: RoundRow[];
   initialFilter: { month: string; status?: string };
+  canCreate: boolean;
+  editableRoundIds: number[];
 }
 
-export function RoundListClient({ initialRounds, initialFilter }: Props) {
+export function RoundListClient({ initialRounds, initialFilter, canCreate, editableRoundIds }: Props) {
   const router = useRouter();
   const [month, setMonth] = useState(initialFilter.month);
   const [status, setStatus] = useState(initialFilter.status ?? "");
@@ -58,10 +60,10 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Kế hoạch thanh toán</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
+        {canCreate && <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button>Tạo đợt mới</Button>} />
           <CreateRoundDialog onClose={() => setOpen(false)} defaultMonth={month} />
-        </Dialog>
+        </Dialog>}
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-md border bg-card p-3">
@@ -132,7 +134,7 @@ export function RoundListClient({ initialRounds, initialFilter }: Props) {
                     >
                       Xem
                     </Link>
-                    {r.status !== "approved" && r.status !== "closed" && (
+                    {editableRoundIds.includes(r.id) && r.status !== "approved" && r.status !== "closed" && (
                       <DeleteRoundButton round={r} onDeleted={() => router.refresh()} />
                     )}
                   </div>

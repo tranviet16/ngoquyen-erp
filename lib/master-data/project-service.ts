@@ -1,24 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { projectSchema, categorySchema, type ProjectInput, type CategoryInput } from "./schemas";
 import { serializeDecimal } from "@/lib/utils/serialize-decimal";
 import { queryProjectById } from "./project-query";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listProjects(opts?: { search?: string; status?: string; includeDeleted?: boolean; page?: number; pageSize?: number; ids?: number[] }) {
   await requireReleasedModuleRequest("master-data");
@@ -55,8 +43,8 @@ export async function getProjectById(id: number) {
 }
 
 export async function createProject(input: ProjectInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const data = projectSchema.parse(input);
   const project = await prisma.project.create({
     data: {
@@ -75,8 +63,8 @@ export async function createProject(input: ProjectInput) {
 }
 
 export async function updateProject(id: number, input: ProjectInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const data = projectSchema.parse(input);
   const project = await prisma.project.update({
     where: { id },
@@ -97,8 +85,8 @@ export async function updateProject(id: number, input: ProjectInput) {
 }
 
 export async function softDeleteProject(id: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "admin");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const project = await prisma.project.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/master-data/projects");
   revalidatePath("/master-data");
@@ -119,8 +107,8 @@ const patchProjectSchema = z.object({
 });
 
 export async function patchProject(id: number, patch: Record<string, unknown>) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
 
   for (const k of Object.keys(patch)) {
     if (!(PROJECT_PATCH_WHITELIST as readonly string[]).includes(k)) {
@@ -144,8 +132,8 @@ export async function patchDuAn(id: number, patch: Record<string, unknown>) {
 }
 
 export async function createCategory(projectId: number, input: CategoryInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const data = categorySchema.parse(input);
   const category = await prisma.projectCategory.create({
     data: { ...data, projectId },
@@ -155,8 +143,8 @@ export async function createCategory(projectId: number, input: CategoryInput) {
 }
 
 export async function updateCategory(id: number, projectId: number, input: CategoryInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const data = categorySchema.parse(input);
   const category = await prisma.projectCategory.update({ where: { id }, data });
   revalidatePath(`/master-data/projects/${projectId}`);
@@ -164,8 +152,8 @@ export async function updateCategory(id: number, projectId: number, input: Categ
 }
 
 export async function softDeleteCategory(id: number, projectId: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "admin");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const category = await prisma.projectCategory.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath(`/master-data/projects/${projectId}`);
   return category;

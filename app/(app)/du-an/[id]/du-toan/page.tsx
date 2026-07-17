@@ -1,12 +1,11 @@
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { auth } from "@/lib/auth";
 import { listEstimates } from "@/lib/du-an/estimate-service";
 import { queryProjectById } from "@/lib/master-data/project-query";
 import { serializeDecimals } from "@/lib/serialize";
 import { DuToanClient } from "./du-toan-client";
 import { requireModuleAccess } from "@/lib/acl/guards";
+import { canAccessEntitlement } from "@/lib/acl/effective";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -16,18 +15,16 @@ export default async function DuToanPage({ params }: Props) {
   const { id } = await params;
   const projectId = Number(id);
   if (isNaN(projectId)) notFound();
-  await requireModuleAccess("du-an", {
+  const { userId, role } = await requireModuleAccess("du-an", {
     minLevel: "read",
     scope: { kind: "project", projectId },
   });
 
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  const role = session?.user?.role ?? undefined;
-
-  const [estimates, project] = await Promise.all([
+  const [estimates, project, canCreate, canEdit] = await Promise.all([
     listEstimates(projectId),
     queryProjectById(projectId),
+    canAccessEntitlement(userId, "du-an", { minLevel: "create", scope: { kind: "project", projectId } }),
+    canAccessEntitlement(userId, "du-an", { minLevel: "edit", scope: { kind: "project", projectId } }),
   ]);
 
   return (
@@ -36,7 +33,10 @@ export default async function DuToanPage({ params }: Props) {
         projectId={projectId}
         initialData={serializeDecimals(estimates)}
         categories={project?.categories ?? []}
-        role={role}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canEdit}
+        isAdmin={role === "admin"}
       />
     </Suspense>
   );

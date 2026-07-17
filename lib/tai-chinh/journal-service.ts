@@ -1,11 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import {
   normalizeJournalText,
@@ -13,16 +11,6 @@ import {
   suggestJournalLabel,
   type JournalCategoryLike,
 } from "@/lib/tai-chinh/journal-auto-label";
-
-async function getRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export type CostBehavior = "fixed" | "variable" | "transfer";
 
@@ -113,8 +101,8 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
 }
 
 export async function createJournalEntry(input: JournalEntryInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const fromAccountId = input.fromAccountId ?? null;
   const toAccountId = input.toAccountId ?? null;
@@ -154,8 +142,8 @@ export async function createJournalEntry(input: JournalEntryInput) {
 }
 
 export async function updateJournalEntry(id: number, input: JournalEntryInput) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const fromAccountId = input.fromAccountId ?? null;
   const toAccountId = input.toAccountId ?? null;
@@ -196,8 +184,8 @@ export async function updateJournalEntry(id: number, input: JournalEntryInput) {
 }
 
 export async function softDeleteJournalEntry(id: number) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   const current = await prisma.journalEntry.findUnique({
     where: { id },
     select: { refModule: true },
@@ -213,8 +201,8 @@ export async function softDeleteJournalEntry(id: number) {
 }
 
 export async function softDeleteJournalEntries(ids: number[]) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   if (!ids.length) return;
   const guarded = await prisma.journalEntry.findFirst({
     where: { id: { in: ids }, refModule: "state_obligation" },
@@ -236,8 +224,8 @@ export async function softDeleteJournalEntries(ids: number[]) {
 }
 
 export async function patchJournalEntry(id: number, patch: Record<string, unknown>) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   const current = await prisma.journalEntry.findUnique({ where: { id } });
   if (!current || current.deletedAt) throw new Error(`Bút toán #${id} không tồn tại`);
   if (current.refModule === "state_obligation") {
@@ -276,8 +264,8 @@ export async function patchJournalEntry(id: number, patch: Record<string, unknow
 export async function bulkUpsertJournalEntries(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   const out: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;
@@ -307,8 +295,8 @@ export async function bulkUpsertJournalEntries(
 }
 
 export async function autoLabelJournalEntries(ids: number[]) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
 
   const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
   if (!uniqueIds.length) {

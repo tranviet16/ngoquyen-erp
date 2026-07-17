@@ -1,8 +1,6 @@
-import { headers } from "next/headers";
 import Link from "next/link";
-import { redirect, notFound } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { hasRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { notFound } from "next/navigation";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { getRun } from "../import-actions";
 import { CommitPanel } from "./commit-panel";
 
@@ -11,11 +9,7 @@ interface Props {
 }
 
 export default async function ImportRunDetailPage({ params }: Props) {
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  if (!session?.user || !(await hasRoleModuleAccess(session.user.role, "admin.import", "admin"))) {
-    redirect("/dashboard");
-  }
+  await requireActiveAdmin();
 
   const { runId } = await params;
   const run = await getRun(parseInt(runId, 10));

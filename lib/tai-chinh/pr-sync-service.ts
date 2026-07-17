@@ -1,9 +1,7 @@
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { getChiTieuReport } from "@/lib/sl-dt/report-service";
 import { bypassAudit } from "@/lib/async-context";
 import { writeAuditLog } from "@/lib/audit";
@@ -51,12 +49,6 @@ export interface PayableSyncEntityOption {
   rowCount: number;
   amountVnd: Prisma.Decimal;
   sourceModules: Array<"material_ledger" | "labor_ledger">;
-}
-
-async function getSessionContext() {
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  return { role: session?.user?.role ?? null, userId: session?.user?.id ?? null };
 }
 
 function refreshPrPages() {
@@ -156,8 +148,7 @@ async function queryPayableRows(sourceModule: "material_ledger" | "labor_ledger"
 }
 
 export async function listPayableSyncEntityOptions(): Promise<PayableSyncEntityOption[]> {
-  const { role } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireActiveAdmin();
   const sources: Array<"material_ledger" | "labor_ledger"> = ["material_ledger", "labor_ledger"];
   const byEntity = new Map<number, PayableSyncEntityOption>();
 
@@ -264,8 +255,7 @@ async function getActiveExclusions(sourceModule: string) {
 }
 
 export async function syncPayablesFromLedgers(options: { excludedEntityIds?: number[] } = {}) {
-  const { role, userId } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  const userId = await requireActiveAdmin();
   const excludedEntityIds = new Set(options.excludedEntityIds ?? []);
   const sources: Array<["material_ledger" | "labor_ledger", string]> = [
     ["material_ledger", "supplier"],
@@ -344,8 +334,7 @@ export async function syncPayablesFromLedgers(options: { excludedEntityIds?: num
 }
 
 export async function syncReceivablesFromSlDt() {
-  const { role, userId } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  const userId = await requireActiveAdmin();
   const period = await getLatestReceivablePeriod();
   const batch = await prisma.financePrSyncBatch.create({
     data: { sourceModule: "sl_dt", periodYear: period.year, periodMonth: period.month, createdByUserId: userId },
@@ -397,8 +386,7 @@ export async function syncReceivablesFromSlDt() {
 }
 
 export async function undoLatestFinancePrSync(kind: "payable" | "receivable") {
-  const { role, userId } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  const userId = await requireActiveAdmin();
   const sourceModules = kind === "payable" ? ["material_ledger", "labor_ledger"] : ["sl_dt"];
   const latestBatches = await Promise.all(sourceModules.map((sourceModule) =>
     prisma.financePrSyncBatch.findFirst({
@@ -431,8 +419,7 @@ export async function undoLatestFinancePrSync(kind: "payable" | "receivable") {
 }
 
 export async function updateFinancePrLineOverride(id: number, amountVnd: string | null) {
-  const { role } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireActiveAdmin();
   await prisma.financePrLine.update({
     where: { id },
     data: { overrideAmountVnd: amountVnd ? new Prisma.Decimal(amountVnd) : null },
@@ -441,8 +428,7 @@ export async function updateFinancePrLineOverride(id: number, amountVnd: string 
 }
 
 export async function excludeFinancePrLine(id: number, reason?: string) {
-  const { role } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireActiveAdmin();
   const line = await prisma.financePrLine.update({ where: { id }, data: { isExcluded: true } });
   await prisma.financeSyncExclusion.create({
     data: {
@@ -454,8 +440,7 @@ export async function excludeFinancePrLine(id: number, reason?: string) {
 }
 
 export async function excludeFinancePrLineEntity(id: number, reason?: string) {
-  const { role } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireActiveAdmin();
   const line = await prisma.financePrLine.findUniqueOrThrow({ where: { id } });
   if (!line.entityId) throw new Error("Dòng này không có chủ thể để loại trừ");
   await prisma.financeSyncExclusion.create({
@@ -487,8 +472,7 @@ function parseFinancePrRowIds(rowIds: string[]) {
 }
 
 export async function deleteFinancePrRows(rowIds: string[]) {
-  const { role, userId } = await getSessionContext();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  const userId = await requireActiveAdmin();
   const { syncIds, manualIds } = parseFinancePrRowIds(rowIds);
   const now = new Date();
   let deleted = 0;

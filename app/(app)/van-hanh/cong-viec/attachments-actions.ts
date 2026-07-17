@@ -10,12 +10,12 @@ import {
 } from "@/lib/task/attachment-service";
 
 export async function listAttachmentsAction(taskId: number): Promise<AttachmentRow[]> {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "read", scope: "module" });
   return listAttachments(taskId);
 }
 
 export async function uploadAttachmentAction(formData: FormData): Promise<AttachmentRow> {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "comment", scope: "module" });
   const taskIdRaw = formData.get("taskId");
   const file = formData.get("file");
   const taskId = Number(taskIdRaw);
@@ -27,7 +27,7 @@ export async function uploadAttachmentAction(formData: FormData): Promise<Attach
 }
 
 export async function deleteAttachmentAction(id: number): Promise<void> {
-  await requireReleasedModuleRequest("van-hanh.cong-viec");
+  await requireReleasedModuleRequest("van-hanh.cong-viec", { minLevel: "comment", scope: "module" });
   await deleteAttachment(id);
   revalidatePath("/van-hanh/cong-viec");
 }

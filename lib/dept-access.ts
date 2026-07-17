@@ -1,8 +1,9 @@
 import { prisma } from "./prisma";
+import { ACCESS_LEVELS, LEVEL_RANK, type AccessLevel } from "./acl/modules";
 
-export type AccessLevel = "read" | "comment" | "edit";
+export { type AccessLevel } from "./acl/modules";
 
-export const LEVEL_ORDER: AccessLevel[] = ["read", "comment", "edit"];
+export const LEVEL_ORDER = ACCESS_LEVELS;
 
 export interface DeptAccessMap {
   scope: "all" | "scoped";
@@ -10,15 +11,15 @@ export interface DeptAccessMap {
 }
 
 function isAccessLevel(s: string): s is AccessLevel {
-  return s === "read" || s === "comment" || s === "edit";
+  return (ACCESS_LEVELS as readonly string[]).includes(s);
 }
 
 export async function getDeptAccessMap(userId: string): Promise<DeptAccessMap> {
   const u = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, isDirector: true, departmentId: true },
+    select: { role: true, isActive: true, isDirector: true, departmentId: true },
   });
-  if (!u) return { scope: "scoped", grants: new Map() };
+  if (!u || u.isActive === false) return { scope: "scoped", grants: new Map() };
   if (u.role === "admin" || u.isDirector) return { scope: "all", grants: new Map() };
 
   const grants = new Map<number, AccessLevel>();
@@ -31,7 +32,7 @@ export async function getDeptAccessMap(userId: string): Promise<DeptAccessMap> {
   for (const r of rows) {
     if (!isAccessLevel(r.level)) continue;
     const existing = grants.get(r.deptId);
-    if (!existing || LEVEL_ORDER.indexOf(r.level) > LEVEL_ORDER.indexOf(existing)) {
+    if (!existing || LEVEL_RANK[r.level] > LEVEL_RANK[existing]) {
       grants.set(r.deptId, r.level);
     }
   }
@@ -46,7 +47,7 @@ export function hasDeptAccess(
   if (map.scope === "all") return true;
   const have = map.grants.get(deptId);
   if (!have) return false;
-  return LEVEL_ORDER.indexOf(have) >= LEVEL_ORDER.indexOf(min);
+  return LEVEL_RANK[have] >= LEVEL_RANK[min];
 }
 
 export function assertDeptAccess(
@@ -58,6 +59,7 @@ export function assertDeptAccess(
   if (!hasDeptAccess(map, deptId, min)) {
     const labels: Record<AccessLevel, string> = {
       read: "xem",
+      create: "tạo mới",
       comment: "bình luận",
       edit: "chỉnh sửa",
     };

@@ -1,23 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { deliverySchema, type DeliveryInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listDeliveries(supplierId: number, opts?: { dateFrom?: string; dateTo?: string }) {
   await requireReleasedModuleRequest("vat-tu-ncc");
@@ -48,8 +35,7 @@ export async function listDeliveriesMonthly(supplierId: number) {
 }
 
 export async function createDelivery(input: DeliveryInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
+  await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
   const data = deliverySchema.parse(input);
   const record = await prisma.supplierDeliveryDaily.create({
     data: {
@@ -71,11 +57,12 @@ export async function createDelivery(input: DeliveryInput) {
 }
 
 export async function updateDelivery(id: number, input: DeliveryInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
   const data = deliverySchema.parse(input);
+  const existing = await prisma.supplierDeliveryDaily.findUnique({ where: { id }, select: { supplierId: true } });
+  if (!existing || existing.supplierId !== data.supplierId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
   const record = await prisma.supplierDeliveryDaily.update({
-    where: { id },
+    where: { id, supplierId: existing.supplierId },
     data: {
       projectId: data.projectId ?? null,
       date: new Date(data.date),
@@ -95,10 +82,11 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
 }
 
 export async function softDeleteDelivery(id: number, supplierId: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "vat-tu-ncc", "admin");
+  const existing = await prisma.supplierDeliveryDaily.findUnique({ where: { id }, select: { supplierId: true } });
+  if (!existing || existing.supplierId !== supplierId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
   const record = await prisma.supplierDeliveryDaily.update({
-    where: { id },
+    where: { id, supplierId: existing.supplierId },
     data: { deletedAt: new Date() },
   });
   revalidatePath(`/vat-tu-ncc/${supplierId}/ngay`);

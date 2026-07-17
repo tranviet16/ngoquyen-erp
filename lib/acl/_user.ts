@@ -13,6 +13,7 @@ import { prisma } from "../prisma";
 export interface UserRecord {
   id: string;
   role: string;
+  isActive: boolean;
   isLeader: boolean;
   isDirector: boolean;
 }
@@ -20,6 +21,6 @@ export interface UserRecord {
 export const loadUser = cache(async (userId: string): Promise<UserRecord | null> => {
   return prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, role: true, isLeader: true, isDirector: true },
+    select: { id: true, role: true, isActive: true, isLeader: true, isDirector: true },
   });
 });

@@ -22,14 +22,14 @@ export const MODULE_KEYS = [
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 // D2: no "none" — revoke = delete row.
-export const ACCESS_LEVELS = ["read", "comment", "edit", "admin"] as const;
+export const ACCESS_LEVELS = ["read", "comment", "create", "edit"] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
 export const LEVEL_RANK: Record<AccessLevel, number> = {
   read: 10,
   comment: 20,
-  edit: 30,
-  admin: 40,
+  create: 30,
+  edit: 40,
 };
 
 // Per-module axis config — drives Phase 2 effective resolver
@@ -61,22 +61,22 @@ export const MODULE_LEVELS: Record<ModuleKey, readonly AccessLevel[]> = {
   dashboard: ["read"],
   "thong-bao": ["read"],
   "van-hanh.hieu-suat": ["read"],
-  "master-data": ["admin"],
-  "sl-dt": ["admin"],
-  "tai-chinh": ["admin"],
-  "admin.import": ["admin"],
-  "admin.phong-ban": ["admin"],
-  "admin.nguoi-dung": ["admin"],
-  "admin.permissions": ["admin"],
-  // dept + project axis modules: full RWE set
-  "du-an": ["read", "comment", "edit"],
-  "vat-tu-ncc": ["read", "comment", "edit"],
-  "cong-no-vt": ["read", "comment", "edit"],
-  "cong-no-nc": ["read", "comment", "edit"],
-  "thanh-toan.ke-hoach": ["read", "comment", "edit"],
-  "thanh-toan.tong-hop": ["read", "comment", "edit"],
-  "van-hanh.cong-viec": ["read", "comment", "edit"],
-  "van-hanh.phieu-phoi-hop": ["read", "comment", "edit"],
+  "master-data": [],
+  "sl-dt": [],
+  "tai-chinh": [],
+  "admin.import": [],
+  "admin.phong-ban": [],
+  "admin.nguoi-dung": [],
+  "admin.permissions": [],
+  // Record modules: create is insert-only; edit permits create/update/delete.
+  "du-an": ["read", "comment", "create", "edit"],
+  "vat-tu-ncc": ["read", "comment", "create", "edit"],
+  "cong-no-vt": ["read", "comment", "create", "edit"],
+  "cong-no-nc": ["read", "comment", "create", "edit"],
+  "thanh-toan.ke-hoach": ["read", "comment", "create", "edit"],
+  "thanh-toan.tong-hop": ["read"],
+  "van-hanh.cong-viec": ["read", "comment", "create", "edit"],
+  "van-hanh.phieu-phoi-hop": ["read", "comment", "create", "edit"],
 };
 
 export function isValidLevelForModule(mk: ModuleKey, level: AccessLevel): boolean {

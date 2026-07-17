@@ -1,22 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { scheduleSchema, type ScheduleInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listSchedules(projectId: number) {
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
@@ -27,9 +15,7 @@ export async function listSchedules(projectId: number) {
 }
 
 export async function createSchedule(input: ScheduleInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
+  await requireReleasedModuleRequest("du-an", { minLevel: "create", scope: { kind: "project", projectId: input.projectId } });
   const data = scheduleSchema.parse(input);
   const record = await prisma.projectSchedule.create({
     data: {
@@ -50,12 +36,10 @@ export async function createSchedule(input: ScheduleInput) {
 }
 
 export async function updateSchedule(id: number, input: ScheduleInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = scheduleSchema.parse(input);
   const existing = await prisma.projectSchedule.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectSchedule.update({
     where: { id, projectId: data.projectId },
     data: {
@@ -83,11 +67,10 @@ export async function adminPatchSchedule(
   patch: Partial<{ taskName: string; planStart: string; planEnd: string; actualStart: string | null; actualEnd: string | null; pctComplete: number; note: string }>,
   projectId: number,
 ) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectSchedule.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId: existing.projectId } });
+  await requireActiveAdmin();
   const data: Record<string, unknown> = {};
   if (patch.taskName !== undefined) data.taskName = patch.taskName;
   if (patch.planStart !== undefined) data.planStart = new Date(patch.planStart);
@@ -102,11 +85,9 @@ export async function adminPatchSchedule(
 }
 
 export async function softDeleteSchedule(id: number, projectId: number) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectSchedule.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectSchedule.update({
     where: { id, projectId },
     data: { deletedAt: new Date() },

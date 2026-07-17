@@ -1,10 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
-import { auth } from "@/lib/auth";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { prisma } from "@/lib/prisma";
 import { getChiTieuReport } from "@/lib/sl-dt/report-service";
@@ -17,16 +15,6 @@ import {
   findFutureMonths,
   prevMonth as prevMonthRef,
 } from "@/lib/sl-dt/recompute";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 const D = (n: number | null | undefined): Prisma.Decimal | null =>
   n == null ? null : new Prisma.Decimal(n);
@@ -61,8 +49,7 @@ export async function adminPatchChiTieuRow(
   patch: Record<string, unknown>,
 ): Promise<{ futureMonthsCount: number }> {
   await requireReleasedModuleRequest("sl-dt");
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "sl-dt", "admin");
+  await requireActiveAdmin();
 
   const curData: Record<string, Prisma.Decimal | null> = {};
   const prevData: Record<string, Prisma.Decimal | null> = {};
@@ -158,8 +145,7 @@ export async function cascadeRecomputeLuyKe(
   month: number,
 ): Promise<{ cascaded: number }> {
   await requireReleasedModuleRequest("sl-dt");
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "sl-dt", "admin");
+  await requireActiveAdmin();
 
   const cascaded = await prisma.$transaction(async (tx) => {
     return cascadeFutureMonths(tx, lotId, year, month);
@@ -178,8 +164,7 @@ export async function calculateMonthlyTargets(
   month: number,
 ): Promise<{ updated: number; skipped: number }> {
   await requireReleasedModuleRequest("sl-dt");
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "sl-dt", "admin");
+  await requireActiveAdmin();
 
   const reportRows = (await getChiTieuReport(year, month)).filter((r) => r.kind === "lot" && r.lotId != null);
   const lots = await prisma.slDtLot.findMany({
@@ -264,8 +249,7 @@ export async function setSubtotalLabel(
   label: string,
 ): Promise<void> {
   await requireReleasedModuleRequest("sl-dt");
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "sl-dt", "admin");
+  await requireActiveAdmin();
   const trimmed = label.trim();
   const existing = await prisma.slDtSubtotalLabel.findUnique({
     where: { scope_key: { scope, key } },

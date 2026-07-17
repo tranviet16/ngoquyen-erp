@@ -13,8 +13,8 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
@@ -42,8 +42,7 @@ const ID_PATTERN = /^[a-z][a-z0-9_-]*$/;
 async function assertPermissionsAdmin(): Promise<string> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Phiên đăng nhập đã hết hạn");
-  await requireRoleModuleAccess(session.user.role, "admin.permissions", "admin");
-  return session.user.id;
+  return requireActiveAdmin();
 }
 
 function validatePermissions(

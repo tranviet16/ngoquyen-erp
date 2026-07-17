@@ -59,6 +59,10 @@ interface Props {
   partyLabel: string;
   defaults: { entityId: number; partyId: number };
   actions: TxActions;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  isAdmin?: boolean;
   role?: string;
 }
 
@@ -108,7 +112,10 @@ export function LedgerTransactionGrid({
   partyLabel,
   defaults,
   actions,
-  role,
+  canCreate,
+  canEdit,
+  canDelete,
+  isAdmin = false,
 }: Props) {
   const router = useRouter();
 
@@ -136,23 +143,21 @@ export function LedgerTransactionGrid({
   );
 
   const handlers: DataGridHandlers<TxRow> = {
-    onCellEdit: async (rowId, col, value) => {
-      const isAdmin = role === "admin";
+    ...(canEdit ? { onCellEdit: async (rowId: number, col: string, value: unknown) => {
       const useAdmin = isAdmin && actions.adminPatch && ADMIN_RAW_COLS.has(col as keyof TxRow);
       const updated = useAdmin
         ? await actions.adminPatch!(rowId, { [col]: value })
         : await actions.patch(rowId, { [col]: value });
       router.refresh();
       return dbTxToRow(updated as Record<string, unknown>);
-    },
-    onBulkPaste: async (patches) => {
+    }, onBulkPaste: async (patches: Array<Partial<TxRow>>) => {
       const result = await actions.bulkUpsert(
         patches.map((p) => p as Record<string, unknown> & { id?: number }),
       );
       router.refresh();
       return (result as Record<string, unknown>[]).map(dbTxToRow);
-    },
-    onAddRow: async (template) => {
+    } } : {}),
+    ...(canCreate ? { onAddRow: async (template: Partial<TxRow>) => {
       const today = new Date().toISOString().slice(0, 10);
       const stub: Record<string, unknown> = {
         date: today,
@@ -179,11 +184,11 @@ export function LedgerTransactionGrid({
         toast.error(err instanceof Error ? err.message : "Lỗi tạo dòng — chọn Chủ thể & đối tác trước");
         throw err;
       }
-    },
-    onDeleteRows: async (ids) => {
+    } } : {}),
+    ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
       await actions.softDeleteMany(ids);
       router.refresh();
-    },
+    } } : {}),
   };
 
   return (
@@ -192,7 +197,7 @@ export function LedgerTransactionGrid({
       rows={initialData}
       handlers={handlers}
       height={600}
-      role={role}
+      role={isAdmin ? "admin" : undefined}
     />
   );
 }

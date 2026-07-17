@@ -1,22 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { cashflowSchema, type CashflowInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listCashflows(projectId: number) {
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
@@ -53,9 +41,7 @@ export async function getCashflowSummary(projectId: number) {
 }
 
 export async function createCashflow(input: CashflowInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
+  await requireReleasedModuleRequest("du-an", { minLevel: "create", scope: { kind: "project", projectId: input.projectId } });
   const data = cashflowSchema.parse(input);
   const record = await prisma.project3WayCashflow.create({
     data: {
@@ -76,12 +62,10 @@ export async function createCashflow(input: CashflowInput) {
 }
 
 export async function updateCashflow(id: number, input: CashflowInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = cashflowSchema.parse(input);
   const existing = await prisma.project3WayCashflow.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.project3WayCashflow.update({
     where: { id, projectId: data.projectId },
     data: {
@@ -109,11 +93,10 @@ export async function adminPatchCashflow(
   patch: Partial<{ payerName: string; payeeName: string; amountVnd: number; batch: string; refDoc: string; note: string }>,
   projectId: number,
 ) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.project3WayCashflow.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId: existing.projectId } });
+  await requireActiveAdmin();
   const data: Record<string, unknown> = {};
   if (patch.payerName !== undefined) data.payerName = patch.payerName;
   if (patch.payeeName !== undefined) data.payeeName = patch.payeeName;
@@ -127,11 +110,9 @@ export async function adminPatchCashflow(
 }
 
 export async function softDeleteCashflow(id: number, projectId: number) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.project3WayCashflow.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.project3WayCashflow.update({
     where: { id, projectId },
     data: { deletedAt: new Date() },

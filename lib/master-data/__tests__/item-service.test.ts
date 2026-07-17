@@ -13,6 +13,7 @@ const mockAvailability = vi.hoisted(() => ({
   requireReleasedModuleRequest: vi.fn(),
   isModuleReleased: vi.fn(),
 }));
+const mockRequireActiveAdmin = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn().mockResolvedValue(new Headers()) }));
@@ -22,6 +23,9 @@ vi.mock("@/lib/acl/module-availability", () => ({
 }));
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: mockAvailability.requireReleasedModuleRequest,
+}));
+vi.mock("@/lib/admin/require-active-admin", () => ({
+  requireActiveAdmin: () => mockRequireActiveAdmin(),
 }));
 
 import {
@@ -37,6 +41,7 @@ beforeEach(() => {
   mockAvailability.requireReleasedModuleRequest.mockResolvedValue({ userId: "admin-1", role: "admin" });
   mockAvailability.isModuleReleased.mockResolvedValue(true);
   mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
+  mockRequireActiveAdmin.mockResolvedValue("admin-1");
 });
 
 describe("listItems", () => {
@@ -76,13 +81,13 @@ describe("getItemById", () => {
 });
 
 describe("item-service RBAC", () => {
-  it("createItem rejects a viewer", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "viewer" } });
-    await expect(createItem({} as never)).rejects.toThrow(/Forbidden/);
+  it("createItem rejects an inactive/non-admin session", async () => {
+    mockRequireActiveAdmin.mockRejectedValue(new Error("TÃ i khoáº£n Ä‘Ã£ bá»‹ vÃ´ hiá»‡u hÃ³a"));
+    await expect(createItem({} as never)).rejects.toThrow(/vÃ´ hiá»‡u hÃ³a/);
   });
 
-  it("softDeleteItem rejects a non-admin (ketoan)", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "ketoan" } });
-    await expect(softDeleteItem(1)).rejects.toThrow(/Forbidden/);
+  it("softDeleteItem rejects a non-admin session", async () => {
+    mockRequireActiveAdmin.mockRejectedValue(new Error("Chá»‰ admin Ä‘Æ°á»£c thao tÃ¡c"));
+    await expect(softDeleteItem(1)).rejects.toThrow(/Chá»‰ admin/);
   });
 });

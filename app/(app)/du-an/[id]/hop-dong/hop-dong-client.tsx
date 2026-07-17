@@ -86,9 +86,12 @@ interface Props {
   initialData: ContractRow[];
   /** Warning threshold in days from ProjectSettings (default 90) */
   warningDays?: number;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
-export function HopDongClient({ projectId, initialData, warningDays = 90 }: Props) {
+export function HopDongClient({ projectId, initialData, warningDays = 90, canCreate, canEdit, canDelete }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [currentTime] = useState(Date.now);
@@ -217,7 +220,7 @@ export function HopDongClient({ projectId, initialData, warningDays = 90 }: Prop
             Sửa trực tiếp trong bảng. Cảnh báo các tài liệu sắp hết hạn trong {warningDays} ngày tới.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>Thêm mới</Button>
+        <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm mới</Button>
       </div>
 
       {(expired > 0 || expiringSoon > 0) && (
@@ -238,7 +241,7 @@ export function HopDongClient({ projectId, initialData, warningDays = 90 }: Prop
       <DataGrid<ContractGridRow>
         columns={columns}
         rows={rows}
-        handlers={handlers}
+        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
         height={500}
       />
 

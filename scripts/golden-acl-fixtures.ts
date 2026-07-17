@@ -65,17 +65,17 @@ const FIXTURES: Fixture[] = [
     expected: true,
   },
   {
-    label: "admin / admin.import / admin",
+    label: "admin / admin.import / read",
     role: "admin",
     moduleKey: "admin.import",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: true,
   },
   {
-    label: "admin / admin.permissions / admin",
+    label: "admin / admin.permissions / read",
     role: "admin",
     moduleKey: "admin.permissions",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: true,
   },
   {
@@ -123,10 +123,10 @@ const FIXTURES: Fixture[] = [
     expected: false,
   },
   {
-    label: "viewer / admin.import / admin (no access)",
+    label: "viewer / admin.import / read (no access)",
     role: "viewer",
     moduleKey: "admin.import",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: false,
   },
   {
@@ -185,17 +185,17 @@ const FIXTURES: Fixture[] = [
     expected: true,
   },
   {
-    label: "ketoan / admin.import / admin (no access — admin-axis)",
+    label: "ketoan / admin.import / read (no access — admin-axis)",
     role: "ketoan",
     moduleKey: "admin.import",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: false,
   },
   {
-    label: "ketoan / master-data / admin (no access — admin-axis)",
+    label: "ketoan / master-data / read (no access — admin-axis)",
     role: "ketoan",
     moduleKey: "master-data",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: false,
   },
   {
@@ -264,10 +264,10 @@ const FIXTURES: Fixture[] = [
     expected: false,
   },
   {
-    label: "canbo_vt / admin.import / admin (no access)",
+    label: "canbo_vt / admin.import / read (no access)",
     role: "canbo_vt",
     moduleKey: "admin.import",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: false,
   },
 
@@ -280,10 +280,10 @@ const FIXTURES: Fixture[] = [
     expected: true,
   },
   {
-    label: "chihuy_ct / admin.nguoi-dung / admin (no access)",
+    label: "chihuy_ct / admin.nguoi-dung / read (no access)",
     role: "chihuy_ct",
     moduleKey: "admin.nguoi-dung",
-    opts: { minLevel: "admin", scope: "module" },
+    opts: { minLevel: "read", scope: "module" },
     expected: false,
   },
 ];

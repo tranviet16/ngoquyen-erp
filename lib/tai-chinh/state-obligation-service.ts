@@ -3,16 +3,15 @@
 /**
  * Server actions for the State Obligations module.
  * List functions skip auth (the /tai-chinh layout already guards the module).
- * Mutations enforce `requireRoleModuleAccess(role, "tai-chinh", ...)`.
+ * Mutations require an active administrator session.
  * Txn writes delegate JournalEntry sync to `state-obligation-internal.ts`.
  */
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import {
-  getRole,
   revalidateObligation,
   createTxnWithSync,
   updateTxnWithSync,
@@ -89,8 +88,8 @@ function typeData(row: Record<string, unknown>, current: TypeRow | null) {
 export async function bulkUpsertObligationTypes(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   if (!rows.length) return [];
   const out = await prisma.$transaction(async (tx) => {
     const results: TypeRow[] = [];
@@ -111,8 +110,8 @@ export async function bulkUpsertObligationTypes(
 }
 
 export async function softDeleteObligationTypes(ids: number[]) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "admin");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   if (!ids.length) return;
   // Deleting a type would silently drop its txns from the report (which joins
   // on a non-deleted type), so refuse while live txns still reference it.
@@ -177,8 +176,8 @@ async function typeNameOf(tx: ObligationTx, typeId: number): Promise<string> {
 export async function bulkUpsertObligationTxns(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   if (!rows.length) return [];
   const out = await prisma.$transaction(async (tx) => {
     const results: TxnRow[] = [];
@@ -203,8 +202,8 @@ export async function bulkUpsertObligationTxns(
 }
 
 export async function softDeleteObligationTxns(ids: number[]) {
-  const role = await getRole();
-  await requireRoleModuleAccess(role, "tai-chinh", "edit");
+  await requireReleasedModuleRequest("tai-chinh");
+  await requireActiveAdmin();
   if (!ids.length) return;
   await prisma.$transaction(async (tx) => {
     for (const id of ids) {

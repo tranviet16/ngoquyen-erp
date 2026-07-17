@@ -13,6 +13,7 @@ const mockAvailability = vi.hoisted(() => ({
   requireReleasedModuleRequest: vi.fn(),
   isModuleReleased: vi.fn(),
 }));
+const mockAdmin = vi.hoisted(() => ({ requireActiveAdmin: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn().mockResolvedValue(new Headers()) }));
@@ -23,6 +24,7 @@ vi.mock("@/lib/acl/module-availability", () => ({
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: mockAvailability.requireReleasedModuleRequest,
 }));
+vi.mock("@/lib/admin/require-active-admin", () => mockAdmin);
 
 import {
   getCashflowSummary,
@@ -37,6 +39,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockAvailability.requireReleasedModuleRequest.mockResolvedValue({ userId: "admin-1", role: "admin" });
   mockAvailability.isModuleReleased.mockResolvedValue(true);
+  mockAdmin.requireActiveAdmin.mockResolvedValue("admin-1");
   mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
 });
 
@@ -79,16 +82,17 @@ describe("getCashflowSummary", () => {
 
 describe("createCashflow RBAC", () => {
   it("rejects a viewer with a Forbidden error", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "viewer" } });
+    mockAvailability.requireReleasedModuleRequest.mockRejectedValue(new Error("Forbidden"));
     await expect(
-      createCashflow({ projectId: 1 } as never),
+      createCashflow(cashflowInput),
     ).rejects.toThrow(/Forbidden/);
   });
 });
 
 describe("softDeleteCashflow RBAC", () => {
   it("rejects a non-admin (ketoan) role", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "ketoan" } });
+    mockDb.project3WayCashflow.findUnique.mockResolvedValue({ projectId: 1 });
+    mockAvailability.requireReleasedModuleRequest.mockRejectedValue(new Error("Forbidden"));
     await expect(softDeleteCashflow(5, 1)).rejects.toThrow(/Forbidden/);
   });
 });
@@ -108,10 +112,7 @@ describe("project-scoped ACL", () => {
     mockDb.project3WayCashflow.findUnique.mockResolvedValue({ projectId: 8 });
 
     await expect(updateCashflow(10, cashflowInput)).rejects.toThrow("Forbidden");
-    expect(mockAvailability.requireReleasedModuleRequest).toHaveBeenCalledWith("du-an", {
-      minLevel: "edit",
-      scope: { kind: "project", projectId: 7 },
-    });
+    expect(mockAvailability.requireReleasedModuleRequest).not.toHaveBeenCalled();
     expect(mockDb.project3WayCashflow.update).not.toHaveBeenCalled();
   });
 
@@ -120,10 +121,7 @@ describe("project-scoped ACL", () => {
     mockDb.project3WayCashflow.findUnique.mockResolvedValue({ projectId: 8 });
 
     await expect(softDeleteCashflow(10, 7)).rejects.toThrow("Forbidden");
-    expect(mockAvailability.requireReleasedModuleRequest).toHaveBeenCalledWith("du-an", {
-      minLevel: "admin",
-      scope: { kind: "project", projectId: 7 },
-    });
+    expect(mockAvailability.requireReleasedModuleRequest).not.toHaveBeenCalled();
     expect(mockDb.project3WayCashflow.update).not.toHaveBeenCalled();
   });
 

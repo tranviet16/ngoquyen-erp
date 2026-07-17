@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   getSession: vi.fn(),
   requireReleasedModuleRequest: vi.fn(),
+  requireActiveAdmin: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -25,9 +26,7 @@ vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: mocks.requireReleasedModuleRequest,
 }));
-vi.mock("@/lib/acl/role-permissions", () => ({
-  requireRoleModuleAccess: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/admin/require-active-admin", () => ({ requireActiveAdmin: mocks.requireActiveAdmin }));
 
 import { adminPatchChangeOrder } from "@/lib/du-an/change-order-service";
 
@@ -35,6 +34,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.getSession.mockResolvedValue({ user: { role: "admin" } });
   mocks.requireReleasedModuleRequest.mockResolvedValue({ userId: "admin-1", role: "admin" });
+  mocks.requireActiveAdmin.mockResolvedValue("admin-1");
   mocks.findUnique.mockResolvedValue({ projectId: 7 });
   mocks.update.mockResolvedValue({ id: 10 });
 });

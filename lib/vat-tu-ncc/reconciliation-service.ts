@@ -1,23 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { reconciliationSchema, type ReconciliationInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listReconciliations(supplierId: number) {
   await requireReleasedModuleRequest("vat-tu-ncc");
@@ -28,8 +15,7 @@ export async function listReconciliations(supplierId: number) {
 }
 
 export async function createReconciliation(input: ReconciliationInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
+  await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
   const data = reconciliationSchema.parse(input);
   const closingBalance = new Prisma.Decimal(data.openingBalance)
     .add(new Prisma.Decimal(data.totalIn))
@@ -53,14 +39,15 @@ export async function createReconciliation(input: ReconciliationInput) {
 }
 
 export async function updateReconciliation(id: number, input: ReconciliationInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "vat-tu-ncc", "edit");
   const data = reconciliationSchema.parse(input);
+  const existing = await prisma.supplierReconciliation.findUnique({ where: { id }, select: { supplierId: true } });
+  if (!existing || existing.supplierId !== data.supplierId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
   const closingBalance = new Prisma.Decimal(data.openingBalance)
     .add(new Prisma.Decimal(data.totalIn))
     .sub(new Prisma.Decimal(data.totalPaid));
   const record = await prisma.supplierReconciliation.update({
-    where: { id },
+    where: { id, supplierId: existing.supplierId },
     data: {
       periodFrom: new Date(data.periodFrom),
       periodTo: new Date(data.periodTo),
@@ -79,10 +66,11 @@ export async function updateReconciliation(id: number, input: ReconciliationInpu
 }
 
 export async function softDeleteReconciliation(id: number, supplierId: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "vat-tu-ncc", "admin");
+  const existing = await prisma.supplierReconciliation.findUnique({ where: { id }, select: { supplierId: true } });
+  if (!existing || existing.supplierId !== supplierId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
   const record = await prisma.supplierReconciliation.update({
-    where: { id },
+    where: { id, supplierId: existing.supplierId },
     data: { deletedAt: new Date() },
   });
   revalidatePath(`/vat-tu-ncc/${supplierId}/doi-chieu`);

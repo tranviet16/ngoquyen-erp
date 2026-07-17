@@ -1,12 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
-import { LedgerService } from "@/lib/ledger/ledger-service";
+import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
 import { transactionSchema, openingBalanceSchema } from "./schemas";
 import type { TransactionInput, OpeningBalanceInput } from "./schemas";
@@ -20,16 +18,6 @@ const REVALIDATE_PATHS = [
 ];
 
 const service = new LedgerService("labor");
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function revalidateAll() {
   for (const p of REVALIDATE_PATHS) revalidatePath(p);
@@ -51,8 +39,7 @@ export async function listLaborTransactions(filter?: Parameters<typeof service.l
 }
 
 export async function createLaborTransaction(input: TransactionInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "create", scope: "module" });
   const data = transactionSchema.parse(input);
   await assertContractorExists(data.partyId);
   const tx = await service.create(data);
@@ -61,8 +48,9 @@ export async function createLaborTransaction(input: TransactionInput) {
 }
 
 export async function updateLaborTransaction(id: number, input: TransactionInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
+  const current = await prisma.ledgerTransaction.findUnique({ where: { id }, select: { ledgerType: true, deletedAt: true } });
+  if (!current || current.ledgerType !== "labor" || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
   const data = transactionSchema.parse(input);
   await assertContractorExists(data.partyId);
   const tx = await service.update(id, data);
@@ -71,15 +59,17 @@ export async function updateLaborTransaction(id: number, input: TransactionInput
 }
 
 export async function softDeleteLaborTransaction(id: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
+  const current = await prisma.ledgerTransaction.findUnique({ where: { id }, select: { ledgerType: true } });
+  if (!current || current.ledgerType !== "labor") throw new Error(`Giao dịch #${id} không tồn tại`);
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
   await service.softDelete(id);
   revalidateAll();
 }
 
 export async function softDeleteLaborTransactions(ids: number[]) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
+  const records = await prisma.ledgerTransaction.findMany({ where: { id: { in: ids } }, select: { id: true, ledgerType: true } });
+  if (records.length !== ids.length || records.some((record) => record.ledgerType !== "labor")) throw new Error("Có giao dịch không hợp lệ");
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
   for (const id of ids) await service.softDelete(id);
   revalidateAll();
 }
@@ -87,11 +77,12 @@ export async function softDeleteLaborTransactions(ids: number[]) {
 export async function patchLaborTransaction(
   id: number,
   patch: Record<string, unknown>,
+  client: LedgerWriteClient = prisma,
+  authorized = false,
 ) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
-  const current = await prisma.ledgerTransaction.findUnique({ where: { id } });
-  if (!current || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
+  const current = await client.ledgerTransaction.findUnique({ where: { id } });
+  if (!current || current.ledgerType !== "labor" || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
+  if (!authorized) await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
 
   const merged: TransactionInput = {
     date: (patch.date as string | undefined) ?? current.date.toISOString(),
@@ -115,7 +106,7 @@ export async function patchLaborTransaction(
 
   const validated = transactionSchema.parse(merged);
   await assertContractorExists(validated.partyId);
-  const tx = await service.update(id, validated);
+  const tx = await service.update(id, validated, client);
   revalidateAll();
   return tx;
 }
@@ -127,8 +118,10 @@ export async function adminPatchLaborTransaction(
   id: number,
   patch: Partial<{ vatTt: number | string; totalTt: number | string; vatHd: number | string; totalHd: number | string }>,
 ) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
+  const current = await prisma.ledgerTransaction.findUnique({ where: { id }, select: { ledgerType: true } });
+  if (!current || current.ledgerType !== "labor") throw new Error(`Giao dịch #${id} không tồn tại`);
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "read", scope: "module" });
+  await requireActiveAdmin();
   const data: Record<string, unknown> = {};
   if (patch.vatTt !== undefined) data.vatTt = String(patch.vatTt ?? "0");
   if (patch.totalTt !== undefined) data.totalTt = String(patch.totalTt ?? "0");
@@ -145,19 +138,28 @@ export async function adminPatchLaborTransaction(
 export async function bulkUpsertLaborTransactions(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
-  const results: unknown[] = [];
-  for (const row of rows) {
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
+  const updateIds = rows.flatMap((row) => row.id != null && row.id > 0 ? [row.id] : []);
+  const existing = updateIds.length === 0
+    ? []
+    : await prisma.ledgerTransaction.findMany({ where: { id: { in: updateIds } }, select: { id: true, ledgerType: true, deletedAt: true } });
+  if (existing.length !== updateIds.length || existing.some((row) => row.ledgerType !== "labor" || row.deletedAt)) {
+    throw new Error("Có giao dịch không hợp lệ");
+  }
+  const results = await prisma.$transaction(async (client) => {
+    const writes: unknown[] = [];
+    for (const row of rows) {
     const { id, ...rest } = row;
     if (id != null && id > 0) {
-      results.push(await patchLaborTransaction(id, rest));
+        writes.push(await patchLaborTransaction(id, rest, client, true));
     } else {
       const validated = transactionSchema.parse(rest);
       await assertContractorExists(validated.partyId);
-      results.push(await service.create(validated));
+        writes.push(await service.create(validated, client));
     }
-  }
+    }
+    return writes;
+  });
   revalidateAll();
   return results;
 }
@@ -170,8 +172,7 @@ export async function listLaborOpeningBalances(filter?: Parameters<typeof servic
 }
 
 export async function setLaborOpeningBalance(input: OpeningBalanceInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
   const data = openingBalanceSchema.parse(input);
   await assertContractorExists(data.partyId);
   const ob = await service.setOpeningBalance(data);
@@ -180,15 +181,17 @@ export async function setLaborOpeningBalance(input: OpeningBalanceInput) {
 }
 
 export async function deleteLaborOpeningBalance(id: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
+  const current = await prisma.ledgerOpeningBalance.findUnique({ where: { id }, select: { ledgerType: true } });
+  if (!current || current.ledgerType !== "labor") throw new Error(`Số dư #${id} không tồn tại`);
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
   await service.deleteOpeningBalance(id);
   revalidateAll();
 }
 
 export async function deleteLaborOpeningBalances(ids: number[]) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "admin");
+  const records = await prisma.ledgerOpeningBalance.findMany({ where: { id: { in: ids } }, select: { id: true, ledgerType: true } });
+  if (records.length !== ids.length || records.some((record) => record.ledgerType !== "labor")) throw new Error("Có số dư không hợp lệ");
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
   for (const id of ids) await service.deleteOpeningBalance(id);
   revalidateAll();
 }
@@ -196,11 +199,12 @@ export async function deleteLaborOpeningBalances(ids: number[]) {
 export async function patchLaborOpeningBalance(
   id: number,
   patch: Record<string, unknown>,
+  client: LedgerWriteClient = prisma,
+  authorized = false,
 ) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
-  const current = await prisma.ledgerOpeningBalance.findUnique({ where: { id } });
-  if (!current) throw new Error(`Số dư #${id} không tồn tại`);
+  const current = await client.ledgerOpeningBalance.findUnique({ where: { id } });
+  if (!current || current.ledgerType !== "labor") throw new Error(`Số dư #${id} không tồn tại`);
+  if (!authorized) await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
 
   const merged: OpeningBalanceInput = {
     entityId: (patch.entityId as number | undefined) ?? current.entityId,
@@ -214,7 +218,7 @@ export async function patchLaborOpeningBalance(
 
   const validated = openingBalanceSchema.parse(merged);
   await assertContractorExists(validated.partyId);
-  const ob = await service.setOpeningBalance(validated);
+  const ob = await service.setOpeningBalance(validated, client);
   revalidateAll();
   return ob;
 }
@@ -222,19 +226,28 @@ export async function patchLaborOpeningBalance(
 export async function bulkUpsertLaborOpeningBalances(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "cong-no-nc", "edit");
-  const results: unknown[] = [];
-  for (const row of rows) {
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
+  const updateIds = rows.flatMap((row) => row.id != null && row.id > 0 ? [row.id] : []);
+  const existing = updateIds.length === 0
+    ? []
+    : await prisma.ledgerOpeningBalance.findMany({ where: { id: { in: updateIds } }, select: { id: true, ledgerType: true } });
+  if (existing.length !== updateIds.length || existing.some((row) => row.ledgerType !== "labor")) {
+    throw new Error("Có số dư không hợp lệ");
+  }
+  const results = await prisma.$transaction(async (client) => {
+    const writes: unknown[] = [];
+    for (const row of rows) {
     const { id, ...rest } = row;
     if (id != null && id > 0) {
-      results.push(await patchLaborOpeningBalance(id, rest));
+        writes.push(await patchLaborOpeningBalance(id, rest, client, true));
     } else {
       const validated = openingBalanceSchema.parse(rest);
       await assertContractorExists(validated.partyId);
-      results.push(await service.setOpeningBalance(validated));
+        writes.push(await service.setOpeningBalance(validated, client));
     }
-  }
+    }
+    return writes;
+  });
   revalidateAll();
   return results;
 }

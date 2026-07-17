@@ -23,10 +23,11 @@ describe("hasDeptAccess (pure)", () => {
     expect(hasDeptAccess(map, 999, "read")).toBe(true);
   });
 
-  it("scoped access compares against the level order read < comment < edit", () => {
-    const map: DeptAccessMap = { scope: "scoped", grants: new Map([[7, "comment"]]) };
+  it("scoped access compares read < comment < create < edit", () => {
+    const map: DeptAccessMap = { scope: "scoped", grants: new Map([[7, "create"]]) };
     expect(hasDeptAccess(map, 7, "read")).toBe(true);
     expect(hasDeptAccess(map, 7, "comment")).toBe(true);
+    expect(hasDeptAccess(map, 7, "create")).toBe(true);
     expect(hasDeptAccess(map, 7, "edit")).toBe(false);
   });
 
@@ -57,6 +58,14 @@ describe("getDeptAccessMap", () => {
   it("returns scope 'all' for a director", async () => {
     mockDb.user.findUnique.mockResolvedValue({ role: "viewer", isDirector: true, departmentId: 3 });
     expect((await getDeptAccessMap("u1")).scope).toBe("all");
+  });
+
+  it("fails closed for an inactive director", async () => {
+    mockDb.user.findUnique.mockResolvedValue({
+      role: "viewer", isActive: false, isDirector: true, departmentId: 3,
+    });
+    expect(await getDeptAccessMap("u1")).toEqual({ scope: "scoped", grants: new Map() });
+    expect(mockDb.userDeptAccess.findMany).not.toHaveBeenCalled();
   });
 
   it("gives edit on the home department and merges the highest explicit grant", async () => {

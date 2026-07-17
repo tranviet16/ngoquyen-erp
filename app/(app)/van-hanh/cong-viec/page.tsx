@@ -12,6 +12,7 @@ import { listViewableDeptIds } from "@/lib/dept-access";
 import { KanbanClient } from "./kanban-client";
 import { OverdueSummary } from "./overdue-summary";
 import { serializeDecimals } from "@/lib/serialize";
+import { canAccess } from "@/lib/acl/effective";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +85,22 @@ export default async function Page({
     viewableIds === "all"
       ? allDepartments
       : allDepartments.filter((d) => viewableIds.includes(d.id));
+  const taskDepartments = departments.map((department) => department.id);
+  const capabilityEntries = await Promise.all(
+    taskDepartments.map(async (departmentId) => {
+      const scope = { kind: "dept" as const, deptId: departmentId };
+      const [canCreate, canEdit, canComment] = await Promise.all([
+        canAccess(session.user.id, "van-hanh.cong-viec", { minLevel: "create", scope }),
+        canAccess(session.user.id, "van-hanh.cong-viec", { minLevel: "edit", scope }),
+        canAccess(session.user.id, "van-hanh.cong-viec", { minLevel: "comment", scope }),
+      ]);
+      return [departmentId, { canCreate, canEdit, canDelete: canEdit, canComment }] as const;
+    }),
+  );
+  const taskCapabilities = Object.fromEntries(capabilityEntries);
+  const creatableDepartmentIds = departments
+    .filter((department) => taskCapabilities[department.id]?.canCreate)
+    .map((department) => department.id);
 
   return (
     <div className="space-y-3">
@@ -98,10 +115,10 @@ export default async function Page({
       members={members}
       viewableMembers={viewableMembers}
       currentUserId={session.user.id}
-      currentRole={session.user.role ?? "viewer"}
       currentDeptId={ctx?.departmentId ?? null}
-      currentIsLeader={ctx?.isLeader ?? false}
-      currentIsDirector={ctx?.isDirector ?? false}
+      canCreate={creatableDepartmentIds.length > 0}
+      creatableDepartmentIds={creatableDepartmentIds}
+      taskCapabilities={taskCapabilities}
       view={sp.view === "swimlane" ? "swimlane" : "kanban"}
       filters={{
         deptId: queryDeptId ?? null,

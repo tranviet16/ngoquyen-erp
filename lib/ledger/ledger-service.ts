@@ -23,6 +23,8 @@ import {
   queryDebtMatrix,
 } from "./ledger-aggregations";
 
+export type LedgerWriteClient = Pick<typeof prisma, "ledgerTransaction" | "ledgerOpeningBalance">;
+
 /** Compute vat + total from amount + vatPct */
 function computeTotals(amount: Prisma.Decimal, vatPct: Prisma.Decimal) {
   const vat = amount.times(vatPct);
@@ -65,7 +67,7 @@ export class LedgerService {
     return { items, total, page, pageSize };
   }
 
-  async create(input: LedgerTransactionInput) {
+  async create(input: LedgerTransactionInput, client: LedgerWriteClient = prisma) {
     const amountTt = new Prisma.Decimal(input.amountTt);
     const vatPctTt = new Prisma.Decimal(input.vatPctTt ?? "0");
     const { vat: vatTt, total: totalTt } = computeTotals(amountTt, vatPctTt);
@@ -74,7 +76,7 @@ export class LedgerService {
     const vatPctHd = new Prisma.Decimal(input.vatPctHd ?? "0");
     const { vat: vatHd, total: totalHd } = computeTotals(amountHd, vatPctHd);
 
-    return prisma.ledgerTransaction.create({
+    return client.ledgerTransaction.create({
       data: {
         ledgerType: this.ledgerType,
         date: new Date(input.date),
@@ -100,7 +102,7 @@ export class LedgerService {
     });
   }
 
-  async update(id: number, input: LedgerTransactionInput) {
+  async update(id: number, input: LedgerTransactionInput, client: LedgerWriteClient = prisma) {
     const amountTt = new Prisma.Decimal(input.amountTt);
     const vatPctTt = new Prisma.Decimal(input.vatPctTt ?? "0");
     const { vat: vatTt, total: totalTt } = computeTotals(amountTt, vatPctTt);
@@ -109,7 +111,7 @@ export class LedgerService {
     const vatPctHd = new Prisma.Decimal(input.vatPctHd ?? "0");
     const { vat: vatHd, total: totalHd } = computeTotals(amountHd, vatPctHd);
 
-    return prisma.ledgerTransaction.update({
+    return client.ledgerTransaction.update({
       where: { id },
       data: {
         date: new Date(input.date),
@@ -202,9 +204,9 @@ export class LedgerService {
     });
   }
 
-  async setOpeningBalance(input: OpeningBalanceInput) {
+  async setOpeningBalance(input: OpeningBalanceInput, client: LedgerWriteClient = prisma) {
     // No soft-delete on opening balances — use native update or create
-    const existing = await prisma.ledgerOpeningBalance.findFirst({
+    const existing = await client.ledgerOpeningBalance.findFirst({
       where: {
         ledgerType: this.ledgerType,
         entityId: input.entityId,
@@ -221,10 +223,10 @@ export class LedgerService {
     };
 
     if (existing) {
-      return prisma.ledgerOpeningBalance.update({ where: { id: existing.id }, data });
+      return client.ledgerOpeningBalance.update({ where: { id: existing.id }, data });
     }
 
-    return prisma.ledgerOpeningBalance.create({
+    return client.ledgerOpeningBalance.create({
       data: {
         ledgerType: this.ledgerType,
         entityId: input.entityId,

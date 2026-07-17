@@ -8,11 +8,10 @@ import {
   hasDeptAccess,
   type DeptAccessMap,
 } from "@/lib/dept-access";
+import { canAccessEntitlement } from "@/lib/acl/effective";
 import {
-  canMoveTask,
   isValidTaskStatus,
   TASK_STATUSES,
-  type TaskMoveRole,
   type TaskStatus,
 } from "./state-machine";
 import {
@@ -93,46 +92,16 @@ function canViewTask(task: Task, ctx: UserContext, accessMap: DeptAccessMap): bo
   return hasDeptAccess(accessMap, task.deptId, "read");
 }
 
-function canEditTask(task: Task, ctx: UserContext, role: string): boolean {
-  if (role === "admin") return true;
-  if (task.creatorId === ctx.userId) return true;
-  if (ctx.isLeader && ctx.departmentId === task.deptId) return true;
-  return false;
-}
-
-function canAssignTask(task: Task, ctx: UserContext, role: string): boolean {
-  if (role === "admin") return true;
-  if (ctx.isLeader && ctx.departmentId === task.deptId) return true;
-  return false;
-}
-
-function canDeleteTask(task: Task, ctx: UserContext, role: string): boolean {
-  if (role === "admin") return true;
-  if (task.creatorId === ctx.userId && task.status === "todo") return true;
-  return false;
-}
-
-export function assertCanCreateTask(
-  ctx: UserContext,
-  role: string,
+async function assertTaskEntitlement(
+  userId: string,
   deptId: number,
-  assigneeId: string,
-): void {
-  if (role === "admin" || ctx.isDirector) return;
-  const ownDept = ctx.departmentId !== null && ctx.departmentId === deptId;
-  if (ctx.isLeader && ownDept) return;
-  if (ownDept && assigneeId === ctx.userId) return; // self-task
-  throw new Error(
-    "Bạn chỉ được tự tạo task cho mình. Giao việc cho người khác hoặc phòng khác phải qua Phiếu phối hợp công việc.",
-  );
-}
-
-export function moveRole(task: Task, ctx: UserContext, role: string): TaskMoveRole {
-  if (role === "admin") return "admin";
-  if (ctx.isLeader && ctx.departmentId === task.deptId) return "leader";
-  if (task.assigneeId === ctx.userId) return "assignee";
-  if (task.creatorId === ctx.userId) return "creator";
-  return "none";
+  minLevel: "create" | "edit",
+): Promise<void> {
+  const allowed = await canAccessEntitlement(userId, "van-hanh.cong-viec", {
+    minLevel,
+    scope: { kind: "dept", deptId },
+  });
+  if (!allowed) throw new Error("Bạn không có quyền thực hiện thao tác này trên task");
 }
 
 // ─── Queries ────────────────────────────────────────────────────────────────
@@ -238,9 +207,9 @@ export async function getTaskById(id: number): Promise<TaskWithRelations> {
 
 export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
   const data = createTaskSchema.parse(input);
-  const { ctx, role } = await requireContext();
+  const { ctx } = await requireContext();
 
-  assertCanCreateTask(ctx, role, data.deptId, data.assigneeId);
+  await assertTaskEntitlement(ctx.userId, data.deptId, "create");
 
   // Validate dept active
   const dept = await prisma.department.findUnique({ where: { id: data.deptId } });
@@ -287,15 +256,12 @@ export async function createTaskManual(input: CreateTaskInput): Promise<Task> {
 
 export async function updateTask(id: number, input: UpdateTaskInput): Promise<Task> {
   const data = updateTaskSchema.parse(input);
-  const { ctx, role, accessMap } = await requireContext();
+  const { ctx } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.task.findUnique({ where: { id } });
     if (!existing) throw new Error("Không tìm thấy task");
-    const allowedByOldRule = canEditTask(existing, ctx, role);
-    const allowedByGrant = hasDeptAccess(accessMap, existing.deptId, "edit");
-    if (!allowedByOldRule && !allowedByGrant)
-      throw new Error("Bạn không có quyền sửa task này");
+    await assertTaskEntitlement(ctx.userId, existing.deptId, "edit");
     if (existing.status === "done") throw new Error("Task đã hoàn thành, không thể sửa");
 
     const patch: Prisma.TaskUpdateInput = {};
@@ -311,12 +277,12 @@ export async function updateTask(id: number, input: UpdateTaskInput): Promise<Ta
 }
 
 export async function assignTask(id: number, assigneeId: string | null): Promise<Task> {
-  const { ctx, role } = await requireContext();
+  const { ctx } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.task.findUnique({ where: { id } });
     if (!existing) throw new Error("Không tìm thấy task");
-    if (!canAssignTask(existing, ctx, role)) throw new Error("Chỉ lãnh đạo phòng được phân công");
+    await assertTaskEntitlement(ctx.userId, existing.deptId, "edit");
 
     if (assigneeId) {
       const u = await tx.user.findUnique({
@@ -364,7 +330,7 @@ export async function assignTask(id: number, assigneeId: string | null): Promise
 
 export async function moveTask(id: number, toStatus: TaskStatus, toOrder?: number): Promise<Task> {
   if (!isValidTaskStatus(toStatus)) throw new Error("Trạng thái không hợp lệ");
-  const { ctx, role } = await requireContext();
+  const { ctx } = await requireContext();
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.task.findUnique({ where: { id } });
@@ -372,13 +338,7 @@ export async function moveTask(id: number, toStatus: TaskStatus, toOrder?: numbe
 
     const fromStatus = existing.status;
     if (!isValidTaskStatus(fromStatus)) throw new Error("Trạng thái nguồn không hợp lệ");
-
-    const role0 = moveRole(existing, ctx, role);
-    if (!canMoveTask(fromStatus, toStatus, role0, existing.sourceFormId !== null)) {
-      throw new Error(
-        `Bạn không có quyền chuyển task từ "${fromStatus}" sang "${toStatus}"`,
-      );
-    }
+    await assertTaskEntitlement(ctx.userId, existing.deptId, "edit");
 
     const updated = await tx.task.update({
       where: { id },
@@ -449,12 +409,12 @@ export async function maybeBumpParentToReview(
 }
 
 export async function deleteTask(id: number): Promise<void> {
-  const { ctx, role } = await requireContext();
+  const { ctx } = await requireContext();
   await prisma.$transaction(async (tx) => {
     const existing = await tx.task.findUnique({ where: { id } });
     if (!existing) throw new Error("Không tìm thấy task");
-    if (!canDeleteTask(existing, ctx, role))
-      throw new Error("Chỉ creator (khi task ở 'todo') hoặc admin được xoá");
+    await assertTaskEntitlement(ctx.userId, existing.deptId, "edit");
+    if (existing.status !== "todo") throw new Error("Chỉ có thể xoá task ở trạng thái cần làm");
     await tx.task.delete({ where: { id } });
     await logTaskAudit(tx, "delete", existing, null, ctx.userId);
   });

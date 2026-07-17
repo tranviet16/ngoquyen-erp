@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 const mockQueryRaw = vi.fn();
 const mockFindMany = vi.fn();
 const mockFindFirst = vi.fn();
-const mockRequireAccess = vi.fn();
+const mockRequireActiveAdmin = vi.fn();
 const mockBulkUpsert = vi.fn();
 const mockSoftDelete = vi.fn();
 const mockAssertModuleReleased = vi.fn();
@@ -19,16 +19,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
-vi.mock("@/lib/acl/role-permissions", () => ({
-  requireRoleModuleAccess: (...args: unknown[]) => mockRequireAccess(...args),
+vi.mock("@/lib/admin/require-active-admin", () => ({
+  requireActiveAdmin: () => mockRequireActiveAdmin(),
 }));
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: (...args: unknown[]) => mockAssertModuleReleased(...args),
 }));
 
-vi.mock("@/lib/tai-chinh/state-obligation-internal", () => ({
-  getRole: vi.fn(async () => "ke-toan"),
-}));
 
 vi.mock("@/lib/tai-chinh/state-obligation-service", () => ({
   bulkUpsertObligationTxns: (...args: unknown[]) => mockBulkUpsert(...args),
@@ -80,6 +77,7 @@ function rawRow(over: Partial<RawMatrixRow> = {}): RawMatrixRow {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mockRequireActiveAdmin.mockResolvedValue("admin-1");
   mockAssertModuleReleased.mockResolvedValue(undefined);
   mockQueryRaw.mockResolvedValue([]);
   mockFindFirst.mockResolvedValue(null);

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createUserAccount: vi.fn(),
   revalidatePath: vi.fn(),
+  requireActiveAdmin: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: mocks.revalidatePath }));
@@ -16,6 +17,9 @@ vi.mock("@/lib/admin/user-grants-service", () => ({
 }));
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/admin/require-active-admin", () => ({
+  requireActiveAdmin: mocks.requireActiveAdmin,
 }));
 
 import { createUserAccountAction } from "@/app/(app)/admin/nguoi-dung/actions";
@@ -32,6 +36,7 @@ const input = {
 describe("createUserAccountAction", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.requireActiveAdmin.mockResolvedValue("admin-1");
   });
 
   it("returns the service result and revalidates only after success", async () => {

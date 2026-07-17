@@ -61,7 +61,7 @@ interface TxGridRow extends RowWithId {
 }
 
 interface Props {
-  projectId: number; initialData: TxRow[]; categories: CategoryOption[]; role?: string;
+  projectId: number; initialData: TxRow[]; categories: CategoryOption[]; canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean;
 }
 
 function TransactionForm({ projectId, categories, defaultValues, onSubmit }: {
@@ -144,8 +144,7 @@ function TransactionForm({ projectId, categories, defaultValues, onSubmit }: {
   );
 }
 
-export function GiaoDichClient({ projectId, initialData, categories, role }: Props) {
-  const isAdmin = role === "admin";
+export function GiaoDichClient({ projectId, initialData, categories, canCreate, canEdit, canDelete, isAdmin = false }: Props) {
   const ADMIN_RAW_COLS = new Set<keyof TxGridRow>(["amountHd", "amountTt"]);
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -274,20 +273,20 @@ export function GiaoDichClient({ projectId, initialData, categories, role }: Pro
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa đầy đủ
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
         </div>
       </div>
 
       <DataGrid<TxGridRow>
         columns={columns}
         rows={rows}
-        handlers={handlers}
+        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
         height={500}
         onSelectionChange={setSelectedIds}
-        role={role}
+        role={isAdmin ? "admin" : undefined}
       />
 
       <CrudDialog title="Thêm giao dịch" open={createOpen} onOpenChange={setCreateOpen}>

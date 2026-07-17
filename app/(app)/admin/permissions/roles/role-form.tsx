@@ -31,6 +31,10 @@ export interface RoleFormData {
 
 type LevelMap = Partial<Record<ModuleKey, AccessLevel>>;
 
+const GRANTABLE_MODULE_KEYS = MODULE_KEYS.filter(
+  (moduleKey) => MODULE_LEVELS[moduleKey].length > 0,
+);
+
 function toLevelMap(
   perms: { moduleKey: ModuleKey; level: AccessLevel }[],
 ): LevelMap {
@@ -156,7 +160,7 @@ function RoleFormContent({
           )}
 
           <div className="max-h-[44vh] space-y-1 overflow-y-auto rounded border p-2">
-            {MODULE_KEYS.map((mk) => (
+            {GRANTABLE_MODULE_KEYS.map((mk) => (
               <div
                 key={mk}
                 className="flex items-center justify-between gap-2 text-sm"

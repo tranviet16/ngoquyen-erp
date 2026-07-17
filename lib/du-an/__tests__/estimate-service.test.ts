@@ -13,6 +13,7 @@ const mockAvailability = vi.hoisted(() => ({
   requireReleasedModuleRequest: vi.fn(),
   isModuleReleased: vi.fn(),
 }));
+const mockAdmin = vi.hoisted(() => ({ requireActiveAdmin: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/headers", () => ({ headers: vi.fn().mockResolvedValue(new Headers()) }));
@@ -23,6 +24,7 @@ vi.mock("@/lib/acl/module-availability", () => ({
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: mockAvailability.requireReleasedModuleRequest,
 }));
+vi.mock("@/lib/admin/require-active-admin", () => mockAdmin);
 
 import {
   listEstimates,
@@ -38,6 +40,7 @@ beforeEach(() => {
   mockAvailability.isModuleReleased.mockResolvedValue(true);
   mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
   mockDb.projectEstimate.findUnique.mockResolvedValue({ projectId: 1 });
+  mockAdmin.requireActiveAdmin.mockResolvedValue("admin-1");
 });
 
 describe("listEstimates", () => {
@@ -53,17 +56,17 @@ describe("listEstimates", () => {
 
 describe("estimate-service RBAC", () => {
   it("createEstimate rejects a viewer", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "viewer" } });
+    mockAvailability.requireReleasedModuleRequest.mockRejectedValue(new Error("Forbidden"));
     await expect(createEstimate({ projectId: 1 } as never)).rejects.toThrow(/Forbidden/);
   });
 
   it("adminPatchEstimate rejects a non-admin (ketoan)", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "ketoan" } });
+    mockAdmin.requireActiveAdmin.mockRejectedValue(new Error("Forbidden"));
     await expect(adminPatchEstimate(1, { qty: 5 }, 1)).rejects.toThrow(/Forbidden/);
   });
 
   it("softDeleteEstimate rejects a non-admin", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "ketoan" } });
+    mockAvailability.requireReleasedModuleRequest.mockRejectedValue(new Error("Forbidden"));
     await expect(softDeleteEstimate(1, 1)).rejects.toThrow(/Forbidden/);
   });
 });

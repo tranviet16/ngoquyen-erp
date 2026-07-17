@@ -56,9 +56,12 @@ interface ReconGridRow extends RowWithId {
 interface Props {
   supplierId: number;
   initialData: ReconciliationRow[];
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
-export function DoiChieuClient({ supplierId, initialData }: Props) {
+export function DoiChieuClient({ supplierId, initialData, canCreate, canEdit, canDelete }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ReconciliationRow | null>(null);
@@ -108,7 +111,7 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
   };
 
   const handlers: DataGridHandlers<ReconGridRow> = {
-    onCellEdit: async (id, col, value) => {
+    ...(canEdit ? { onCellEdit: async (id: number, col: string, value: unknown) => {
       try {
         await patchRecon(id, { [col]: value } as Partial<ReconGridRow>);
         toast.success("Đã lưu");
@@ -117,13 +120,13 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
         toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
         startTransition(() => router.refresh());
       }
-    },
-    onDeleteRows: async (ids) => {
+    } } : {}),
+    ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
       for (const id of ids) {
         await softDeleteReconciliation(id, supplierId);
       }
       startTransition(() => router.refresh());
-    },
+    } } : {}),
   };
 
   const editSelected = () => {
@@ -177,10 +180,10 @@ export function DoiChieuClient({ supplierId, initialData }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
             Tạo kỳ đối chiếu
           </Button>

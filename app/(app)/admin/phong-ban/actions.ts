@@ -1,10 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import {
   createDepartment,
   updateDepartment,
@@ -13,11 +11,7 @@ import {
   unsetDirector,
 } from "@/lib/department-service";
 
-async function requireAdmin() {
-  const h = await headers();
-  const session = await auth.api.getSession({ headers: h });
-  await requireRoleModuleAccess(session?.user?.role, "admin.phong-ban", "admin");
-}
+const requireAdmin = requireActiveAdmin;
 
 export async function createDepartmentAction(data: { code: string; name: string }) {
   await requireReleasedModuleRequest("admin.phong-ban");

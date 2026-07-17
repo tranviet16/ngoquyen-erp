@@ -1,22 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { changeOrderSchema, type ChangeOrderInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listChangeOrders(projectId: number) {
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
@@ -27,9 +15,7 @@ export async function listChangeOrders(projectId: number) {
 }
 
 export async function createChangeOrder(input: ChangeOrderInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
+  await requireReleasedModuleRequest("du-an", { minLevel: "create", scope: { kind: "project", projectId: input.projectId } });
   const data = changeOrderSchema.parse(input);
   const record = await prisma.projectChangeOrder.create({
     data: {
@@ -57,12 +43,10 @@ export async function createChangeOrder(input: ChangeOrderInput) {
 }
 
 export async function updateChangeOrder(id: number, input: ChangeOrderInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = changeOrderSchema.parse(input);
   const existing = await prisma.projectChangeOrder.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectChangeOrder.update({
     where: { id, projectId: data.projectId },
     data: {
@@ -97,11 +81,10 @@ export async function adminPatchChangeOrder(
   patch: Partial<{ description: string; reason: string; costImpactVnd: number; scheduleImpactDays: number; approvedBy: string; note: string }>,
   projectId: number,
 ) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectChangeOrder.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId: existing.projectId } });
+  await requireActiveAdmin();
   const data: Record<string, unknown> = {};
   if (patch.description !== undefined) data.description = patch.description;
   if (patch.reason !== undefined) data.reason = patch.reason;
@@ -116,11 +99,9 @@ export async function adminPatchChangeOrder(
 }
 
 export async function softDeleteChangeOrder(id: number, projectId: number) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectChangeOrder.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectChangeOrder.update({
     where: { id, projectId },
     data: { deletedAt: new Date() },

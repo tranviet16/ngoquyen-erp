@@ -73,6 +73,7 @@ model Department {
 
   tasks      Task[]
   userAccess UserDeptAccess[]
+  paymentRounds PaymentRound[]
 
   @@map("departments")
 }
@@ -81,7 +82,7 @@ model UserDeptAccess {
   id        Int      @id @default(autoincrement())
   userId    String
   deptId    Int
-  level     String
+  level     String // "read" | "comment" | "create" | "edit"
   grantedAt DateTime @default(now())
   grantedBy String?
 
@@ -576,6 +577,7 @@ model PaymentRound {
   sequence     Int
   status       String    @default("draft") // draft|submitted|approved|rejected|closed
   createdById  String
+  departmentId Int?
   submittedAt  DateTime?
   approvedById String?
   approvedAt   DateTime?
@@ -585,12 +587,14 @@ model PaymentRound {
   deletedAt    DateTime?
 
   createdBy  User               @relation("PaymentRoundCreator", fields: [createdById], references: [id])
+  department Department?        @relation(fields: [departmentId], references: [id])
   approvedBy User?              @relation("PaymentRoundApprover", fields: [approvedById], references: [id])
   items      PaymentRoundItem[]
 
   @@unique([month, sequence])
   @@index([status, month])
   @@index([createdById])
+  @@index([departmentId, month, status])
   @@index([approvedById])
   @@map("payment_rounds")
 }
@@ -1260,7 +1264,7 @@ model Notification {
 model ModulePermission {
   userId    String
   moduleKey String
-  level     String // "read" | "comment" | "edit" | "admin"
+  level     String // "read" | "comment" | "create" | "edit"
   grantedAt DateTime @default(now())
   grantedBy String?
 
@@ -1284,7 +1288,7 @@ model ModuleAvailability {
 model ProjectPermission {
   userId    String
   projectId Int
-  level     String
+  level     String // "read" | "comment" | "create" | "edit"
   grantedAt DateTime @default(now())
   grantedBy String?
 
@@ -1301,7 +1305,7 @@ model ProjectPermission {
 
 model ProjectGrantAll {
   userId    String   @id
-  level     String
+  level     String // "read" | "comment" | "create" | "edit"
   grantedAt DateTime @default(now())
   grantedBy String?
 
@@ -1329,7 +1333,7 @@ model Role {
 model RolePermission {
   roleId    String
   moduleKey String
-  level     String // "read" | "comment" | "edit" | "admin"
+  level     String // "read" | "comment" | "create" | "edit"
 
   role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 

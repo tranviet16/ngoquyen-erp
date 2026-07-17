@@ -1,6 +1,6 @@
-import { requireModuleAccess } from "@/lib/acl/guards";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 
 export default async function AdminNguoiDungLayout({ children }: { children: React.ReactNode }) {
-  await requireModuleAccess("admin.nguoi-dung", { minLevel: "admin", scope: "module" });
+  await requireActiveAdmin();
   return <>{children}</>;
 }

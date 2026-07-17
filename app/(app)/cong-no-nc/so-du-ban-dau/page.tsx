@@ -6,13 +6,18 @@ import {
 } from "@/lib/cong-no-nc/labor-ledger-service";
 import { prisma } from "@/lib/prisma";
 import { LedgerOpeningGrid, type OpeningRow } from "@/components/ledger-grid/opening-grid";
+import { requireModuleAccess } from "@/lib/acl/guards";
+import { canAccessEntitlement } from "@/lib/acl/effective";
 
 export default async function SoDuBanDauNcPage() {
-  const [balances, entities, contractors, projects] = await Promise.all([
+  const { userId } = await requireModuleAccess("cong-no-nc", { minLevel: "read", scope: "module" });
+  const [balances, entities, contractors, projects, canCreate, canEdit] = await Promise.all([
     listLaborOpeningBalances(),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.contractor.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    canAccessEntitlement(userId, "cong-no-nc", { minLevel: "create", scope: "module" }),
+    canAccessEntitlement(userId, "cong-no-nc", { minLevel: "edit", scope: "module" }),
   ]);
 
   const rows: OpeningRow[] = balances.map((b) => ({
@@ -46,6 +51,9 @@ export default async function SoDuBanDauNcPage() {
           bulkUpsert: bulkUpsertLaborOpeningBalances,
           deleteMany: deleteLaborOpeningBalances,
         }}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canDelete={canEdit}
       />
     </div>
   );

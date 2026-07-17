@@ -1,6 +1,6 @@
-import { requireModuleAccess } from "@/lib/acl/guards";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 
 export default async function SlDtLayout({ children }: { children: React.ReactNode }) {
-  await requireModuleAccess("sl-dt", { minLevel: "admin", scope: "module" });
+  await requireActiveAdmin();
   return <>{children}</>;
 }

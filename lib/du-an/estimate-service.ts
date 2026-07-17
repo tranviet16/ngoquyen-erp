@@ -1,23 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { Prisma } from "@prisma/client";
 import { estimateSchema, type EstimateInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listEstimates(projectId: number) {
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
@@ -28,9 +16,7 @@ export async function listEstimates(projectId: number) {
 }
 
 export async function createEstimate(input: EstimateInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
+  await requireReleasedModuleRequest("du-an", { minLevel: "create", scope: { kind: "project", projectId: input.projectId } });
   const data = estimateSchema.parse(input);
   const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.create({
@@ -53,12 +39,10 @@ export async function createEstimate(input: EstimateInput) {
 }
 
 export async function updateEstimate(id: number, input: EstimateInput) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: input.projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = estimateSchema.parse(input);
   const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.update({
     where: { id, projectId: data.projectId },
@@ -90,11 +74,10 @@ export async function adminPatchEstimate(
   patch: Partial<{ itemName: string; unit: string; qty: number; unitPrice: number; totalVnd: number; note: string }>,
   projectId: number,
 ) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId: existing.projectId } });
+  await requireActiveAdmin();
   const data: Prisma.ProjectEstimateUpdateInput = {};
   if (patch.itemName !== undefined) data.itemName = patch.itemName;
   if (patch.unit !== undefined) data.unit = patch.unit;
@@ -110,11 +93,9 @@ export async function adminPatchEstimate(
 }
 
 export async function softDeleteEstimate(id: number, projectId: number) {
-  await requireReleasedModuleRequest("du-an", { minLevel: "admin", scope: { kind: "project", projectId } });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectEstimate.update({
     where: { id, projectId },
     data: { deletedAt: new Date() },

@@ -1,22 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
 import { supplierSchema, type SupplierInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listSuppliers(opts?: { search?: string; includeDeleted?: boolean; page?: number; pageSize?: number }) {
   await requireReleasedModuleRequest("master-data");
@@ -43,8 +31,8 @@ export async function getSupplierById(id: number) {
 }
 
 export async function createSupplier(input: SupplierInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const data = supplierSchema.parse(input);
   const supplier = await prisma.supplier.create({ data });
   revalidatePath("/master-data/suppliers");
@@ -53,8 +41,8 @@ export async function createSupplier(input: SupplierInput) {
 }
 
 export async function updateSupplier(id: number, input: SupplierInput) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const data = supplierSchema.parse(input);
   const supplier = await prisma.supplier.update({ where: { id }, data });
   revalidatePath("/master-data/suppliers");
@@ -63,8 +51,8 @@ export async function updateSupplier(id: number, input: SupplierInput) {
 }
 
 export async function softDeleteSupplier(id: number) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "admin");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
   const supplier = await prisma.supplier.update({ where: { id }, data: { deletedAt: new Date() } });
   revalidatePath("/master-data/suppliers");
   revalidatePath("/master-data");
@@ -86,8 +74,8 @@ const patchSupplierSchema = z.object({
 });
 
 export async function patchSupplier(id: number, patch: Record<string, unknown>) {
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "master-data", "edit");
+  await requireReleasedModuleRequest("master-data");
+  await requireActiveAdmin();
 
   for (const k of Object.keys(patch)) {
     if (!(SUPPLIER_PATCH_WHITELIST as readonly string[]).includes(k)) {

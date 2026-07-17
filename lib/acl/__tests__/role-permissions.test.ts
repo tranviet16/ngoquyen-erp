@@ -90,9 +90,9 @@ describe("getRolePermissionMap", () => {
 // ─── getRoleModuleLevel ───────────────────────────────────────────────────────
 
 describe("getRoleModuleLevel", () => {
-  it("returns 'admin' for the admin role without a DB read", async () => {
+  it("returns null for the admin role without a DB read", async () => {
     const level = await getRoleModuleLevel("admin", "du-an");
-    expect(level).toBe("admin");
+    expect(level).toBeNull();
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 
@@ -111,7 +111,7 @@ describe("getRoleModuleLevel", () => {
 
 describe("hasRoleModuleAccess", () => {
   it("admin always passes, every module/level", async () => {
-    expect(await hasRoleModuleAccess("admin", "tai-chinh", "admin")).toBe(true);
+    expect(await hasRoleModuleAccess("admin", "tai-chinh", "read")).toBe(true);
     expect(await hasRoleModuleAccess("admin", "du-an", "edit")).toBe(true);
     expect(mockFindMany).not.toHaveBeenCalled();
   });
@@ -121,7 +121,7 @@ describe("hasRoleModuleAccess", () => {
       row.moduleKey === "du-an" ? { ...row, status: "development" } : row,
     );
 
-    expect(await hasRoleModuleAccess("admin", "du-an", "admin")).toBe(false);
+    expect(await hasRoleModuleAccess("admin", "du-an", "read")).toBe(false);
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 
@@ -137,8 +137,8 @@ describe("hasRoleModuleAccess", () => {
   });
 
   it("passes when the role's level outranks minLevel", async () => {
-    setupRolePermissions([{ moduleKey: "du-an", level: "admin" }]);
-    expect(await hasRoleModuleAccess("ketoan", "du-an", "edit")).toBe(true);
+    setupRolePermissions([{ moduleKey: "du-an", level: "edit" }]);
+    expect(await hasRoleModuleAccess("ketoan", "du-an", "create")).toBe(true);
   });
 
   it("fails when the role's level is below minLevel", async () => {
@@ -166,7 +166,7 @@ describe("requireRoleModuleAccess", () => {
 
   it("resolves for admin on any module", async () => {
     await expect(
-      requireRoleModuleAccess("admin", "tai-chinh", "admin"),
+      requireRoleModuleAccess("admin", "tai-chinh", "read"),
     ).resolves.toBeUndefined();
   });
 

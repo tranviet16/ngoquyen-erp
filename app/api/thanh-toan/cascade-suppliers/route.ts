@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { canAccess } from "@/lib/acl";
 import { prisma } from "@/lib/prisma";
-import { isAdmin } from "@/lib/rbac";
+import { canAccess } from "@/lib/acl";
 
 /**
  * GET /api/thanh-toan/cascade-suppliers
@@ -36,21 +35,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
   const actor = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { role: true },
+    select: { role: true, isActive: true },
   });
-  if (!isAdmin(actor?.role)) {
+  if (!actor?.isActive) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const allowed = await canAccess(session.user.id, "thanh-toan.tong-hop", {
-    minLevel: "read",
-    scope: "module",
-  });
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = req.nextUrl;
   const ledgerType = searchParams.get("ledgerType");
   const entityIdRaw = searchParams.get("entityId");
   const projectIdRaw = searchParams.get("projectId");
+  const departmentIdRaw = searchParams.get("departmentId");
+
+  if (actor.role !== "admin") {
+    const departmentId = departmentIdRaw ? Number(departmentIdRaw) : NaN;
+    const allowed = Number.isInteger(departmentId) && departmentId > 0 && await canAccess(
+      session.user.id,
+      "thanh-toan.ke-hoach",
+      { minLevel: "create", scope: { kind: "dept", deptId: departmentId } },
+    );
+    if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Validate ledgerType
   if (!ledgerType || !["material", "labor", "all"].includes(ledgerType)) {

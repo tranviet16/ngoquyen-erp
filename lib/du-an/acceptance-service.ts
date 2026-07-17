@@ -1,22 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { auth } from "@/lib/auth";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { acceptanceSchema, type AcceptanceInput } from "./schemas";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 export async function listAcceptances(projectId: number) {
   await requireReleasedModuleRequest("du-an", {
@@ -31,11 +19,9 @@ export async function listAcceptances(projectId: number) {
 
 export async function createAcceptance(input: AcceptanceInput) {
   await requireReleasedModuleRequest("du-an", {
-    minLevel: "edit",
+    minLevel: "create",
     scope: { kind: "project", projectId: input.projectId },
   });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = acceptanceSchema.parse(input);
   const record = await prisma.projectAcceptance.create({
     data: {
@@ -60,18 +46,16 @@ export async function createAcceptance(input: AcceptanceInput) {
 }
 
 export async function updateAcceptance(id: number, input: AcceptanceInput) {
-  await requireReleasedModuleRequest("du-an", {
-    minLevel: "edit",
-    scope: { kind: "project", projectId: input.projectId },
-  });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "edit");
   const data = acceptanceSchema.parse(input);
   const existing = await prisma.projectAcceptance.findUnique({
     where: { id },
     select: { projectId: true },
   });
   if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "edit",
+    scope: { kind: "project", projectId: existing.projectId },
+  });
   const record = await prisma.projectAcceptance.update({
     where: { id, projectId: data.projectId },
     data: {
@@ -102,17 +86,16 @@ export async function adminPatchAcceptance(
   patch: Partial<{ planEnd: string | null; actualEnd: string | null }>,
   projectId: number,
 ) {
-  await requireReleasedModuleRequest("du-an", {
-    minLevel: "admin",
-    scope: { kind: "project", projectId },
-  });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectAcceptance.findUnique({
     where: { id },
     select: { projectId: true },
   });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId: existing.projectId },
+  });
+  await requireActiveAdmin();
   const data: Record<string, unknown> = {};
   if (patch.planEnd !== undefined) data.planEnd = patch.planEnd ? new Date(patch.planEnd) : null;
   if (patch.actualEnd !== undefined) data.actualEnd = patch.actualEnd ? new Date(patch.actualEnd) : null;
@@ -122,17 +105,15 @@ export async function adminPatchAcceptance(
 }
 
 export async function softDeleteAcceptance(id: number, projectId: number) {
-  await requireReleasedModuleRequest("du-an", {
-    minLevel: "admin",
-    scope: { kind: "project", projectId },
-  });
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "du-an", "admin");
   const existing = await prisma.projectAcceptance.findUnique({
     where: { id },
     select: { projectId: true },
   });
   if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "edit",
+    scope: { kind: "project", projectId: existing.projectId },
+  });
   const record = await prisma.projectAcceptance.update({
     where: { id, projectId },
     data: { deletedAt: new Date() },

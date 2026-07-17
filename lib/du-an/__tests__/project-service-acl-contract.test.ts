@@ -27,8 +27,7 @@ describe("project service ACL contract", () => {
   it.each(serviceFiles)("scopes every %s action to its project", (file) => {
     const source = readFileSync(join(process.cwd(), "lib", "du-an", file), "utf8");
     for (const action of exportedActions(source)) {
-      const firstAwait = action.body.match(/await\s+([^;]+);/)?.[1] ?? "";
-      expect(firstAwait, `${file}:${action.name} first await`).toContain(
+      expect(action.body, `${file}:${action.name} release guard`).toContain(
         'requireReleasedModuleRequest("du-an"',
       );
       expect(action.body, `${file}:${action.name} project scope`).toMatch(

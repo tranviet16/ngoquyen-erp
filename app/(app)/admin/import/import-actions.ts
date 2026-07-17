@@ -1,47 +1,33 @@
 "use server";
 
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { previewImport, commitImport, listImportRuns, getImportRun, deleteImportRun, rollbackImportRun, getRollbackInfo } from "@/lib/import/import-engine";
 import { listAdapters } from "@/lib/import/adapters/adapter-registry";
 import type { ResolvedMapping } from "@/lib/import/adapters/adapter-types";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-
-async function getSession() {
-  const h = await headers();
-  return auth.api.getSession({ headers: h });
-}
-
-async function requireAdminImportAccess() {
-  const session = await getSession();
-  if (!session?.user?.id || session.user.role !== "admin") {
-    throw new Error("Forbidden: admin import access required");
-  }
-  return session;
-}
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 
 export async function getAdapters() {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
   return listAdapters();
 }
 
 export async function getRuns() {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
   return listImportRuns(50);
 }
 
 export async function getRun(id: number) {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
   return getImportRun(id);
 }
 
 export async function startPreview(formData: FormData) {
   await requireReleasedModuleRequest("admin.import");
-  const session = await requireAdminImportAccess();
+  const userId = await requireActiveAdmin();
 
   const file = formData.get("file") as File | null;
   const adapterName = formData.get("adapter") as string | null;
@@ -51,20 +37,20 @@ export async function startPreview(formData: FormData) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await previewImport(buffer, adapterName, file.name, session!.user!.id);
+  const result = await previewImport(buffer, adapterName, file.name, userId);
   return result;
 }
 
 export async function deleteRun(id: number) {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
   await deleteImportRun(id);
   revalidatePath("/admin/import");
 }
 
 export async function rollbackRun(id: number) {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
   const result = await rollbackImportRun(id);
   revalidatePath("/admin/import");
   return result;
@@ -72,13 +58,13 @@ export async function rollbackRun(id: number) {
 
 export async function getRunRollbackInfo(id: number) {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
   return getRollbackInfo(id);
 }
 
 export async function doCommit(formData: FormData) {
   await requireReleasedModuleRequest("admin.import");
-  await requireAdminImportAccess();
+  await requireActiveAdmin();
 
   const runIdRaw = formData.get("runId");
   const file = formData.get("file") as File | null;

@@ -50,7 +50,7 @@ interface CoGridRow extends RowWithId {
   status: string;
 }
 
-interface Props { projectId: number; initialData: CoRow[]; categories: CategoryOption[]; role?: string; }
+interface Props { projectId: number; initialData: CoRow[]; categories: CategoryOption[]; canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean; }
 
 function CoForm({ projectId, categories, defaultValues, onSubmit }: {
   projectId: number; categories: CategoryOption[];
@@ -124,8 +124,7 @@ function CoForm({ projectId, categories, defaultValues, onSubmit }: {
   );
 }
 
-export function PhatSinhClient({ projectId, initialData, categories, role }: Props) {
-  const isAdmin = role === "admin";
+export function PhatSinhClient({ projectId, initialData, categories, canCreate, canEdit, canDelete, isAdmin = false }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CoRow | null>(null);
@@ -208,18 +207,18 @@ export function PhatSinhClient({ projectId, initialData, categories, role }: Pro
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>Thêm CO</Button>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm CO</Button>
         </div>
       </div>
 
       <DataGrid<CoGridRow>
         columns={columns}
         rows={rows}
-        handlers={handlers}
-        role={role}
+        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
+        role={isAdmin ? "admin" : undefined}
         height={500}
         onSelectionChange={setSelectedIds}
       />

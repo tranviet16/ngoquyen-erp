@@ -58,10 +58,10 @@ interface Props {
   members: MemberOpt[];
   viewableMembers: { id: string; name: string }[];
   currentUserId: string;
-  currentRole: string;
   currentDeptId: number | null;
-  currentIsLeader: boolean;
-  currentIsDirector: boolean;
+  canCreate: boolean;
+  creatableDepartmentIds: number[];
+  taskCapabilities: Record<number, { canCreate: boolean; canEdit: boolean; canDelete: boolean; canComment: boolean }>;
   view: ViewMode;
   filters: Filters;
 }
@@ -79,10 +79,10 @@ export function KanbanClient({
   members,
   viewableMembers,
   currentUserId,
-  currentRole,
   currentDeptId,
-  currentIsLeader,
-  currentIsDirector,
+  canCreate,
+  creatableDepartmentIds,
+  taskCapabilities,
   view,
   filters,
 }: Props) {
@@ -98,11 +98,7 @@ export function KanbanClient({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   function canDragTask(task: TaskWithRelations): boolean {
-    if (currentRole === "admin") return true;
-    if (currentIsLeader && currentDeptId === task.deptId) return true;
-    if (task.assigneeId === currentUserId) return true;
-    if (task.creatorId === currentUserId && !task.sourceFormId && task.status === "review") return true;
-    return false;
+    return taskCapabilities[task.deptId]?.canEdit ?? false;
   }
 
   function handleDragEnd(e: DragEndEvent) {
@@ -183,8 +179,6 @@ export function KanbanClient({
       includeUndated: next.includeUndated,
     });
   }
-
-  const canCreate = currentRole === "admin" || currentIsDirector || currentIsLeader || currentDeptId !== null;
 
   const swimlaneGroups = useMemo(
     () => (view === "swimlane" ? regroupBySwimlane(optimistic) : []),
@@ -295,11 +289,8 @@ export function KanbanClient({
         <CreateTaskDialog
           departments={departments}
           members={members}
-          currentUserId={currentUserId}
-          currentRole={currentRole}
           currentDeptId={currentDeptId}
-          currentIsLeader={currentIsLeader}
-          currentIsDirector={currentIsDirector}
+          creatableDepartmentIds={creatableDepartmentIds}
           onClose={() => setOpenCreate(false)}
           onCreated={() => {
             setOpenCreate(false);
@@ -313,9 +304,9 @@ export function KanbanClient({
           task={openEdit}
           members={openEdit.deptId === currentDeptId ? members : []}
           currentUserId={currentUserId}
-          canEdit={canEditTask(openEdit, currentUserId, currentRole, currentIsLeader, currentDeptId)}
-          canAssign={canAssignTask(openEdit, currentRole, currentIsLeader, currentDeptId)}
-          canDelete={canDeleteTask(openEdit, currentUserId, currentRole)}
+          canEdit={taskCapabilities[openEdit.deptId]?.canEdit ?? false}
+          canAssign={taskCapabilities[openEdit.deptId]?.canEdit ?? false}
+          canDelete={taskCapabilities[openEdit.deptId]?.canDelete ?? false}
           onClose={() => setOpenEdit(null)}
           onChanged={() => {
             setOpenEdit(null);
@@ -325,23 +316,6 @@ export function KanbanClient({
       )}
     </div>
   );
-}
-
-function canEditTask(t: TaskWithRelations, userId: string, role: string, isLeader: boolean, deptId: number | null) {
-  if (role === "admin") return true;
-  if (t.creatorId === userId) return true;
-  if (isLeader && deptId === t.deptId) return true;
-  return false;
-}
-function canAssignTask(t: TaskWithRelations, role: string, isLeader: boolean, deptId: number | null) {
-  if (role === "admin") return true;
-  if (isLeader && deptId === t.deptId) return true;
-  return false;
-}
-function canDeleteTask(t: TaskWithRelations, userId: string, role: string) {
-  if (role === "admin") return true;
-  if (t.creatorId === userId && t.status === "todo") return true;
-  return false;
 }
 
 function Column({
@@ -384,41 +358,39 @@ function Column({
 function CreateTaskDialog({
   departments,
   members,
-  currentUserId,
-  currentRole,
   currentDeptId,
-  currentIsLeader,
-  currentIsDirector,
+  creatableDepartmentIds,
   onClose,
   onCreated,
   pending,
 }: {
   departments: DeptOpt[];
   members: MemberOpt[];
-  currentUserId: string;
-  currentRole: string;
   currentDeptId: number | null;
-  currentIsLeader: boolean;
-  currentIsDirector: boolean;
+  creatableDepartmentIds: number[];
   onClose: () => void;
   onCreated: () => void;
   pending: boolean;
 }) {
-  const isPrivileged = currentRole === "admin" || currentIsDirector;
-  const isPlainMember = !isPrivileged && !currentIsLeader;
+  const creatableDepartments = departments.filter((department) =>
+    creatableDepartmentIds.includes(department.id),
+  );
+  const defaultDepartmentId = creatableDepartmentIds.includes(currentDeptId ?? -1)
+    ? currentDeptId!
+    : (creatableDepartmentIds[0] ?? "");
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [deptId, setDeptId] = useState<number | "">(currentDeptId ?? "");
+  const [deptId, setDeptId] = useState<number | "">(defaultDepartmentId);
   const [priority, setPriority] = useState<"cao" | "trung_binh" | "thap">("trung_binh");
   const [deadline, setDeadline] = useState("");
-  const [assigneeId, setAssigneeId] = useState(isPlainMember ? currentUserId : "");
+  const [assigneeId, setAssigneeId] = useState("");
   const [memberOptions, setMemberOptions] = useState<MemberOpt[]>(members);
   const [submitting, startSubmit] = useTransition();
 
   // Privileged users can pick any dept — reload its members on change.
   useEffect(() => {
-    if (!isPrivileged || deptId === "") return;
+    if (deptId === "") return;
     let cancelled = false;
     listDeptMembersAction(Number(deptId))
       .then((rows) => {
@@ -430,9 +402,7 @@ function CreateTaskDialog({
     return () => {
       cancelled = true;
     };
-  }, [isPrivileged, deptId]);
-
-  const selfName = members.find((m) => m.id === currentUserId)?.name ?? "Tôi";
+  }, [deptId]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -481,11 +451,10 @@ function CreateTaskDialog({
               className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm disabled:opacity-60"
               value={deptId}
               onChange={(e) => setDeptId(e.target.value === "" ? "" : Number(e.target.value))}
-              disabled={!isPrivileged}
               required
             >
               <option value="">— Chọn —</option>
-              {departments.map((d) => (
+              {creatableDepartments.map((d) => (
                 <option key={d.id} value={d.id}>{d.code} - {d.name}</option>
               ))}
             </select>
@@ -505,10 +474,7 @@ function CreateTaskDialog({
         </div>
         <div>
           <Label>Người thực hiện *</Label>
-          {isPlainMember ? (
-            <Input value={selfName} disabled className="mt-1" />
-          ) : (
-            <select
+          <select
               className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
               value={assigneeId}
               onChange={(e) => setAssigneeId(e.target.value)}
@@ -518,8 +484,7 @@ function CreateTaskDialog({
               {memberOptions.map((m) => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
-            </select>
-          )}
+          </select>
         </div>
         <div>
           <Label>Hạn chót</Label>

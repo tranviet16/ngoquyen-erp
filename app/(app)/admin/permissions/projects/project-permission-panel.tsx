@@ -51,6 +51,7 @@ const PROJECT_LEVELS: readonly (AccessLevel | "default")[] = [
   "default",
   "read",
   "comment",
+  "create",
   "edit",
 ];
 
@@ -58,8 +59,8 @@ function levelLabel(level: AccessLevel | "default"): string {
   if (level === "default") return "Không có";
   if (level === "read") return "Xem";
   if (level === "comment") return "Bình luận";
+  if (level === "create") return "Tạo mới";
   if (level === "edit") return "Chỉnh sửa";
-  if (level === "admin") return "Admin";
   return level;
 }
 

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getRound } from "@/lib/payment/payment-service";
+import { canAccess } from "@/lib/acl/effective";
 import { RoundDetailClient } from "./round-detail-client";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,14 @@ export default async function Page({
   ]);
   if (!round) notFound();
 
+  const deptScope = round.departmentId === null
+    ? { kind: "dept" as const, deptId: -1 }
+    : { kind: "dept" as const, deptId: round.departmentId };
+  const [canCreateItem, canEdit] = await Promise.all([
+    canAccess(session.user.id, "thanh-toan.ke-hoach", { minLevel: "create", scope: deptScope }),
+    canAccess(session.user.id, "thanh-toan.ke-hoach", { minLevel: "edit", scope: deptScope }),
+  ]);
+
   const actorRole: string | null = dbUser?.role ?? session.user.role ?? null;
   const isAdmin = actorRole === "admin";
   // Prisma Decimal instances are not serializable across the Server → Client boundary.
@@ -62,11 +71,10 @@ export default async function Page({
       suppliers={suppliers}
       projects={projects}
       isAdmin={isAdmin}
-      currentUser={{
-        id: session.user.id,
-        role: actorRole,
-        isDirector: dbUser?.isDirector ?? false,
-      }}
+      canCreateItem={canCreateItem && round.status === "draft"}
+      canEdit={canEdit && round.status === "draft"}
+      canApprove={Boolean(isAdmin || dbUser?.isDirector) && round.status === "submitted"}
+      canClose={isAdmin && round.status === "approved"}
     />
   );
 }

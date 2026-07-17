@@ -49,7 +49,7 @@ export async function getEffectiveModuleLevel(
 ): Promise<AccessLevel | null> {
   // Shared cache with canAccess — no extra DB round-trip when called together
   const user = await loadUser(userId);
-  if (!user) return null;
+  if (!user || user.isActive === false) return null;
 
   // Check explicit permission row first
   const map = await getModuleAccessMap(userId);

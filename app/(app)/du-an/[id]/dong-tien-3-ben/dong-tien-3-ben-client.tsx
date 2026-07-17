@@ -65,7 +65,7 @@ interface CfGridRow extends RowWithId {
 }
 
 interface Summary { cdtToCty: number; ctyToDoi: number; doiToCty: number; ctyToCdt: number; doiRefund: number; total: number; }
-interface Props { projectId: number; initialData: CfRow[]; summary: Summary; role?: string; }
+interface Props { projectId: number; initialData: CfRow[]; summary: Summary; canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean; }
 
 function CfForm({ projectId, defaultValues, onSubmit }: {
   projectId: number; defaultValues?: Partial<CashflowInput>; onSubmit: (d: CashflowInput) => Promise<void>;
@@ -123,8 +123,7 @@ function CfForm({ projectId, defaultValues, onSubmit }: {
   );
 }
 
-export function DongTien3BenClient({ projectId, initialData, summary, role }: Props) {
-  const isAdmin = role === "admin";
+export function DongTien3BenClient({ projectId, initialData, summary, canCreate, canEdit, canDelete, isAdmin = false }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CfRow | null>(null);
@@ -204,10 +203,10 @@ export function DongTien3BenClient({ projectId, initialData, summary, role }: Pr
           <p className="text-sm text-muted-foreground mt-0.5">CĐT · Công ty · Đội thi công</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
             Thêm giao dịch
           </Button>
@@ -238,8 +237,8 @@ export function DongTien3BenClient({ projectId, initialData, summary, role }: Pr
       <DataGrid<CfGridRow>
         columns={columns}
         rows={rows}
-        handlers={handlers}
-        role={role}
+        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
+        role={isAdmin ? "admin" : undefined}
         height={500}
         onSelectionChange={setSelectedIds}
       />

@@ -1,26 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import type { MonthRef } from "./helpers";
 import { prevMonth } from "./helpers";
 import { refreshAutoTarget } from "@/lib/sl-dt/recompute";
 import { activeLotWhere } from "@/lib/sl-dt/lot-effective";
-
-async function getSessionRole(): Promise<string | null> {
-  try {
-    const h = await headers();
-    const session = await auth.api.getSession({ headers: h });
-    return session?.user?.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 const NUM_INPUT_FIELDS = new Set([
   "slKeHoachKy", "slThucKyTho", "slTrat", "estimateValue",
@@ -60,6 +48,7 @@ export async function patchMonthlyInputCell(
   patch: Record<string, unknown>,
 ): Promise<void> {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const inputPatch: Record<string, Prisma.Decimal | null> = {};
   for (const k of Object.keys(patch)) {
     if (NUM_INPUT_FIELDS.has(k)) {
@@ -131,8 +120,7 @@ export async function adminPatchMonthlyInputCell(
   patch: Record<string, unknown>,
 ): Promise<void> {
   await requireReleasedModuleRequest("sl-dt");
-  const role = await getSessionRole();
-  await requireRoleModuleAccess(role, "sl-dt", "admin");
+  await requireActiveAdmin();
   const data: Record<string, Prisma.Decimal | null> = {};
   for (const k of Object.keys(patch)) {
     if (ADMIN_RAW_INPUT_FIELDS.has(k)) {
@@ -176,6 +164,7 @@ export async function patchProgressStatusCell(
   patch: Record<string, unknown>,
 ): Promise<void> {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const data: Record<string, string | null> = {};
   for (const k of Object.keys(patch)) {
     if (PROGRESS_FIELDS.has(k)) {
@@ -220,6 +209,7 @@ export async function patchLotCell(
   lotId: number, patch: Record<string, unknown>,
 ): Promise<void> {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const data: Record<string, Prisma.Decimal | null> = {};
   if ("estimateValue" in patch) data.estimateValue = D(toN(patch.estimateValue));
   if ("contractValue" in patch) data.contractValue = D(toN(patch.contractValue));
@@ -260,6 +250,7 @@ export async function cloneFromPreviousMonth(year: number, month: number): Promi
   message: string;
 }> {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const target = { year, month };
   const source = await findLatestMonthBefore(target);
   if (!source) {
@@ -396,6 +387,7 @@ export interface SaveMonthlyPayload {
 
 export async function saveMonthlyData(payload: SaveMonthlyPayload): Promise<{ saved: number }> {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const { year, month, rows } = payload;
   if (year < 2000 || year > 2100) throw new Error("Năm không hợp lệ");
   if (month < 1 || month > 12) throw new Error("Tháng phải 1–12");

@@ -29,6 +29,7 @@ interface RoleOpt {
 const LEVEL_LABEL: Record<AccessLevel, string> = {
   read: "Xem",
   comment: "Bình luận",
+  create: "Tạo mới",
   edit: "Chỉnh sửa",
 };
 
@@ -425,7 +426,7 @@ function UserRow({
                         }
                         className="rounded border px-2 py-1 text-sm bg-background"
                       >
-                        {(["read", "comment", "edit"] as AccessLevel[]).map(
+                        {(["read", "comment", "create", "edit"] as AccessLevel[]).map(
                           (lv) => (
                             <option key={lv} value={lv}>
                               {LEVEL_LABEL[lv]}
@@ -464,7 +465,7 @@ function UserRow({
                       onChange={(e) => setNewLevel(e.target.value as AccessLevel)}
                       className="rounded border px-2 py-1 text-sm bg-background"
                     >
-                      {(["read", "comment", "edit"] as AccessLevel[]).map(
+                      {(["read", "comment", "create", "edit"] as AccessLevel[]).map(
                         (lv) => (
                           <option key={lv} value={lv}>
                             {LEVEL_LABEL[lv]}

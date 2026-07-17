@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
 import { milestoneScoreSchema, type MilestoneScoreInput } from "@/lib/sl-dt/schemas";
 import { z } from "zod";
 
 export async function upsertMilestoneScore(id: number | null, input: MilestoneScoreInput) {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const data = milestoneScoreSchema.parse(input);
 
   if (id) {
@@ -27,6 +29,7 @@ export async function upsertMilestoneScore(id: number | null, input: MilestoneSc
 
 export async function deleteMilestoneScore(id: number) {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   if (!id || id < 1) throw new Error("Invalid id");
   await prisma.slDtMilestoneScore.delete({ where: { id } });
   revalidatePath("/sl-dt/cau-hinh");
@@ -35,6 +38,7 @@ export async function deleteMilestoneScore(id: number) {
 
 export async function patchMilestoneScore(id: number, patch: Record<string, unknown>) {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const current = await prisma.slDtMilestoneScore.findUnique({ where: { id } });
   if (!current) throw new Error(`Mốc #${id} không tồn tại`);
   const merged: MilestoneScoreInput = {
@@ -56,6 +60,7 @@ export async function bulkUpsertMilestoneScores(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const out: unknown[] = [];
   for (const row of rows) {
     const { id, ...rest } = row;
@@ -73,6 +78,7 @@ export async function bulkUpsertMilestoneScores(
 
 export async function deleteMilestoneScores(ids: number[]) {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   if (!ids.length) return;
   await prisma.slDtMilestoneScore.deleteMany({ where: { id: { in: ids } } });
   revalidatePath("/sl-dt/cau-hinh");
@@ -81,6 +87,7 @@ export async function deleteMilestoneScores(ids: number[]) {
 
 export async function reorderMilestoneScores(ids: number[]) {
   await requireReleasedModuleRequest("sl-dt");
+  await requireActiveAdmin();
   const schema = z.array(z.number().int().positive());
   const validated = schema.parse(ids);
 

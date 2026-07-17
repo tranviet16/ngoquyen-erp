@@ -59,7 +59,7 @@ interface Props {
   projectId: number;
   initialData: AcceptanceRow[];
   categories: CategoryOption[];
-  role?: string;
+  canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean;
 }
 
 function AcceptanceForm({ projectId, categories, defaultValues, onSubmit }: {
@@ -126,8 +126,7 @@ function AcceptanceForm({ projectId, categories, defaultValues, onSubmit }: {
   );
 }
 
-export function NghiemThuClient({ projectId, initialData, categories, role }: Props) {
-  const isAdmin = role === "admin";
+export function NghiemThuClient({ projectId, initialData, categories, canCreate, canEdit, canDelete, isAdmin = false }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<AcceptanceRow | null>(null);
@@ -238,10 +237,10 @@ export function NghiemThuClient({ projectId, initialData, categories, role }: Pr
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
             Sửa đầy đủ
           </Button>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
             Thêm nghiệm thu
           </Button>
@@ -251,8 +250,8 @@ export function NghiemThuClient({ projectId, initialData, categories, role }: Pr
       <DataGrid<AcceptanceGridRow>
         columns={columns}
         rows={rows}
-        handlers={handlers}
-        role={role}
+        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
+        role={isAdmin ? "admin" : undefined}
         height={500}
         onSelectionChange={setSelectedIds}
       />

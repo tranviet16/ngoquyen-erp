@@ -21,8 +21,8 @@
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
-import { requireRoleModuleAccess } from "@/lib/acl/role-permissions";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { bypassAudit } from "@/lib/async-context";
@@ -52,8 +52,7 @@ async function assertAdmin(): Promise<string> {
   const h = await headers();
   const session = await auth.api.getSession({ headers: h });
   if (!session?.user) throw new Error("Phiên đăng nhập đã hết hạn");
-  await requireRoleModuleAccess(session.user.role, "admin.permissions", "admin");
-  return session.user.id;
+  return requireActiveAdmin();
 }
 
 function isValidModuleKey(key: string): key is ModuleKey {
@@ -80,7 +79,7 @@ export async function setModulePermission(
     throw new Error(`Cấp quyền "${level}" không hợp lệ cho module "${moduleKey}"`);
   }
   // Self-lockout guard: refuse to demote current admin's own admin.permissions access
-  if (userId === adminId && moduleKey === "admin.permissions" && level !== "admin") {
+  if (userId === adminId && moduleKey === "admin.permissions" && level !== "default") {
     throw new Error("Không thể hạ quyền của chính mình trên module Phân quyền");
   }
 
@@ -153,7 +152,7 @@ export async function bulkApplyModulePermissionChanges(
     if (
       userId === adminId &&
       moduleKey === "admin.permissions" &&
-      level !== "admin"
+      level !== "default"
     ) {
       rejected.push({
         change,

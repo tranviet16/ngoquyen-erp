@@ -42,13 +42,13 @@ export const getRolePermissionMap = cache(
 
 /**
  * Effective access level of a role on a module.
- * admin → "admin" (always). Otherwise the seeded row, or null if none.
+ * The admin role has no business-level row; boolean access handles its bypass.
  */
 export async function getRoleModuleLevel(
   roleId: string,
   moduleKey: ModuleKey,
 ): Promise<AccessLevel | null> {
-  if (roleId === "admin") return "admin";
+  if (roleId === "admin") return null;
   const map = await getRolePermissionMap(roleId);
   return map.get(moduleKey) ?? null;
 }

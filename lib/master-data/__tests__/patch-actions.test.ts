@@ -23,6 +23,7 @@ const mockAvailability = vi.hoisted(() => ({
   requireReleasedModuleRequest: vi.fn(),
   isModuleReleased: vi.fn(),
 }));
+const mockRequireActiveAdmin = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -33,6 +34,9 @@ vi.mock("@/lib/acl/module-availability", () => ({
 }));
 vi.mock("@/lib/acl/released-module-request", () => ({
   requireReleasedModuleRequest: mockAvailability.requireReleasedModuleRequest,
+}));
+vi.mock("@/lib/admin/require-active-admin", () => ({
+  requireActiveAdmin: () => mockRequireActiveAdmin(),
 }));
 
 import {
@@ -63,6 +67,7 @@ beforeEach(() => {
   mockAvailability.requireReleasedModuleRequest.mockResolvedValue({ userId: "admin-1", role: "admin" });
   mockAvailability.isModuleReleased.mockResolvedValue(true);
   mockDb.rolePermission.findMany.mockImplementation(rolePermissionFindMany);
+  mockRequireActiveAdmin.mockResolvedValue("admin-1");
   // Default: admin session — master-data/tai-chinh are admin-only modules,
   // so happy-path/whitelist/Zod tests need a role that clears the RBAC gate.
   // The explicit "rejects viewer role" tests override this per-test.
@@ -81,9 +86,9 @@ describe("patchEntity", () => {
     await expect(patchEntity(1, { name: "" })).rejects.toThrow();
   });
 
-  it("rejects viewer role", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "viewer" } });
-    await expect(patchEntity(1, { name: "Công ty A" })).rejects.toThrow(/Forbidden/);
+  it("rejects inactive admin", async () => {
+    mockRequireActiveAdmin.mockRejectedValue(new Error("inactive admin"));
+    await expect(patchEntity(1, { name: "Công ty A" })).rejects.toThrow(/inactive admin/);
   });
 
   it("happy path: updates and returns row", async () => {
@@ -271,8 +276,8 @@ describe("patchLoan", () => {
     expect(result).toEqual(row);
   });
 
-  it("rejects viewer role", async () => {
-    mockAuth.getSession.mockResolvedValue({ user: { role: "viewer" } });
-    await expect(patchLoan(1, { status: "active" })).rejects.toThrow(/Forbidden/);
+  it("rejects inactive admin", async () => {
+    mockRequireActiveAdmin.mockRejectedValue(new Error("inactive admin"));
+    await expect(patchLoan(1, { status: "active" })).rejects.toThrow(/inactive admin/);
   });
 });
