@@ -572,16 +572,35 @@ describe("closeRound", () => {
   });
 
   it("throws when the round is not approved", async () => {
-    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "submitted" });
+    // Chuyển trạng thái nguyên tử: updateMany WHERE status='approved' không khớp → 0 dòng
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 0 });
     await expect(svc.closeRound(1)).rejects.toThrow("Chỉ đóng được đợt đã duyệt");
   });
 
-  it("closes an approved round", async () => {
-    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "approved" });
-    mockDb.paymentRound.update.mockResolvedValue({ id: 1 });
+  it("closes an approved round and syncs vat_tu items to the material ledger", async () => {
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.paymentRound.findUnique.mockResolvedValue({ month: "2026-06", sequence: 1 });
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([
+      { id: 7, entityId: 2, supplierId: 3, projectId: null, soDuyet: new Prisma.Decimal(500) },
+    ]);
+    mockDb.supplierReconciliation.findFirst.mockResolvedValue(null); // kỳ chưa ký → không khóa
+    mockDb.ledgerTransaction.findFirst.mockResolvedValue(null); // chưa có event → create
     await svc.closeRound(1);
-    expect(mockDb.paymentRound.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "closed" }) }),
+    expect(mockDb.paymentRound.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 1, status: "approved" },
+        data: expect.objectContaining({ status: "closed" }),
+      }),
+    );
+    expect(mockDb.ledgerTransaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          ledgerType: "material",
+          transactionType: "thanh_toan",
+          paymentRoundItemId: 7,
+          partyId: 3,
+        }),
+      }),
     );
   });
 });
