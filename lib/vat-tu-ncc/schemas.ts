@@ -7,6 +7,8 @@ export const deliverySchema = z.object({
   itemId: z.number().int().positive(),
   qty: z.number().positive("Số lượng phải > 0"),
   unit: z.string().min(1, "Đơn vị không được để trống"),
+  unitPrice: z.number().nonnegative("Đơn giá phải >= 0").optional(),
+  totalAmount: z.number().nonnegative("Thành tiền phải >= 0").optional(),
   cbVatTu: z.string().optional(),
   chiHuyCt: z.string().optional(),
   keToan: z.string().optional(),
@@ -15,15 +17,12 @@ export const deliverySchema = z.object({
 
 export type DeliveryInput = z.infer<typeof deliverySchema>;
 
+// Kỳ đối chiếu chỉ là marker (NCC + khoảng kỳ + ghi chú) — mọi số tiền
+// đều dẫn xuất từ sổ cái; ký mới đông cứng số vào snapshot.
 export const reconciliationSchema = z.object({
   supplierId: z.number().int().positive(),
   periodFrom: z.string().min(1, "Từ ngày không được để trống"),
   periodTo: z.string().min(1, "Đến ngày không được để trống"),
-  openingBalance: z.number(),
-  totalIn: z.number().min(0),
-  totalPaid: z.number().min(0),
-  signedBySupplier: z.boolean(),
-  signedDate: z.string().optional(),
   note: z.string().optional(),
 }).refine(
   (d) => new Date(d.periodFrom) <= new Date(d.periodTo),

@@ -1,11 +1,10 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { listReconciliations } from "@/lib/vat-tu-ncc/reconciliation-service";
-import { serializeDecimals } from "@/lib/serialize";
+import { listReconciliationsDerived } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
 import { DoiChieuClient } from "./doi-chieu-client";
-import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 
 interface Props {
   params: Promise<{ supplierId: string }>;
@@ -19,34 +18,22 @@ export default async function DoiChieuPage({ params }: Props) {
   if (isNaN(id)) notFound();
   const { userId } = await requireModuleAccess("vat-tu-ncc", { minLevel: "read", scope: "module" });
 
-  const [reconciliations, canCreate, canEdit] = await Promise.all([
-    listReconciliations(id),
+  const [reconciliations, canCreate, canEdit, isAdmin] = await Promise.all([
+    listReconciliationsDerived(id),
     canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "create", scope: "module" }),
     canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "edit", scope: "module" }),
+    requireActiveAdmin().then(() => true).catch(() => false),
   ]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Đối chiếu công nợ - NCC #{id}</h1>
-        <div className="flex gap-2">
-          <ExcelExportButton
-            template="doi-chieu"
-            params={{ ledgerType: "material", partyId: id }}
-            label="Xuất Excel đối chiếu"
-            filename={`doi-chieu-ncc-${id}.xlsx`}
-          />
-          <PrintButton label="In đối chiếu" />
-        </div>
-      </div>
-      <Suspense>
-        <DoiChieuClient supplierId={id} initialData={serializeDecimals(reconciliations)} canCreate={canCreate} canEdit={canEdit} canDelete={canEdit} />
-      </Suspense>
-      {/* Signature section for print */}
-      <div className="print-signatures hidden">
-        <div>Đại diện Công ty<br /><br /><br />Ký, ghi rõ họ tên</div>
-        <div>Đại diện Nhà cung cấp<br /><br /><br />Ký, ghi rõ họ tên</div>
-      </div>
-    </div>
+    <Suspense>
+      <DoiChieuClient
+        supplierId={id}
+        initialData={reconciliations}
+        canCreate={canCreate}
+        canDelete={canEdit}
+        isAdmin={isAdmin}
+      />
+    </Suspense>
   );
 }

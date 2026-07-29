@@ -225,6 +225,7 @@ model Entity {
   updatedAt DateTime  @updatedAt
 
   paymentItems PaymentRoundItem[]
+  projects     Project[]
 
   // Partial unique enforced via raw SQL: entities_name_active_unique WHERE "deletedAt" IS NULL
   @@index([name])
@@ -271,16 +272,19 @@ model Project {
   startDate     DateTime?
   endDate       DateTime?
   status        String    @default("active")
+  entityId      Int? // Chủ Thể sở hữu công trình — nguồn suy entity cho phiếu vật tư NCC
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  entity          Entity?             @relation(fields: [entityId], references: [id])
   categories      ProjectCategory[]
   userPermissions ProjectPermission[]
   paymentItems    PaymentRoundItem[]
 
   // Partial unique enforced via raw SQL: projects_code_active_unique WHERE "deletedAt" IS NULL
   @@index([code])
+  @@index([entityId])
   @@map("projects")
 }
 
@@ -539,6 +543,8 @@ model SupplierDeliveryDaily {
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
+  ledgerTransactions LedgerTransaction[]
+
   @@index([supplierId, date])
   @@index([supplierId, itemId])
   @@index([importRunId])
@@ -546,24 +552,29 @@ model SupplierDeliveryDaily {
 }
 
 model SupplierReconciliation {
-  id               Int       @id @default(autoincrement())
-  supplierId       Int
-  periodFrom       DateTime
-  periodTo         DateTime
-  openingBalance   Decimal   @db.Decimal(18, 2)
-  totalIn          Decimal   @db.Decimal(18, 2)
-  totalPaid        Decimal   @db.Decimal(18, 2)
-  closingBalance   Decimal   @db.Decimal(18, 2)
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+  periodFrom DateTime
+  periodTo   DateTime
+  // Số tổng chỉ được ghi khi NCC ký (snapshot denormalized cho list/sort).
+  // Kỳ chưa ký: mọi hiển thị tính động từ sổ cái — 4 cột này để NULL.
+  openingBalance   Decimal?  @db.Decimal(18, 2)
+  totalIn          Decimal?  @db.Decimal(18, 2)
+  totalPaid        Decimal?  @db.Decimal(18, 2)
+  closingBalance   Decimal?  @db.Decimal(18, 2)
   signedBySupplier Boolean   @default(false)
   signedDate       DateTime?
-  note             String?
-  deletedAt        DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @default(now())
+  // Bản đông cứng đầy đủ (dòng chi tiết + tổng phụ) tại thời điểm ký — nguồn in lại.
+  signedSnapshotJson Json?
+  note               String?
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now())
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
+  // Partial unique enforced via raw SQL: supplier_recon_period_unique WHERE "deletedAt" IS NULL
   @@index([supplierId, periodFrom])
   @@index([importRunId])
   @@map("supplier_reconciliations")
@@ -623,6 +634,8 @@ model PaymentRoundItem {
   project    Project?     @relation(fields: [projectId], references: [id])
   approvedBy User?        @relation("PaymentItemApprover", fields: [approvedById], references: [id])
 
+  ledgerTransactions LedgerTransaction[]
+
   @@index([roundId])
   @@index([supplierId])
   @@index([projectId])
@@ -663,12 +676,28 @@ model LedgerTransaction {
   note        String?
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
-  deletedAt   DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
 
+  // Nguồn gốc sự kiện sinh tự động: phiếu vật tư ngày (lay_hang). 1 phiếu ↔ tối đa 1 event.
+  deliveryId        Int?
+  delivery          SupplierDeliveryDaily? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+  qty               Decimal?               @db.Decimal(18, 4) // KL snapshot từ phiếu — chỉ event sinh từ phiếu
+  unitPriceSnapshot Decimal?               @db.Decimal(18, 2) // đơn giá tại thời điểm chốt kỳ
+
+  // Nguồn gốc sự kiện thanh toán tự động: dòng đợt thanh toán đã đóng (đã chi).
+  paymentRoundItemId Int?
+  paymentRoundItem   PaymentRoundItem? @relation(fields: [paymentRoundItemId], references: [id], onDelete: SetNull)
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Partial uniques enforced via raw SQL:
+  //   ledger_tx_delivery_id_unique WHERE "deliveryId" IS NOT NULL
+  //   ledger_tx_payment_item_unique WHERE "paymentRoundItemId" IS NOT NULL
   @@index([ledgerType, entityId, partyId, projectId, date])
   @@index([importRunId])
+  @@index([deliveryId])
+  @@index([paymentRoundItemId])
   @@map("ledger_transactions")
 }
 

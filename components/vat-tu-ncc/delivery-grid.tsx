@@ -32,6 +32,8 @@ type DeliveryRow = {
   itemId: number;
   qty: unknown;
   unit: string;
+  unitPrice: unknown;
+  totalAmount: unknown;
   cbVatTu: string | null;
   chiHuyCt: string | null;
   keToan: string | null;
@@ -46,6 +48,8 @@ interface DeliveryGridRow extends RowWithId {
   itemLabel: string;
   qty: number;
   unit: string;
+  unitPrice: number;
+  totalAmount: number;
   projectLabel: string;
   cbVatTu: string;
   chiHuyCt: string;
@@ -80,6 +84,8 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
     itemLabel: itemMap[r.itemId] ?? String(r.itemId),
     qty: Number(r.qty),
     unit: r.unit,
+    unitPrice: r.unitPrice == null ? 0 : Number(r.unitPrice),
+    totalAmount: r.totalAmount == null ? 0 : Number(r.totalAmount),
     projectLabel: r.projectId ? (projectMap[r.projectId] ?? String(r.projectId)) : "",
     cbVatTu: r.cbVatTu ?? "",
     chiHuyCt: r.chiHuyCt ?? "",
@@ -92,6 +98,8 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
     { id: "itemLabel", title: "Vật tư", kind: "text", width: 240, readonly: true },
     { id: "qty", title: "SL", kind: "number", width: 100 },
     { id: "unit", title: "ĐVT", kind: "text", width: 80, readonly: true },
+    { id: "unitPrice", title: "Đơn giá", kind: "number", width: 120 },
+    { id: "totalAmount", title: "Thành tiền", kind: "number", width: 130, readonly: true },
     { id: "projectLabel", title: "Dự án", kind: "text", width: 100, readonly: true },
     { id: "cbVatTu", title: "Cán bộ VT", kind: "text", width: 140 },
     { id: "chiHuyCt", title: "Chỉ huy CT", kind: "text", width: 140 },
@@ -102,6 +110,8 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
   const patchDelivery = async (id: number, patch: Partial<DeliveryGridRow>) => {
     const current = rowsById.get(id);
     if (!current) throw new Error(`Phiếu #${id} không tồn tại`);
+    const currentPrice = current.unitPrice == null ? undefined : Number(current.unitPrice);
+    const patchedPrice = typeof patch.unitPrice === "number" ? patch.unitPrice : currentPrice;
     const merged: DeliveryInput = {
       supplierId,
       projectId: current.projectId ?? undefined,
@@ -109,6 +119,8 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
       itemId: current.itemId,
       qty: typeof patch.qty === "number" ? patch.qty : Number(current.qty),
       unit: current.unit,
+      // totalAmount cố tình bỏ trống để service tự tính = qty × đơn giá
+      unitPrice: patchedPrice,
       cbVatTu: typeof patch.cbVatTu === "string" ? (patch.cbVatTu || undefined) : (current.cbVatTu ?? undefined),
       chiHuyCt: typeof patch.chiHuyCt === "string" ? (patch.chiHuyCt || undefined) : (current.chiHuyCt ?? undefined),
       keToan: typeof patch.keToan === "string" ? (patch.keToan || undefined) : (current.keToan ?? undefined),
@@ -181,7 +193,7 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Chỉnh sửa nhanh: nhấp đúp vào ô <strong>SL</strong>, <strong>Cán bộ VT</strong>, <strong>Chỉ huy CT</strong>, <strong>Kế toán</strong>, <strong>Ghi chú</strong>. Đổi <strong>Vật tư</strong> hoặc <strong>Dự án</strong> qua nút &quot;Sửa đầy đủ&quot;.
+        Chỉnh sửa nhanh: nhấp đúp vào ô <strong>SL</strong>, <strong>Đơn giá</strong>, <strong>Cán bộ VT</strong>, <strong>Chỉ huy CT</strong>, <strong>Kế toán</strong>, <strong>Ghi chú</strong>. Thành tiền tự tính = SL × Đơn giá. Đổi <strong>Vật tư</strong> hoặc <strong>Dự án</strong> qua nút &quot;Sửa đầy đủ&quot;.
       </p>
 
       <DataGrid<DeliveryGridRow>

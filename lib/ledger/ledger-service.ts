@@ -22,6 +22,7 @@ import {
   queryCurrentBalance,
   queryDebtMatrix,
 } from "./ledger-aggregations";
+import { assertPeriodOpen } from "@/lib/vat-tu-ncc/period-lock";
 
 export type LedgerWriteClient = Pick<typeof prisma, "ledgerTransaction" | "ledgerOpeningBalance">;
 
@@ -34,6 +35,16 @@ function computeTotals(amount: Prisma.Decimal, vatPct: Prisma.Decimal) {
 
 export class LedgerService {
   constructor(private ledgerType: LedgerType) {}
+
+  /**
+   * Sổ vật tư: kỳ NCC đã ký đối chiếu là bất biến — chặn ghi lay_hang/thanh_toan
+   * có ngày rơi vào kỳ đã ký (dieu_chinh kỳ sau là lối ra duy nhất).
+   */
+  private async assertMaterialPeriodOpen(transactionType: string, partyId: number, date: Date) {
+    if (this.ledgerType !== "material") return;
+    if (transactionType !== "lay_hang" && transactionType !== "thanh_toan") return;
+    await assertPeriodOpen(partyId, date);
+  }
 
   async list(filter: LedgerTransactionFilter = {}) {
     const { entityId, partyId, projectId, dateFrom, dateTo, transactionType, page = 1, pageSize = 50 } = filter;
@@ -68,6 +79,7 @@ export class LedgerService {
   }
 
   async create(input: LedgerTransactionInput, client: LedgerWriteClient = prisma) {
+    await this.assertMaterialPeriodOpen(input.transactionType, input.partyId, new Date(input.date));
     const amountTt = new Prisma.Decimal(input.amountTt);
     const vatPctTt = new Prisma.Decimal(input.vatPctTt ?? "0");
     const { vat: vatTt, total: totalTt } = computeTotals(amountTt, vatPctTt);
@@ -103,6 +115,15 @@ export class LedgerService {
   }
 
   async update(id: number, input: LedgerTransactionInput, client: LedgerWriteClient = prisma) {
+    const current = await client.ledgerTransaction.findUnique({
+      where: { id },
+      select: { transactionType: true, partyId: true, date: true },
+    });
+    if (current) {
+      // Chặn cả trạng thái cũ lẫn mới — không cho kéo sự kiện ra/vào kỳ đã ký
+      await this.assertMaterialPeriodOpen(current.transactionType, current.partyId, current.date);
+    }
+    await this.assertMaterialPeriodOpen(input.transactionType, input.partyId, new Date(input.date));
     const amountTt = new Prisma.Decimal(input.amountTt);
     const vatPctTt = new Prisma.Decimal(input.vatPctTt ?? "0");
     const { vat: vatTt, total: totalTt } = computeTotals(amountTt, vatPctTt);
@@ -138,10 +159,72 @@ export class LedgerService {
   }
 
   async softDelete(id: number) {
+    const current = await prisma.ledgerTransaction.findUnique({
+      where: { id },
+      select: { transactionType: true, partyId: true, date: true },
+    });
+    if (current) {
+      await this.assertMaterialPeriodOpen(current.transactionType, current.partyId, current.date);
+    }
     await prisma.ledgerTransaction.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
+  }
+
+  /**
+   * Sinh/đồng bộ sự kiện lay_hang từ một phiếu vật tư ngày (chốt kỳ NCC).
+   * Idempotent theo deliveryId: 1 phiếu ↔ tối đa 1 event. Chạy lại chốt kỳ chỉ
+   * cập nhật giá/tiền của event đã có (kể cả event từng bị xóa mềm — revive).
+   * Giá thực tế (TT), VAT = 0; cột HĐ để 0 (bảng đối chiếu NCC không dùng HĐ).
+   */
+  async upsertFromDelivery(
+    input: {
+      deliveryId: number;
+      date: Date;
+      entityId: number;
+      partyId: number;
+      projectId: number | null;
+      itemId: number | null;
+      qty: Prisma.Decimal;
+      unitPrice: Prisma.Decimal;
+      content?: string | null;
+    },
+    client: LedgerWriteClient = prisma
+  ) {
+    const amountTt = input.qty.times(input.unitPrice);
+    const zero = new Prisma.Decimal(0);
+    const data = {
+      ledgerType: this.ledgerType,
+      date: input.date,
+      transactionType: "lay_hang" as const,
+      entityId: input.entityId,
+      partyId: input.partyId,
+      projectId: input.projectId,
+      itemId: input.itemId,
+      amountTt,
+      vatPctTt: zero,
+      vatTt: zero,
+      totalTt: amountTt,
+      amountHd: zero,
+      vatPctHd: zero,
+      vatHd: zero,
+      totalHd: zero,
+      qty: input.qty,
+      unitPriceSnapshot: input.unitPrice,
+      content: input.content ?? null,
+      status: "approved",
+      deletedAt: null,
+    };
+
+    const existing = await client.ledgerTransaction.findFirst({
+      where: { deliveryId: input.deliveryId },
+      select: { id: true },
+    });
+    if (existing) {
+      return client.ledgerTransaction.update({ where: { id: existing.id }, data });
+    }
+    return client.ledgerTransaction.create({ data: { ...data, deliveryId: input.deliveryId } });
   }
 
   async summary(filter: { entityId?: number; partyId?: number; projectId?: number } = {}): Promise<SummaryRow[]> {

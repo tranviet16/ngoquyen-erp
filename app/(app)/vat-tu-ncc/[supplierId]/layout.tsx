@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 
 const TABS = [
   { href: "/ngay", label: "Vật tư ngày" },
   { href: "/thang", label: "Vật tư tháng" },
+  { href: "/chot-ky", label: "Chốt kỳ" },
   { href: "/doi-chieu", label: "Đối chiếu công nợ" },
 ];
+
+const ADMIN_TABS = [{ href: "/kiem-tra-khop", label: "Kiểm tra khớp" }];
 
 interface Props {
   params: Promise<{ supplierId: string }>;
@@ -20,6 +24,9 @@ export default async function SupplierLayout({ params, children }: Props) {
 
   const supplier = await prisma.supplier.findUnique({ where: { id, deletedAt: null } });
   if (!supplier) notFound();
+
+  const isAdmin = await requireActiveAdmin().then(() => true).catch(() => false);
+  const tabs = isAdmin ? [...TABS, ...ADMIN_TABS] : TABS;
 
   const basePath = `/vat-tu-ncc/${id}`;
 
@@ -39,7 +46,7 @@ export default async function SupplierLayout({ params, children }: Props) {
 
       <div className="border-b overflow-x-auto">
         <nav className="flex gap-0 min-w-max">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <Link
               key={tab.href}
               href={`${basePath}${tab.href}`}

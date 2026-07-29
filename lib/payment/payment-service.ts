@@ -7,6 +7,9 @@ import { getDeptAccessMap, hasDeptAccess } from "@/lib/dept-access";
 import type { AccessLevel } from "@/lib/acl/modules";
 import { getOutstandingDebt, getCumulativePaid } from "@/lib/ledger/balance-service";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
+import { syncClosedRoundToLedger } from "./payment-ledger-sync";
+import { bypassAudit } from "@/lib/async-context";
+import { writeAuditLog } from "@/lib/audit";
 
 export type PaymentCategory = "vat_tu" | "nhan_cong" | "dich_vu" | "khac";
 export type RoundStatus =
@@ -394,10 +397,12 @@ export async function refreshAllItemBalances(roundId: number) {
   })));
   const now = new Date();
   await prisma.$transaction(async (tx) => {
-    const locked = await tx.paymentRound.updateMany({
+    // updateMany làm khóa trạng thái nguyên tử (không đổi dữ liệu nghiệp vụ) —
+    // các update từng item bên dưới vẫn được audit đầy đủ.
+    const locked = await bypassAudit(() => tx.paymentRound.updateMany({
       where: { id: roundId, status: "draft" },
       data: { updatedAt: now },
-    });
+    }));
     if (locked.count !== 1) {
       throw new Error("Chỉ có thể làm mới số dư khi đợt ở trạng thái nháp");
     }
@@ -511,10 +516,11 @@ export async function bulkApproveAsRequested(roundId: number) {
 
   const now = new Date();
   await prisma.$transaction(async (tx) => {
-    const transitioned = await tx.paymentRound.updateMany({
+    // Chuyển trạng thái nguyên tử qua updateMany; audit ghi tay ngay dưới.
+    const transitioned = await bypassAudit(() => tx.paymentRound.updateMany({
       where: { id: roundId, status: "submitted" },
       data: { status: "approved", approvedAt: now, approvedById: actor.id },
-    });
+    }));
     if (transitioned.count !== 1) {
       throw new Error("Đợt phải ở trạng thái đã gửi");
     }
@@ -530,6 +536,13 @@ export async function bulkApproveAsRequested(roundId: number) {
         data: { soDuyet: item.soDeNghi, approvedAt: now, approvedById: actor.id },
       });
     }
+  });
+  await writeAuditLog({
+    tableName: "PaymentRound",
+    recordId: String(roundId),
+    action: "update",
+    after: { status: "approved", approvedById: actor.id, via: "bulkApproveAsRequested" },
+    userId: actor.id,
   });
 }
 
@@ -575,15 +588,23 @@ export async function rejectRound(roundId: number, reason: string) {
 export async function closeRound(roundId: number) {
   const actor = await getActor();
   if (!isAdmin(actor.role)) throw new Error("Chỉ admin được đóng đợt");
-  const round = await prisma.paymentRound.findUnique({
-    where: { id: roundId },
-    select: { status: true },
+  const closedAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    // Chuyển trạng thái nguyên tử qua updateMany; audit ghi tay ngay dưới.
+    const transitioned = await bypassAudit(() => tx.paymentRound.updateMany({
+      where: { id: roundId, status: "approved" },
+      data: { status: "closed" },
+    }));
+    if (transitioned.count !== 1) throw new Error("Chỉ đóng được đợt đã duyệt");
+    // Đóng đợt = tiền đã chi thật → ghi sự kiện thanh_toan vào công nợ vật tư
+    await syncClosedRoundToLedger(roundId, tx, closedAt);
   });
-  if (round?.status !== "approved")
-    throw new Error("Chỉ đóng được đợt đã duyệt");
-  await prisma.paymentRound.update({
-    where: { id: roundId },
-    data: { status: "closed" },
+  await writeAuditLog({
+    tableName: "PaymentRound",
+    recordId: String(roundId),
+    action: "update",
+    after: { status: "closed", via: "closeRound" },
+    userId: actor.id,
   });
 }
 

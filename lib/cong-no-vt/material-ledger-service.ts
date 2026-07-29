@@ -6,6 +6,7 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
 import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
+import { assertPeriodOpen } from "@/lib/vat-tu-ncc/period-lock";
 import { transactionSchema, openingBalanceSchema } from "./schemas";
 import type { TransactionInput, OpeningBalanceInput } from "./schemas";
 
@@ -106,10 +107,17 @@ export async function adminPatchMaterialTransaction(
   id: number,
   patch: Partial<{ vatTt: number | string; totalTt: number | string; vatHd: number | string; totalHd: number | string }>,
 ) {
-  const current = await prisma.ledgerTransaction.findUnique({ where: { id }, select: { ledgerType: true } });
+  const current = await prisma.ledgerTransaction.findUnique({
+    where: { id },
+    select: { ledgerType: true, transactionType: true, partyId: true, date: true },
+  });
   if (!current || current.ledgerType !== "material") throw new Error(`Giao dịch #${id} không tồn tại`);
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "read", scope: "module" });
   await requireActiveAdmin();
+  // Kỳ NCC đã ký là bất biến với cả admin — sửa số đi qua gỡ ký hoặc dieu_chinh
+  if (current.transactionType === "lay_hang" || current.transactionType === "thanh_toan") {
+    await assertPeriodOpen(current.partyId, current.date);
+  }
   const data: Record<string, unknown> = {};
   if (patch.vatTt !== undefined) data.vatTt = String(patch.vatTt ?? "0");
   if (patch.totalTt !== undefined) data.totalTt = String(patch.totalTt ?? "0");
