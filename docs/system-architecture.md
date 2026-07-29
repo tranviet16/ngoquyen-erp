@@ -44,6 +44,7 @@ Once module-level gate passes, per-module dispatch rules apply:
 |--------|-----------|----------|----------|
 | `du-an` (Projects) | Project-based | `ProjectPermission` + `ProjectGrantAll` | User-specific per-project grants + optional super-grant covering all projects |
 | `cong-no-vt`, `cong-no-nc` (Supplier Debt) | Dept-based | `UserDeptAccess` (existing) | Scoped to user's department(s) |
+| `vat-tu-ncc` (Supplier Material Ledger) | Dept-based | `UserDeptAccess` (existing) | Scoped to user's department(s); `chot-ky` writes need `edit` level; `kiem-tra-khop` also requires active admin |
 | `task` (Tasks/Cộng Việc) | Dept-based | `UserDeptAccess` (existing) | Scoped to user's department(s) |
 | `coordination` (Phiếu Phối Hợp) | Dept-based | `UserDeptAccess` (existing) | Scoped to user's department(s) |
 | `hieu-suat` (Performance) | Role-based | AppRole + `isLeader` + `isDirector` | Role/director flags determine access |
@@ -141,6 +142,43 @@ GET /api/tai-chinh/state-obligation/report       Period aggregation
 - Mocked Prisma $queryRaw for report aggregation
 - JournalEntry sync helpers tested with fake tx client
 - CRUD operation coverage
+
+---
+
+## Vật Tư NCC — Đối chiếu công nợ (Ledger Single-Source-of-Truth, 2026-07-29)
+
+**Decision: `ledger_transactions` (`ledgerType="material"`) is the single source of truth.** `SupplierReconciliation` no longer stores hand-entered totals; it is a derived snapshot until signed.
+
+### Write paths into the ledger
+
+1. **`lay_hang` (delivery):** Daily slips (`SupplierDeliveryDaily`) collect qty without price. At period close, the accountant assigns `unitPrice`/`totalAmount` per slip and `commitPeriodClose` (`lib/vat-tu-ncc/period-close-service.ts`) upserts one `LedgerTransaction` per slip, keyed by `deliveryId` (partial-unique index `ledger_tx_delivery_id_unique`) — re-running close is idempotent. `entityId` on the event is resolved from `SupplierDeliveryDaily.projectId → Project.entityId`; slips without a project are rejected, not silently defaulted.
+2. **`thanh_toan` (payment):** `PaymentRound.closeRound()` (approved→closed, `lib/payment/payment-service.ts`) transactionally invokes `syncClosedRoundToLedger` (`lib/payment/payment-ledger-sync.ts`), which writes one event per `PaymentRoundItem` where `category="vat_tu"` and `soDuyet > 0`, keyed by `paymentRoundItemId` (partial-unique index `ledger_tx_payment_item_unique`). Scope is intentionally `vat_tu` only — `nhan_cong`/`dich_vu`/`khac` are out of scope for this iteration.
+3. **`dieu_chinh` (adjustment):** Manual, only path allowed to write into an already-signed period (see lock below).
+
+### Fixed close period
+
+`lib/vat-tu-ncc/period.ts` → `periodRange(year, month)` returns a fixed **27th of prior month → 26th of target month** window (UTC midnight), applied uniformly to every supplier — no per-supplier configuration.
+
+### Derived reconciliation & signing
+
+`lib/vat-tu-ncc/reconciliation-derive-service.ts` computes, per unsigned period: **A** (opening = prior period's closing carry-over), **B** (Σ `lay_hang` in range), **C** (Σ `thanh_toan` in range) — all live queries against `ledger_transactions`, nothing stored. `signReconciliation`:
+- runs inside a `$transaction` guarded by the same advisory lock key as `commitPeriodClose` (`vat-tu-close:{supplierId}:{periodFrom}`), re-checking the signed flag inside the transaction to avoid a TOCTOU race with a concurrent close;
+- freezes `openingBalance/totalIn/totalPaid/closingBalance` (denormalized, display-only after signing) plus a full `signedSnapshotJson` (line items + subtotals) as the reprint source of truth.
+
+`unsignReconciliation` is admin-only and rejects if a later period for the same supplier is already signed (preserves the carry-over chain integrity).
+
+### Period lock
+
+`assertPeriodOpen(supplierId, date)` (`lib/vat-tu-ncc/period-lock.ts`) rejects any write dated inside a signed period's `[periodFrom, periodTo]`. Enforced at every write path that can touch `ledgerType="material"` data: `delivery-service.ts` (create/update/soft-delete slip), `ledger-service.ts` (`upsertFromDelivery` and manual create/update/soft-delete), `payment-ledger-sync.ts` (payment close), and the admin ledger patch endpoint (`material-ledger-service.ts`) — signed periods are immutable even to admins; corrections go through `dieu_chinh` in the following period.
+
+### Data model additions
+
+- `Project.entityId: Int? FK → Entity` — supplies the Chủ Thể for slips/events derived from a project.
+- `SupplierDeliveryDaily.unitPrice/totalAmount: Decimal?` — null until period close.
+- `LedgerTransaction.deliveryId: Int? FK` (unique), `.paymentRoundItemId: Int? FK` (unique), `.qty`/`.unitPriceSnapshot: Decimal?` — link + snapshot for events auto-generated from slips.
+- `SupplierReconciliation`: 4 total columns now nullable (populated only on sign); `signedSnapshotJson: Json?` added.
+
+**Migrations:** `20260729160000_add_project_entity_and_delivery_pricing`, `20260729161000_link_ledger_to_payment_item`, `20260729162000_reconciliation_derived_snapshot`.
 
 ---
 

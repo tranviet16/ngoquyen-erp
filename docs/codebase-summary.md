@@ -4,7 +4,7 @@
 
 **ngoquyyen-erp** is an enterprise resource planning (ERP) system built with Next.js 14 (App Router), TypeScript, Prisma ORM, and PostgreSQL. The system manages projects (du-án), supplier debt (cộng nợ), tasks (công việc), coordination forms (phiếu phối hợp), and administrative operations through a granular, role-based access control system.
 
-**Latest Major Change:** 2026-05-15 Payment round refactor — EntityId FK + cascade UI + 4-category pivot. Previous: 2026-05-10 Plan A — Vận hành module + 2-axis ACL
+**Latest Major Change:** 2026-07-29 vat-tu-ncc ledger single-source-of-truth (period close → `lay_hang`, PaymentRound closeRound → `thanh_toan`, derived+signable reconciliation; see §9). Previous: 2026-05-15 Payment round refactor — EntityId FK + cascade UI + 4-category pivot. Previous: 2026-05-10 Plan A — Vận hành module + 2-axis ACL
 
 ---
 
@@ -30,8 +30,17 @@ ngoquyyen-erp/
 │       │       └── ...
 │       ├── cong-no-vt/                 # Supplier debt (Vật Tư dept)
 │       ├── cong-no-nc/                 # Supplier debt (Nhân Công dept)
+│       ├── vat-tu-ncc/                 # NEW: Supplier material ledger + reconciliation
+│       │   └── [supplierId]/
+│       │       ├── ngay/               # Daily delivery slips (qty + unitPrice/totalAmount)
+│       │       ├── thang/               # Monthly grid
+│       │       ├── chot-ky/            # Period close (27→26): bulk price assign → lay_hang ledger
+│       │       ├── doi-chieu/          # Derived reconciliation (A/B/C) + sign/unsign
+│       │       └── kiem-tra-khop/      # Admin: slip↔ledger consistency check
 │       └── ...
 ├── lib/
+│   ├── vat-tu-ncc/                     # NEW: period.ts, period-lock.ts, period-close-service.ts,
+│   │                                   #      reconciliation-derive-service.ts, period-recon-check-service.ts
 │   ├── acl/                            # NEW: 2-axis access control system
 │   │   ├── modules.ts                  # Module registry + per-module config
 │   │   ├── effective.ts                # Access resolver (canAccess, getViewable*)
@@ -162,6 +171,8 @@ ngoquyyen-erp/
 - `lib/cong-no-vt/balance-report-service.ts` — Cumulative debt report (FULL OUTER JOIN opening_balances ⋈ transactions)
 - `lib/cong-no-nc/balance-report-service.ts` — Delegates to VT service
 
+**NEW (2026-07-29):** `ledger_transactions` is now fed by two write paths for `ledgerType="material"`: (1) NCC period close (`lay_hang`, xem mục 9) và (2) PaymentRound `closeRound` (`thanh_toan`, chỉ `category="vat_tu"`, xem mục 6). `balance-report-service` đọc cùng bảng nên số liệu công nợ lũy kế và bảng đối chiếu NCC (mục 9) luôn khớp nhau — không còn 2 nguồn số song song.
+
 ### 4. Tasks (van-hanh/cong-viec)
 
 **Models:** Task, TaskAssignment, TaskComment, Attachment
@@ -200,6 +211,7 @@ ngoquyyen-erp/
 - Entity-Supplier-Project-Category (4×N) matrix for granular balance tracking
 - Auto-fill congNo + luyKe from balance-service per ledgerType (material/labor)
 - Service: `lib/payment/payment-service.ts` with entityId threading to balance-service (prevents cross-entity bleed)
+- **NEW (2026-07-29):** `closeRound(roundId)` (approved→closed) transactionally calls `syncClosedRoundToLedger` (`lib/payment/payment-ledger-sync.ts`) which writes one `thanh_toan` `LedgerTransaction` per `PaymentRoundItem` where `category="vat_tu"` and `soDuyet > 0`; date = ngày đóng đợt. Idempotent via `ledgerTransaction.paymentRoundItemId` (1 dòng đợt ↔ tối đa 1 event). Blocked by `assertPeriodOpen` if the close date falls inside a signed NCC reconciliation period. `nhan_cong`/`dich_vu`/`khac` chưa sync (out of scope).
 
 **Schema (PaymentRoundItem):**
 - `entityId: Int FK` — Project entity (chu thể); replaced `projectScope` enum (2026-05-15)
@@ -241,6 +253,22 @@ ngoquyyen-erp/
 - Column mapping per tab
 - Error logging and rollback on failure
 
+### 9. Supplier Material Reconciliation (vat-tu-ncc) — NEW 2026-07-29
+
+**Purpose:** Single-source-of-truth flow tying daily material delivery slips → fixed close period → `ledger_transactions` → derived (not manually-entered) supplier reconciliation.
+
+**Flow:**
+1. Daily slip (`SupplierDeliveryDaily`, per NCC × công trình × ngày) — `unitPrice`/`totalAmount` are nullable until period close (accountant assigns price then, not at daily entry).
+2. **Chốt kỳ** (`/vat-tu-ncc/[supplierId]/chot-ky`): fixed period 27 tháng trước → 26 tháng đích (`lib/vat-tu-ncc/period.ts`, `periodRange(year, month)`). Bulk price assignment (with prior-period price suggestion) → `commitPeriodClose` (`lib/vat-tu-ncc/period-close-service.ts`) upserts one `lay_hang` `LedgerTransaction` per slip, keyed by `LedgerTransaction.deliveryId` (idempotent, partial-unique). `entityId` on the event is derived from the slip's `Project.entityId` FK. Slips missing `projectId` are rejected at close time.
+3. **Đối chiếu** (`/vat-tu-ncc/[supplierId]/doi-chieu`): `SupplierReconciliation` is a *derived snapshot* — unsigned periods compute A (opening = prior period's closing carry-over), B (Σ `lay_hang`), C (Σ `thanh_toan`) live from the ledger via `lib/vat-tu-ncc/reconciliation-derive-service.ts` (`getReconciliationView`, `listReconciliationsDerived`). Signing (`signReconciliation`) freezes the 4 total columns + a full `signedSnapshotJson` (reprint source) and **locks all writes** dated inside `[periodFrom, periodTo]` for that supplier — enforced by `assertPeriodOpen` (`lib/vat-tu-ncc/period-lock.ts`) in delivery-service, ledger-service, payment-ledger-sync, and admin ledger patch. Differences post-signing must go through a `dieu_chinh` (adjustment) event in the following period. Unsign (`unsignReconciliation`) is admin-only and restricted to the latest signed period per supplier (preserves the carry-over chain). Manual entry of `openingBalance/totalIn/totalPaid` is removed from the UI.
+4. **Kiểm tra khớp** (`/vat-tu-ncc/[supplierId]/kiem-tra-khop`, admin-only): `checkPeriodConsistency` (`lib/vat-tu-ncc/period-recon-check-service.ts`) FULL OUTER JOINs slips ↔ ledger events to surface mismatches.
+
+**Models:** `SupplierDeliveryDaily` (+`unitPrice`/`totalAmount`), `SupplierReconciliation` (now nullable totals + `signedSnapshotJson`), `LedgerTransaction` (+`deliveryId`, `paymentRoundItemId`, `qty`, `unitPriceSnapshot`), `Project.entityId` FK (source of Chủ Thể for slips without one directly).
+
+**ACL:** Module key `vat-tu-ncc` (dept-scoped, `UserDeptAccess`); `chot-ky` write actions require `edit` level; `kiem-tra-khop` additionally requires active admin.
+
+**Migrations:** `20260729160000_add_project_entity_and_delivery_pricing`, `20260729161000_link_ledger_to_payment_item`, `20260729162000_reconciliation_derived_snapshot`.
+
 ---
 
 ## Data Models (Prisma)
@@ -255,7 +283,7 @@ ngoquyyen-erp/
 | **ModulePermission** | **Module access** | userId, moduleKey, level |
 | **ProjectPermission** | **Project override** | userId, projectId, level |
 | **ProjectGrantAll** | **All-projects grant** | userId, level |
-| Project | Projects | id, name, status, startDate, endDate |
+| Project | Projects | id, name, status, startDate, endDate, entityId? (FK → Entity, chủ thể; NEW source for vat-tu-ncc slip entity) |
 | Task | Tasks | id, projectId, title, status, assigneeId |
 | CoordinationForm | Approval forms | id, projectId, status, createdBy |
 | PaymentRound | Payment planning rounds | id, month, sequence, status, createdBy, approvedBy |
@@ -263,6 +291,9 @@ ngoquyyen-erp/
 | **StateObligationType** | **NEW: Obligation catalog** | id, name, code, category (thue\|bao_hiem\|khac), openingBalance, openingDate, sortOrder, deletedAt |
 | **StateObligationTxn** | **NEW: Obligation ledger** | id, typeId (FK), date, kind (phai_tra\|da_nop), amount, cashAccountId?, journalEntryId?, refNo, description, note, deletedAt |
 | AuditLog | Change tracking | id, action, userId, details, timestamp |
+| **SupplierDeliveryDaily** | **NEW: Daily material slip** | id, supplierId, projectId?, date, itemId, qty, unit, unitPrice?, totalAmount?, deletedAt |
+| **SupplierReconciliation** | **NEW: Derived reconciliation snapshot** | id, supplierId, periodFrom, periodTo, openingBalance?/totalIn?/totalPaid?/closingBalance? (null until signed), signedBySupplier, signedDate?, signedSnapshotJson? |
+| **LedgerTransaction** | **NEW fields: ledger event** | id, ledgerType, date, transactionType (lay_hang\|thanh_toan\|dieu_chinh), entityId, partyId, projectId?, itemId?, amountTt/vatTt/totalTt, deliveryId? (FK, unique), paymentRoundItemId? (FK, unique), qty?, unitPriceSnapshot? |
 
 ### Postgres Constraints
 
@@ -319,6 +350,12 @@ Constraints prevent invalid values at DB layer (eliminates silent denials from t
 /du-an                    Module: du-an (project-scoped)
 /cong-no-vt               Module: cong-no-vt (dept-scoped)
 /cong-no-nc               Module: cong-no-nc (dept-scoped)
+/vat-tu-ncc               Module: vat-tu-ncc (dept-scoped) — NEW 2026-07-29
+  /[supplierId]/ngay          Daily delivery slips
+  /[supplierId]/thang         Monthly grid
+  /[supplierId]/chot-ky       Period close (27→26), requires edit level
+  /[supplierId]/doi-chieu     Derived reconciliation, sign/unsign
+  /[supplierId]/kiem-tra-khop Slip↔ledger consistency check, admin-only
 ```
 
 ---
@@ -570,5 +607,5 @@ Both can execute in parallel; no code conflicts.
 
 ---
 
-**Last Updated:** 2026-05-21  
+**Last Updated:** 2026-07-29 (added vat-tu-ncc ledger single-source-of-truth flow; see §9)
 **Next Update Trigger:** Plan B or C completion, or major payment/ledger changes
