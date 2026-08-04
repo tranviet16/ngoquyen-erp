@@ -22,6 +22,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - Added controlled finance payable/receivable sync snapshots with admin override preservation, SL-DT receivable sync, payable exclusions, and clearer Excel export formatting.
 
 ### Fixed
+- Active administrators now bypass the module development rollout gate across page/layout guards, actions and APIs, generic ACL checks, role-based write checks, and project visibility. Inactive administrators remain denied.
 - Restored direct tailnet ERP access on `http://100.116.178.88:3001`, added `http://admin-pc:3001` as a trusted alternative, and retained the Tailscale HTTPS endpoint as a fallback without exposing the Docker port beyond loopback; protocol-aware CSP and transport headers keep HTTP assets usable while preserving HTTPS-only upgrade/HSTS protections.
 - Prevented breadcrumbs from prefetching nonexistent grouping routes (`/admin`, `/thanh-toan`, `/van-hanh`), eliminating the post-deploy browser-console 404 while preserving accessible current-page semantics.
 - Restored labor-specific Excel header mapping after the upstream merge so both `Đội Thi Công` transaction rows and legacy supplier headers remain importable; added fail-closed risk-manifest coverage for role administration, finance payable/receivable sync, and the SL-DT lot catalog.
