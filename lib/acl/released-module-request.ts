@@ -20,7 +20,7 @@ export class ModuleRequestError extends Error {
   }
 }
 
-/** Authenticates, checks module entitlement, then applies the global rollout gate. */
+/** Authenticates, checks module entitlement, then applies the rollout gate for non-admin users. */
 export async function requireReleasedModuleRequest(
   moduleKey: ModuleKey,
   access: CanAccessOpts = { minLevel: "read", scope: "module" },
@@ -33,6 +33,9 @@ export async function requireReleasedModuleRequest(
 
   const entitled = await canAccessEntitlement(session.user.id, moduleKey, access);
   if (!entitled) throw new ModuleRequestError("forbidden");
+  if (session.user.role === "admin") {
+    return { userId: session.user.id, role: "admin" };
+  }
   if (!(await isModuleReleased(moduleKey))) {
     throw new ModuleRequestError("development");
   }

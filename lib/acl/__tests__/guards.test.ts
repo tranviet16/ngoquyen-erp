@@ -60,6 +60,27 @@ describe("requireModuleAccess ordering", () => {
     );
   });
 
+  it("lets an entitled admin access a module in development", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+    mocks.isModuleReleased.mockResolvedValue(false);
+
+    await expect(requireModuleAccess("du-an")).resolves.toEqual({
+      userId: "admin-1",
+      role: "admin",
+    });
+    expect(mocks.isModuleReleased).not.toHaveBeenCalled();
+  });
+
+  it("keeps an inactive admin denied when entitlement rejects the request", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+    mocks.canAccessEntitlement.mockResolvedValue(false);
+
+    await expect(requireModuleAccess("du-an")).rejects.toThrow(
+      "redirect:/forbidden?m=du-an&need=read",
+    );
+    expect(mocks.isModuleReleased).not.toHaveBeenCalled();
+  });
+
   it("returns session identity only after all gates pass", async () => {
     mocks.getSession.mockResolvedValue({ user: { id: "u1", role: "manager" } });
 

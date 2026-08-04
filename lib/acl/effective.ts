@@ -127,6 +127,9 @@ export async function canAccess(
   moduleKey: ModuleKey,
   opts: CanAccessOpts,
 ): Promise<boolean> {
+  const user = await loadUser(userId);
+  if (!user || user.isActive === false) return false;
+  if (user.role === "admin") return true;
   if (!(await isModuleReleased(moduleKey))) return false;
   return canAccessEntitlement(userId, moduleKey, opts);
 }
@@ -165,13 +168,12 @@ export type ViewableProjectIds =
 export async function getViewableProjectIds(
   userId: string,
 ): Promise<ViewableProjectIds> {
-  if (!(await isModuleReleased("du-an"))) return { kind: "none" };
-
   const user = await loadUser(userId);
   if (!user || user.isActive === false) return { kind: "none" };
 
   // D1: admin sees all projects
   if (user.role === "admin") return { kind: "all" };
+  if (!(await isModuleReleased("du-an"))) return { kind: "none" };
 
   // Trục 1: user must have module-level access to "du-an"
   const moduleLevel = await getEffectiveModuleLevel(userId, "du-an");

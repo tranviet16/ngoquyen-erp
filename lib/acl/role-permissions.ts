@@ -63,8 +63,8 @@ export async function hasRoleModuleAccess(
   minLevel: AccessLevel,
 ): Promise<boolean> {
   if (!role) return false;
-  if (!(await isModuleReleased(moduleKey))) return false;
   if (role === "admin") return true;
+  if (!(await isModuleReleased(moduleKey))) return false;
   const level = await getRoleModuleLevel(role, moduleKey);
   if (!level) return false;
   return LEVEL_RANK[level] >= LEVEL_RANK[minLevel];

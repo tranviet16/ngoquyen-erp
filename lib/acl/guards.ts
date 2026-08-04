@@ -50,6 +50,10 @@ export async function requireModuleAccess(
     redirect(`/forbidden?${params.toString()}`);
   }
 
+  if (role === "admin") {
+    return { userId, role: "admin" };
+  }
+
   if (!(await isModuleReleased(moduleKey))) {
     const params = new URLSearchParams({ m: moduleKey });
     redirect(`/dang-phat-trien?${params.toString()}`);

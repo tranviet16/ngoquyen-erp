@@ -167,7 +167,7 @@ describe("canAccess — admin short-circuit (D1)", () => {
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 
-  it("disabled module blocks admin too because availability is a rollout switch", async () => {
+  it("admin bypasses a development rollout", async () => {
     availabilityRows = availabilityRows.map((row) =>
       row.moduleKey === "dashboard" ? { ...row, status: "development" } : row,
     );
@@ -177,8 +177,8 @@ describe("canAccess — admin short-circuit (D1)", () => {
       scope: "module",
     });
 
-    expect(result).toBe(false);
-    expect(mockFindUnique).not.toHaveBeenCalled();
+    expect(result).toBe(true);
+    expect(mockFindUnique).toHaveBeenCalled();
 
     const entitlement = await canAccessEntitlement("admin1", "dashboard", {
       minLevel: "read",
@@ -569,14 +569,22 @@ describe("canAccess — role axis (van-hanh.hieu-suat)", () => {
 // ─── getViewableProjectIds ────────────────────────────────────────────────────
 
 describe("getViewableProjectIds", () => {
-  it("returns none before loading user/project data when du-an is in development", async () => {
+  it("returns all projects for an admin when du-an is in development", async () => {
     vi.resetAllMocks();
     availabilityRows = availabilityRows.map((row) =>
       row.moduleKey === "du-an" ? { ...row, status: "development" } : row,
     );
 
-    await expect(getViewableProjectIds("admin1")).resolves.toEqual({ kind: "none" });
-    expect(mockFindUnique).not.toHaveBeenCalled();
+    mockFindUnique.mockResolvedValue({
+      id: "admin1",
+      role: "admin",
+      isActive: true,
+      isLeader: false,
+      isDirector: false,
+    });
+
+    await expect(getViewableProjectIds("admin1")).resolves.toEqual({ kind: "all" });
+    expect(mockFindUnique).toHaveBeenCalled();
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 

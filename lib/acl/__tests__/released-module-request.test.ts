@@ -46,11 +46,37 @@ describe("requireReleasedModuleRequest", () => {
     expect(mocks.isModuleReleased).not.toHaveBeenCalled();
   });
 
+  it("keeps an inactive admin denied when entitlement rejects the request", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+    mocks.canAccessEntitlement.mockResolvedValue(false);
+
+    await expect(requireReleasedModuleRequest("du-an")).rejects.toMatchObject({
+      reason: "forbidden",
+    });
+    expect(mocks.isModuleReleased).not.toHaveBeenCalled();
+  });
+
   it("blocks an entitled user when the module is in development", async () => {
     mocks.isModuleReleased.mockResolvedValue(false);
     await expect(requireReleasedModuleRequest("du-an")).rejects.toMatchObject({
       reason: "development",
     });
+  });
+
+  it("lets an entitled admin access a module that is in development", async () => {
+    mocks.getSession.mockResolvedValue({ user: { id: "admin-1", role: "admin" } });
+    mocks.isModuleReleased.mockResolvedValue(false);
+
+    await expect(requireReleasedModuleRequest("du-an")).resolves.toEqual({
+      userId: "admin-1",
+      role: "admin",
+    });
+    expect(mocks.canAccessEntitlement).toHaveBeenCalledWith(
+      "admin-1",
+      "du-an",
+      { minLevel: "read", scope: "module" },
+    );
+    expect(mocks.isModuleReleased).not.toHaveBeenCalled();
   });
 
   it("forwards a server-defined resource scope to the entitlement check", async () => {

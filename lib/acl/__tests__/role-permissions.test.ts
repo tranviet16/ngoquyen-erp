@@ -116,12 +116,12 @@ describe("hasRoleModuleAccess", () => {
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 
-  it("development rollout blocks admin without reading role permissions", async () => {
+  it("development rollout does not block admin or read role permissions", async () => {
     availabilityRows = availabilityRows.map((row) =>
       row.moduleKey === "du-an" ? { ...row, status: "development" } : row,
     );
 
-    expect(await hasRoleModuleAccess("admin", "du-an", "read")).toBe(false);
+    expect(await hasRoleModuleAccess("admin", "du-an", "read")).toBe(true);
     expect(mockFindMany).not.toHaveBeenCalled();
   });
 
