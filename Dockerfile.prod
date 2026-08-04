@@ -1,16 +1,27 @@
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=1536
 
 # Install native build tools for packages that need them (sharp, pg)
 RUN apk add --no-cache libc6-compat python3 make g++
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npm ci
 
 # Stage 2: Build the Next.js application
 FROM node:20-alpine AS builder
 WORKDIR /app
+ENV NODE_OPTIONS=--max-old-space-size=1536
+
+# Static route analysis imports server modules during `next build`. These
+# placeholders satisfy configuration validation without baking runtime secrets
+# into the image; the container receives real values at startup.
+ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
+ENV BETTER_AUTH_SECRET=build-time-placeholder-secret
+ENV BETTER_AUTH_URL=http://localhost:3000
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
