@@ -6,6 +6,7 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 const TABS = [
   { href: "/ngay", label: "Vật tư ngày" },
   { href: "/thang", label: "Vật tư tháng" },
+  { href: "/bao-gia", label: "Báo giá" },
   { href: "/chot-ky", label: "Chốt kỳ" },
   { href: "/doi-chieu", label: "Đối chiếu công nợ" },
 ];

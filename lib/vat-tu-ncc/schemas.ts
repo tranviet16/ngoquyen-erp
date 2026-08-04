@@ -30,3 +30,13 @@ export const reconciliationSchema = z.object({
 );
 
 export type ReconciliationInput = z.infer<typeof reconciliationSchema>;
+
+export const priceQuoteSchema = z.object({
+  supplierId: z.number().int().positive(),
+  itemId: z.number().int().positive(),
+  unitPrice: z.number().nonnegative("Đơn giá phải >= 0"),
+  effectiveFrom: z.string().min(1, "Ngày hiệu lực không được để trống"),
+  note: z.string().optional(),
+});
+
+export type PriceQuoteInput = z.infer<typeof priceQuoteSchema>;

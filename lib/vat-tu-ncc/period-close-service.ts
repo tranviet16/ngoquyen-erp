@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { LedgerService } from "@/lib/ledger/ledger-service";
 import { periodRange, periodLabel } from "./period";
+import { resolveQuotePrice } from "./quote-resolver";
 
 export interface PeriodCloseDeliveryRow {
   id: number;
@@ -113,20 +114,35 @@ export async function previewPeriodClose(
     findSignedOverlap(supplierId, from, to),
   ]);
 
-  // Gợi ý giá = đơn giá lần nhập gần nhất trước kỳ, theo từng vật tư của NCC này
-  const suggestions = itemMap.size
-    ? await prisma.$queryRaw<{ itemId: number; unitPrice: Prisma.Decimal }[]>`
-        SELECT DISTINCT ON ("itemId") "itemId", "unitPrice"
-        FROM supplier_delivery_daily
-        WHERE "supplierId" = ${supplierId}
-          AND "itemId" IN (${Prisma.join([...itemMap.keys()])})
-          AND "unitPrice" IS NOT NULL
-          AND date < ${from}
-          AND "deletedAt" IS NULL
-        ORDER BY "itemId", date DESC, id DESC
-      `
-    : [];
+  // Gợi ý giá — ưu tiên: (1) báo giá hiệu lực tại đúng ngày từng phiếu,
+  // (2) fallback đơn giá lần nhập gần nhất trước kỳ theo từng vật tư.
+  const [suggestions, quotes] = await Promise.all([
+    itemMap.size
+      ? prisma.$queryRaw<{ itemId: number; unitPrice: Prisma.Decimal }[]>`
+          SELECT DISTINCT ON ("itemId") "itemId", "unitPrice"
+          FROM supplier_delivery_daily
+          WHERE "supplierId" = ${supplierId}
+            AND "itemId" IN (${Prisma.join([...itemMap.keys()])})
+            AND "unitPrice" IS NOT NULL
+            AND date < ${from}
+            AND "deletedAt" IS NULL
+          ORDER BY "itemId", date DESC, id DESC
+        `
+      : Promise.resolve([]),
+    itemMap.size
+      ? prisma.supplierPriceQuote.findMany({
+          where: {
+            supplierId,
+            itemId: { in: [...itemMap.keys()] },
+            deletedAt: null,
+            effectiveFrom: { lte: to },
+          },
+          select: { id: true, itemId: true, unitPrice: true, effectiveFrom: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const suggestionMap = new Map(suggestions.map((s) => [s.itemId, Number(s.unitPrice)]));
+  const quoteList = quotes.map((q) => ({ ...q, unitPrice: Number(q.unitPrice) }));
 
   return {
     periodFrom: isoDate(from),
@@ -147,7 +163,8 @@ export async function previewPeriodClose(
         entityId: project?.entityId ?? null,
         entityName: project?.entity?.name ?? "",
         currentUnitPrice: d.unitPrice == null ? null : Number(d.unitPrice),
-        suggestedUnitPrice: suggestionMap.get(d.itemId) ?? null,
+        suggestedUnitPrice:
+          resolveQuotePrice(quoteList, d.itemId, d.date) ?? suggestionMap.get(d.itemId) ?? null,
       };
     }),
     violations: collectViolations(deliveries, projectMap),
