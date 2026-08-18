@@ -66,7 +66,7 @@ export const changeOrderSchema = z.object({
 export const transactionSchema = z.object({
   projectId: z.number().int().positive(),
   date: z.string().min(1, "Ngày không được để trống"),
-  transactionType: z.enum(["lay_hang", "nhan_cong", "may_moc"]),
+  transactionType: z.enum(["lay_hang", "nhan_cong", "may_moc", "chi_phi_chung"]),
   categoryId: z.number().int().positive(),
   itemCode: z.string().min(1, "Mã hàng không được để trống"),
   itemName: z.string().min(1, "Tên hàng không được để trống"),

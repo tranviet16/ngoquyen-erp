@@ -12,6 +12,7 @@ const TABS = [
   { href: "/phat-sinh", label: "Phát Sinh (CO)" },
   { href: "/dinh-muc", label: "Định Mức" },
   { href: "/giao-dich", label: "Giao Dịch" },
+  { href: "/can-doi-vat-tu", label: "Cân Đối VT" },
   { href: "/hop-dong", label: "Hợp Đồng" },
   { href: "/dong-tien-3-ben", label: "Dòng Tiền 3 Bên" },
   { href: "/cong-no", label: "Công Nợ NCC" },

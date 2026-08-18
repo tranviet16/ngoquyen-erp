@@ -385,6 +385,8 @@ model ProjectEstimate {
   qty        Decimal   @db.Decimal(18, 4)
   unitPrice  Decimal   @db.Decimal(18, 2)
   totalVnd   Decimal   @default(0) @db.Decimal(18, 2) // qty * unitPrice, computed on write
+  // NULL = "Còn phải lấy HĐ" tự tính (totalVnd − Σ amountHd); có giá trị = người dùng ghi đè
+  remainingInvoiceOverrideVnd Decimal? @db.Decimal(18, 2)
   note       String?
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())

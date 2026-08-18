@@ -53,7 +53,7 @@ export default async function ProjectDashboardPage({ params }: Props) {
   const doneTasks = dash.schedule.done;
   const pctDone = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
-  const variance = dash.transactionTotal - dash.estimateTotal;
+  const variance = dash.transactionTotalTt - dash.estimateTotal;
   const variancePct =
     dash.estimateTotal > 0 ? ((variance / dash.estimateTotal) * 100).toFixed(1) : "0.0";
   const isOverBudget = Number(variancePct) > 0;
@@ -63,7 +63,7 @@ export default async function ProjectDashboardPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard
           label="Tiến độ"
           value={`${pctDone}%`}
@@ -72,8 +72,14 @@ export default async function ProjectDashboardPage({ params }: Props) {
         />
         <StatCard label="Dự toán gốc" value={formatVND(dash.estimateTotal)} sub="Tổng dự toán" />
         <StatCard
-          label="Thực tế (TT)"
-          value={formatVND(dash.transactionTotal)}
+          label="Hóa đơn đã lấy"
+          value={formatVND(dash.transactionTotalHd)}
+          sub="Tổng giá trị HĐ đã thu thập"
+          tone="info"
+        />
+        <StatCard
+          label="Thực tế (đã nhập)"
+          value={formatVND(dash.transactionTotalTt)}
           sub={`Biến động: ${isOverBudget ? "+" : ""}${variancePct}%`}
           tone={isOverBudget ? "danger" : "success"}
         />

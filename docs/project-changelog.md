@@ -5,6 +5,11 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ## [Unreleased]
 
 ### Added
+- Added a "Bảng cân đối vật tư" import adapter (`bang-can-doi-vat-tu`) that parses HM-block estimate/invoice workbooks into project estimates and invoice-valued transactions (`amountHd` filled, `amountTt = 0`), with a blocking ±0.5% subtotal reconciliation gate against the sheet's own "Cộng/Tổng" rows and rollback support; imported project "Mầm Non Trại Chuối GĐ1" (`MNTC-GD1`).
+- Added the "Cân Đối VT" project tab comparing Dự toán ↔ Hóa đơn đã lấy ↔ Thực tế per item with category subtotals, invoice-only rows ("ngoài DT"), unit-mismatch badges, and a per-row manual override for the derived "Còn phải lấy HĐ" column (`ProjectEstimate.remainingInvoiceOverrideVnd`).
+- Added the `chi_phi_chung` project transaction type (label "Chi phí chung") for amount-only overhead lines.
+- Project dashboard now shows "Hóa đơn đã lấy" (ΣamountHd) beside "Thực tế (đã nhập)" (ΣamountTt); `getProjectDashboard` renamed `transactionTotal` → `transactionTotalTt` and added `transactionTotalHd`.
+- Documented data-entry conventions in `docs/du-an/can-doi-vat-tu-convention.md` (Tt=0 semantics, same-row actual entry, re-import runbook, du-an ↔ vat-tu-ncc boundary).
 - Added the canonical `read < comment < create < edit` record-permission hierarchy across project, debt, materials, payment and task workflows, including active-admin bypass, immutable payment department scope, transactional bulk approval/refresh, and server-derived create/edit/delete UI capabilities.
 - Added global module release control backed by `ModuleAvailability`, with all 18 registered modules backfilled to `ready` and `dashboard` plus `admin.permissions` permanently protected from being moved to development.
 - Added an admin release-status panel under `/admin/permissions/modules` and an accessible synthetic blurred shell for entitled users opening a module marked `development`; the shell never loads or renders business data.

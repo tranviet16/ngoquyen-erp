@@ -30,10 +30,10 @@ export async function getProjectDashboard(projectId: number) {
         _sum: { totalVnd: true },
       }),
 
-      // Transaction total (amountTt)
+      // Transaction totals: Tt = actual entered, Hd = invoices collected
       prisma.projectTransaction.aggregate({
         where: { projectId, deletedAt: null },
-        _sum: { amountTt: true },
+        _sum: { amountTt: true, amountHd: true },
       }),
 
       // Cashflow totals by direction
@@ -81,7 +81,8 @@ export async function getProjectDashboard(projectId: number) {
       delayed: scheduleCounts["delayed"] ?? 0,
     },
     estimateTotal: Number(estimateSum._sum.totalVnd ?? 0),
-    transactionTotal: Number(transactionSum._sum.amountTt ?? 0),
+    transactionTotalTt: Number(transactionSum._sum.amountTt ?? 0),
+    transactionTotalHd: Number(transactionSum._sum.amountHd ?? 0),
     cashflow: cashflowByDir,
     contractWarnings,
   };

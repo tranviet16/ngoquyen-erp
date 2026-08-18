@@ -3,6 +3,7 @@
  * Add new adapters here as they are implemented.
  */
 
+import { BangCanDoiVatTuAdapter } from "./bang-can-doi-vat-tu.adapter";
 import { CongNoVatTuAdapter } from "./cong-no-vat-tu.adapter";
 import { CongNoNhanCongAdapter } from "./cong-no-nhan-cong.adapter";
 import { DuAnXayDungAdapter } from "./du-an-xay-dung.adapter";
@@ -13,6 +14,7 @@ import { SlDtAdapter } from "./sl-dt.adapter";
 import type { ImportAdapter } from "./adapter-types";
 
 const ADAPTERS: ImportAdapter[] = [
+  BangCanDoiVatTuAdapter,
   CongNoVatTuAdapter,
   CongNoNhanCongAdapter,
   DuAnXayDungAdapter,

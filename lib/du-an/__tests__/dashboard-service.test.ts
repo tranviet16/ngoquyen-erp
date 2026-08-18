@@ -30,7 +30,7 @@ describe("getProjectDashboard", () => {
       { status: "pending", _count: { id: 2 } },
     ]);
     mockDb.projectEstimate.aggregate.mockResolvedValue({ _sum: { totalVnd: 5000 } });
-    mockDb.projectTransaction.aggregate.mockResolvedValue({ _sum: { amountTt: 1200 } });
+    mockDb.projectTransaction.aggregate.mockResolvedValue({ _sum: { amountTt: 1200, amountHd: 3400 } });
     mockDb.project3WayCashflow.groupBy.mockResolvedValue([
       { flowDirection: "cdt_to_cty", _sum: { amountVnd: 800 } },
     ]);
@@ -45,7 +45,8 @@ describe("getProjectDashboard", () => {
     expect(d.warningDays).toBe(30);
     expect(d.schedule).toEqual({ pending: 2, in_progress: 0, done: 3, delayed: 0 });
     expect(d.estimateTotal).toBe(5000);
-    expect(d.transactionTotal).toBe(1200);
+    expect(d.transactionTotalTt).toBe(1200);
+    expect(d.transactionTotalHd).toBe(3400);
     expect(d.cashflow).toEqual({ cdt_to_cty: 800 });
     expect(d.contractWarnings).toHaveLength(1);
   });
@@ -54,14 +55,15 @@ describe("getProjectDashboard", () => {
     mockDb.projectSettings.findUnique.mockResolvedValue(null);
     mockDb.projectSchedule.groupBy.mockResolvedValue([]);
     mockDb.projectEstimate.aggregate.mockResolvedValue({ _sum: { totalVnd: null } });
-    mockDb.projectTransaction.aggregate.mockResolvedValue({ _sum: { amountTt: null } });
+    mockDb.projectTransaction.aggregate.mockResolvedValue({ _sum: { amountTt: null, amountHd: null } });
     mockDb.project3WayCashflow.groupBy.mockResolvedValue([]);
     mockDb.projectContract.findMany.mockResolvedValue([]);
 
     const d = await getProjectDashboard(1);
     expect(d.warningDays).toBe(90);
     expect(d.estimateTotal).toBe(0);
-    expect(d.transactionTotal).toBe(0);
+    expect(d.transactionTotalTt).toBe(0);
+    expect(d.transactionTotalHd).toBe(0);
     expect(Number.isNaN(d.estimateTotal)).toBe(false);
     expect(d.schedule).toEqual({ pending: 0, in_progress: 0, done: 0, delayed: 0 });
     expect(d.cashflow).toEqual({});

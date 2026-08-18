@@ -39,7 +39,7 @@ type TxRow = {
 };
 type CategoryOption = { id: number; code: string; name: string };
 
-const TYPE_LABELS: Record<string, string> = { lay_hang: "Lấy hàng", nhan_cong: "Nhân công", may_moc: "Máy móc" };
+const TYPE_LABELS: Record<string, string> = { lay_hang: "Lấy hàng", nhan_cong: "Nhân công", may_moc: "Máy móc", chi_phi_chung: "Chi phí chung" };
 const STATUS_LABELS: Record<string, string> = { pending: "Chờ", approved: "Đã duyệt", paid: "Đã thanh toán" };
 
 interface TxGridRow extends RowWithId {
