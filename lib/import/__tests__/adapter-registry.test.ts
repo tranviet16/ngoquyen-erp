@@ -3,6 +3,7 @@ import { getAdapter, listAdapters } from "@/lib/import/adapters/adapter-registry
 
 const KNOWN = [
   "bang-can-doi-vat-tu",
+  "du-toan-tong-hop-vt",
   "cong-no-nhan-cong",
   "cong-no-vat-tu",
   "du-an-xay-dung",

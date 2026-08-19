@@ -88,6 +88,15 @@ và nhập các dòng thật.
 Import đặt **SL HĐ = SL** cho mọi dòng hóa đơn (số trên sheet là số lượng hóa đơn). Khi
 nhập số thực tế, sửa SL về khối lượng thực nhận và giữ SL HĐ theo hóa đơn.
 
+### Cập nhật dự toán từ file dự toán chính thức
+
+Adapter **"Dự toán — Tổng hợp VT"** trong `/admin/import` đọc tab "Tổng hợp VT" của file
+dự toán (KL × **Giá gốc**) và cập nhật dự toán **tại chỗ** — liên kết hóa đơn và ghi đè
+giữ nguyên. Chạy lại cùng file bao nhiêu lần cũng được (idempotent). Vật tư chỉ có trong
+hệ thống được giữ nguyên và liệt kê "KEEP" trong kết quả import — rà tay nếu cần. Các
+dòng "% vật liệu/máy khác" (chỉ có thành tiền, không có KL/giá) không được import nhưng
+vẫn tính vào phép đối chiếu tổng với sheet.
+
 ## 5. Ranh giới với module Vật tư NCC
 
 - **`/du-an` (Giao dịch)** = sự thật về **chi phí công trình**.

@@ -4,6 +4,7 @@
  */
 
 import { BangCanDoiVatTuAdapter } from "./bang-can-doi-vat-tu.adapter";
+import { DuToanTongHopVtAdapter } from "./du-toan-tong-hop-vt.adapter";
 import { CongNoVatTuAdapter } from "./cong-no-vat-tu.adapter";
 import { CongNoNhanCongAdapter } from "./cong-no-nhan-cong.adapter";
 import { DuAnXayDungAdapter } from "./du-an-xay-dung.adapter";
@@ -15,6 +16,7 @@ import type { ImportAdapter } from "./adapter-types";
 
 const ADAPTERS: ImportAdapter[] = [
   BangCanDoiVatTuAdapter,
+  DuToanTongHopVtAdapter,
   CongNoVatTuAdapter,
   CongNoNhanCongAdapter,
   DuAnXayDungAdapter,
