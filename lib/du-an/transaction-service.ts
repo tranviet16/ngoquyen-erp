@@ -19,7 +19,8 @@ export async function createTransaction(input: TransactionInput) {
   await requireReleasedModuleRequest("du-an", { minLevel: "create", scope: { kind: "project", projectId: input.projectId } });
   const data = transactionSchema.parse(input);
   const qtyDecimal = new Prisma.Decimal(data.qty);
-  const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
+  // Giá trị hóa đơn tính theo SL hóa đơn (nếu tách); thực tế luôn theo SL thực
+  const amountHd = new Prisma.Decimal(data.qtyHd ?? data.qty).mul(new Prisma.Decimal(data.unitPriceHd));
   const amountTt = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceTt));
   const record = await prisma.projectTransaction.create({
     data: {
@@ -31,6 +32,7 @@ export async function createTransaction(input: TransactionInput) {
       itemName: data.itemName,
       partyName: data.partyName,
       qty: data.qty,
+      qtyHd: data.qtyHd ?? null,
       unit: data.unit,
       unitPriceHd: data.unitPriceHd,
       unitPriceTt: data.unitPriceTt,
@@ -52,7 +54,7 @@ export async function updateTransaction(id: number, input: TransactionInput) {
   if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const qtyDecimal = new Prisma.Decimal(data.qty);
-  const amountHd = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceHd));
+  const amountHd = new Prisma.Decimal(data.qtyHd ?? data.qty).mul(new Prisma.Decimal(data.unitPriceHd));
   const amountTt = qtyDecimal.mul(new Prisma.Decimal(data.unitPriceTt));
   const record = await prisma.projectTransaction.update({
     where: { id, projectId: data.projectId },
@@ -64,6 +66,7 @@ export async function updateTransaction(id: number, input: TransactionInput) {
       itemName: data.itemName,
       partyName: data.partyName,
       qty: data.qty,
+      qtyHd: data.qtyHd ?? null,
       unit: data.unit,
       unitPriceHd: data.unitPriceHd,
       unitPriceTt: data.unitPriceTt,

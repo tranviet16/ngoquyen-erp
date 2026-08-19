@@ -440,6 +440,8 @@ model ProjectTransaction {
   itemName        String
   partyName       String?
   qty             Decimal   @db.Decimal(18, 4)
+  // Số lượng trên hóa đơn khi khác khối lượng thực nhận; NULL = giống qty
+  qtyHd           Decimal?  @db.Decimal(18, 4)
   unit            String
   unitPriceHd     Decimal   @default(0) @db.Decimal(18, 2)
   unitPriceTt     Decimal   @default(0) @db.Decimal(18, 2)

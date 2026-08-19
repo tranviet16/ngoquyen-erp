@@ -72,6 +72,7 @@ export const transactionSchema = z.object({
   itemName: z.string().min(1, "Tên hàng không được để trống"),
   partyName: z.string().optional(),
   qty: z.number().positive("Số lượng phải > 0"),
+  qtyHd: z.number().positive("SL hóa đơn phải > 0").optional(),
   unit: z.string().min(1, "Đơn vị không được để trống"),
   unitPriceHd: z.number().min(0),
   unitPriceTt: z.number().min(0),

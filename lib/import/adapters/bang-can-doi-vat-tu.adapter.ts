@@ -168,6 +168,8 @@ export const BangCanDoiVatTuAdapter: ImportAdapter = {
         data: {
           _type: "transaction", hm: hmSlug, sectionCode: section!.code,
           transactionType: section!.txType, ...categoryOf(), ...d,
+          // Adapter rows are invoice records: sheet's HĐ SL is both qty and qtyHd
+          qtyHd: d.qty,
         },
       });
       return { itemCode: d.itemCode, itemName: d.itemName, unit: d.unit };
@@ -359,6 +361,7 @@ export const BangCanDoiVatTuAdapter: ImportAdapter = {
           itemName: `${sub.section.label} (tổng hợp)`,
           unit: "gói",
           qty: 1,
+          qtyHd: 1,
           unitPriceHd: sub.hdTt,
           amountHd: sub.hdTt,
           note: "Tổng hợp từ dòng Cộng của sheet — file không có chi tiết hóa đơn",
@@ -531,12 +534,12 @@ export const BangCanDoiVatTuAdapter: ImportAdapter = {
         await db.$executeRaw`
           INSERT INTO project_transactions
             ("projectId", date, "transactionType", "categoryId", "itemCode", "itemName",
-             "partyName", qty, unit, "unitPriceTt", "unitPriceHd",
+             "partyName", qty, "qtyHd", unit, "unitPriceTt", "unitPriceHd",
              "amountTt", "amountHd", "invoiceNo", status, note, "importRunId", "createdAt", "updatedAt")
           VALUES
             (${projectId}, ${asOfDate}, ${String(row.data.transactionType)}, ${categoryId},
              ${String(row.data.itemCode)}, ${String(row.data.itemName)},
-             ${null}, ${Number(row.data.qty ?? 0)}, ${String(row.data.unit ?? "")},
+             ${null}, ${Number(row.data.qty ?? 0)}, ${row.data.qtyHd != null ? Number(row.data.qtyHd) : null}, ${String(row.data.unit ?? "")},
              ${0}, ${Number(row.data.unitPriceHd ?? 0)},
              ${0}, ${Number(row.data.amountHd ?? 0)},
              ${row.data.invoiceNo ? String(row.data.invoiceNo) : null},

@@ -34,7 +34,7 @@ const DataGrid = dynamic(
 type TxRow = {
   id: number; projectId: number; date: Date; transactionType: string;
   categoryId: number; itemCode: string; itemName: string; partyName: string | null;
-  qty: unknown; unit: string; unitPriceHd: unknown; unitPriceTt: unknown;
+  qty: unknown; qtyHd: unknown; unit: string; unitPriceHd: unknown; unitPriceTt: unknown;
   amountHd: unknown; amountTt: unknown; invoiceNo: string | null; status: string; note: string | null;
 };
 type CategoryOption = { id: number; code: string; name: string };
@@ -50,6 +50,7 @@ interface TxGridRow extends RowWithId {
   categoryLabel: string;
   partyName: string;
   qty: number;
+  qtyHd: number | null;
   unit: string;
   unitPriceHd: number;
   unitPriceTt: number;
@@ -109,10 +110,16 @@ function TransactionForm({ projectId, categories, defaultValues, onSubmit }: {
         <FormField control={form.control} name="partyName" render={({ field }) => (
           <FormItem><FormLabel>Nhà cung cấp / Đội</FormLabel><FormControl><Input {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>
         )} />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <FormField control={form.control} name="qty" render={({ field }) => (
             <FormItem><FormLabel>SL</FormLabel><FormControl>
               <Input type="number" step="0.0001" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value))} />
+            </FormControl><FormMessage /></FormItem>
+          )} />
+          <FormField control={form.control} name="qtyHd" render={({ field }) => (
+            <FormItem><FormLabel>SL HĐ</FormLabel><FormControl>
+              <Input type="number" step="0.0001" placeholder="= SL" {...field} value={field.value ?? ""}
+                onChange={(e) => field.onChange(e.target.value === "" ? undefined : parseFloat(e.target.value))} />
             </FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="unitPriceHd" render={({ field }) => (
@@ -166,6 +173,7 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
     categoryLabel: categoryMap[r.categoryId] ?? "",
     partyName: r.partyName ?? "",
     qty: Number(r.qty),
+    qtyHd: r.qtyHd == null ? null : Number(r.qtyHd),
     unit: r.unit,
     unitPriceHd: Number(r.unitPriceHd),
     unitPriceTt: Number(r.unitPriceTt),
@@ -190,6 +198,10 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
       itemName: typeof patch.itemName === "string" ? patch.itemName : current.itemName,
       partyName: typeof patch.partyName === "string" ? (patch.partyName || undefined) : (current.partyName ?? undefined),
       qty: typeof patch.qty === "number" ? patch.qty : Number(current.qty),
+      // "qtyHd" in patch phân biệt "xóa ô" (null → về mặc định = SL) với "không sửa cột này"
+      qtyHd: "qtyHd" in patch
+        ? (patch.qtyHd == null ? undefined : Number(patch.qtyHd))
+        : (current.qtyHd == null ? undefined : Number(current.qtyHd)),
       unit: typeof patch.unit === "string" ? patch.unit : current.unit,
       unitPriceHd: typeof patch.unitPriceHd === "number" ? patch.unitPriceHd : Number(current.unitPriceHd),
       unitPriceTt: typeof patch.unitPriceTt === "number" ? patch.unitPriceTt : Number(current.unitPriceTt),
@@ -208,6 +220,7 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
     { id: "categoryLabel", title: "Hạng mục", kind: "text", width: 130, readonly: true },
     { id: "partyName", title: "Nhà cung cấp", kind: "text", width: 140 },
     { id: "qty", title: "SL", kind: "number", width: 90 },
+    { id: "qtyHd", title: "SL HĐ", kind: "number", width: 90, format: (v) => (v == null ? "—" : String(v)) },
     { id: "unit", title: "ĐVT", kind: "text", width: 60 },
     { id: "unitPriceHd", title: "ĐG HĐ", kind: "currency", width: 120 },
     { id: "unitPriceTt", title: "ĐG TT", kind: "currency", width: 120 },
@@ -295,7 +308,7 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
       <CrudDialog title="Sửa giao dịch" open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         {editTarget && (
           <TransactionForm projectId={projectId} categories={categories}
-            defaultValues={{ projectId, date: new Date(editTarget.date).toISOString().split("T")[0], transactionType: editTarget.transactionType as TransactionInput["transactionType"], categoryId: editTarget.categoryId, itemCode: editTarget.itemCode, itemName: editTarget.itemName, partyName: editTarget.partyName ?? "", qty: Number(editTarget.qty), unit: editTarget.unit, unitPriceHd: Number(editTarget.unitPriceHd), unitPriceTt: Number(editTarget.unitPriceTt), invoiceNo: editTarget.invoiceNo ?? "", status: editTarget.status as TransactionInput["status"] }}
+            defaultValues={{ projectId, date: new Date(editTarget.date).toISOString().split("T")[0], transactionType: editTarget.transactionType as TransactionInput["transactionType"], categoryId: editTarget.categoryId, itemCode: editTarget.itemCode, itemName: editTarget.itemName, partyName: editTarget.partyName ?? "", qty: Number(editTarget.qty), qtyHd: editTarget.qtyHd == null ? undefined : Number(editTarget.qtyHd), unit: editTarget.unit, unitPriceHd: Number(editTarget.unitPriceHd), unitPriceTt: Number(editTarget.unitPriceTt), invoiceNo: editTarget.invoiceNo ?? "", status: editTarget.status as TransactionInput["status"] }}
             onSubmit={handleEdit} />
         )}
       </CrudDialog>

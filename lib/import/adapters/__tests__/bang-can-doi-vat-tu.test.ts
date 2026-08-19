@@ -187,6 +187,14 @@ describe("BangCanDoiVatTuAdapter (real CSV)", () => {
     expect(stray).toEqual([]);
   });
 
+  it("emits qtyHd = qty on every transaction row (adapter rows are invoice records)", () => {
+    const txns = data.rows.filter((r) => r.data._type === "transaction");
+    expect(txns.length).toBeGreaterThan(0);
+    for (const t of txns) {
+      expect(t.data.qtyHd).toBe(t.data.qty);
+    }
+  });
+
   it("does not import the 'Còn phải nhập' columns", () => {
     for (const r of data.rows) {
       expect(r.data.remaining).toBeUndefined();

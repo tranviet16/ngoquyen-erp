@@ -5,6 +5,8 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ## [Unreleased]
 
 ### Added
+- Rebuilt the "Cân Đối VT" project tab as a 3-mode screen (Lấy hóa đơn / Thi công vs DT / TT vs HĐ): collapsed category groups with progress bars, 4 summary StatCards, a "Top 10 cần đi lấy hóa đơn" worklist with jump-to-row, per-row bucket badges (chưa lấy/thiếu/đủ/vượt/ngoài DT, ε = max(1.000đ, 0,5%)), diacritic-insensitive search, bucket filters, and an .xlsx export (`/api/du-an/[id]/can-doi/export`, project-scope guard) whose totals match the screen. % denominators use dự toán + phát sinh đã duyệt.
+- Added `ProjectTransaction.qtyHd` (invoice quantity, nullable — NULL reads as qty) with backfill for invoice-carrying rows; giao-dich form/grid gained an optional "SL HĐ" field; invoice amounts now compute as SL HĐ × ĐG HĐ; the cân-đối service aggregates quantities per stream (FILTER on amountHd/amountTt) instead of the conflated view quantity.
 - Added a "Bảng cân đối vật tư" import adapter (`bang-can-doi-vat-tu`) that parses HM-block estimate/invoice workbooks into project estimates and invoice-valued transactions (`amountHd` filled, `amountTt = 0`), with a blocking ±0.5% subtotal reconciliation gate against the sheet's own "Cộng/Tổng" rows and rollback support; imported project "Mầm Non Trại Chuối GĐ1" (`MNTC-GD1`).
 - Added the "Cân Đối VT" project tab comparing Dự toán ↔ Hóa đơn đã lấy ↔ Thực tế per item with category subtotals, invoice-only rows ("ngoài DT"), unit-mismatch badges, and a per-row manual override for the derived "Còn phải lấy HĐ" column (`ProjectEstimate.remainingInvoiceOverrideVnd`).
 - Added the `chi_phi_chung` project transaction type (label "Chi phí chung") for amount-only overhead lines.
