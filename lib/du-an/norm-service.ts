@@ -21,6 +21,8 @@ export interface NormRow {
   remaining_amount_vnd: number;
   // computed flag: "green"|"yellow"|"red"
   flag?: string;
+  /** nhóm vật liệu thay thế (null = không thuộc nhóm) */
+  materialGroupId?: number | null;
 }
 
 export async function listNorm(projectId: number, settings?: { normYellowThreshold?: number; normRedThreshold?: number }) {
@@ -33,6 +35,13 @@ export async function listNorm(projectId: number, settings?: { normYellowThresho
     SELECT * FROM vw_project_norm WHERE "projectId" = ${projectId}
     ORDER BY "categoryId", "itemCode"
   `;
+
+  // vw_project_norm không sửa — gắn nhóm vật liệu thay thế bằng lookup phụ
+  const groupLinks = await prisma.projectEstimate.findMany({
+    where: { projectId, deletedAt: null, materialGroupId: { not: null } },
+    select: { id: true, materialGroupId: true },
+  });
+  const groupByEstimateId = new Map(groupLinks.map((g) => [g.id, g.materialGroupId]));
 
   const yellow = Number(settings?.normYellowThreshold ?? 0.8);
   const red = Number(settings?.normRedThreshold ?? 0.95);
@@ -49,6 +58,7 @@ export async function listNorm(projectId: number, settings?: { normYellowThresho
     remaining_qty: Number(r.remaining_qty),
     remaining_amount_vnd: Number(r.remaining_amount_vnd),
     flag: Number(r.used_pct) >= red ? "red" : Number(r.used_pct) >= yellow ? "yellow" : "green",
+    materialGroupId: groupByEstimateId.get(r.estimate_id) ?? null,
   }));
 }
 

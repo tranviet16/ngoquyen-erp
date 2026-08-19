@@ -5,6 +5,8 @@ import {
   bucketOf,
   emptySubtotal,
   addRowToSubtotal,
+  tokenizeVtName,
+  detectNameMismatch,
   type CanDoiRow,
 } from "@/lib/du-an/can-doi-metrics";
 
@@ -19,6 +21,8 @@ function makeRow(over: Partial<CanDoiRow>): CanDoiRow {
     unit: "kg",
     bucket: "thieu",
     unitMismatch: false,
+    nameMismatch: false,
+    nameMismatchSamples: [],
     estimateQty: 0,
     estimateUnitPrice: 0,
     estimateTotalVnd: 0,
@@ -102,6 +106,42 @@ describe("bucketOf", () => {
     expect(
       bucketOf({ kind: "invoice-only", estimateTotalVnd: 0, invoiceAmountVnd: 5_000, remainingInvoiceVnd: -5_000 }),
     ).toBe("ngoai_dt");
+  });
+});
+
+describe("tokenizeVtName / detectNameMismatch", () => {
+  it("drops pure-numeric and short tokens", () => {
+    const t = tokenizeVtName("Vữa XMPC30, cát vàng, đá 1x2 M300");
+    expect(t.has("300")).toBe(false);
+    expect(t.has("vua")).toBe(true);
+    expect(t.has("cat")).toBe(true);
+  });
+
+  it("flags transaction names sharing no token with the estimate", () => {
+    const r = detectNameMismatch("Cung cấp cọc ly tâm ứng suất trước D300 loại A", [
+      "Đơn giá ép cọc D300A bằng máy tải", // chung "coc" → không flag
+      "Hỗ trợ di chuyển máy", // không chung token → flag
+      "Vận tải huy động và giải thể", // flag
+    ]);
+    expect(r.mismatch).toBe(true);
+    expect(r.samples).toEqual(["Hỗ trợ di chuyển máy", "Vận tải huy động và giải thể"]);
+  });
+
+  it("flags BTTP commercial names under a vữa estimate (no shared non-numeric token)", () => {
+    const r = detectNameMismatch("Vữa XMPC30, cát vàng, đá 1x2 M300 - Độ sụt 14 - 17cm", [
+      "BTTP Mac 300",
+    ]);
+    expect(r.mismatch).toBe(true);
+  });
+
+  it("does not flag identical or overlapping names", () => {
+    const r = detectNameMismatch("Đá 1x2", ["Đá 1x2", "Cước vc đá 1x2"]);
+    expect(r.mismatch).toBe(false);
+  });
+
+  it("caps samples at 3", () => {
+    const r = detectNameMismatch("Xi măng", ["aa bb", "cc dd", "ee ff", "gg hh"]);
+    expect(r.samples).toHaveLength(3);
   });
 });
 

@@ -17,6 +17,89 @@ import { changeOrderSchema, type ChangeOrderInput } from "@/lib/du-an/schemas";
 import { createChangeOrder, updateChangeOrder, softDeleteChangeOrder, adminPatchChangeOrder } from "@/lib/du-an/change-order-service";
 import { formatDate } from "@/lib/utils/format";
 import { adminEditable } from "@/lib/utils/admin-editable";
+import { vndFormatter } from "@/lib/format";
+import { buildCategoryTree, type CategoryLite } from "@/lib/du-an/category-tree";
+
+interface CoSums {
+  total: number;
+  approved: number;
+  count: number;
+  approvedCount: number;
+}
+
+function sumCoImpact(rows: CoRow[]): CoSums {
+  return rows.reduce(
+    (acc, r) => {
+      const v = Number(r.costImpactVnd);
+      const isApproved = r.status === "approved";
+      return {
+        total: acc.total + v,
+        approved: acc.approved + (isApproved ? v : 0),
+        count: acc.count + 1,
+        approvedCount: acc.approvedCount + (isApproved ? 1 : 0),
+      };
+    },
+    { total: 0, approved: 0, count: 0, approvedCount: 0 },
+  );
+}
+
+function coVnd(n: number): string {
+  if (n === 0) return "—";
+  return `${n > 0 ? "+" : ""}${vndFormatter(Math.round(n))}`;
+}
+
+/** Cây tổng phát sinh theo hạng mục — widget đặt trên grid, không đổi CRUD. */
+function CoSummaryTree({ rows, categories }: { rows: CoRow[]; categories: CategoryOption[] }) {
+  const categoriesById = new Map<number, CategoryLite>(categories.map((c) => [c.id, c]));
+  const matched = rows.filter((r) => r.categoryId != null);
+  const unmatched = rows.filter((r) => r.categoryId == null);
+  const tree = buildCategoryTree(matched, (r) => r.categoryId as number, categoriesById);
+  const grand = sumCoImpact(rows);
+
+  if (rows.length === 0) return null;
+
+  const line = (label: string, sums: CoSums, cls = "") => (
+    <div key={label} className={`flex items-center justify-between border-t py-1 text-sm first:border-t-0 ${cls}`}>
+      <span>
+        {label}
+        <span className="ml-2 text-xs text-muted-foreground">
+          {sums.count} CO · {sums.approvedCount} đã duyệt
+        </span>
+      </span>
+      <span className="flex gap-4 tabular-nums">
+        <span title="Tổng tác động (mọi trạng thái)">{coVnd(sums.total)}</span>
+        <span
+          className={`w-32 text-right font-medium ${sums.approved > 0 ? "text-red-600" : sums.approved < 0 ? "text-emerald-600" : "text-muted-foreground"}`}
+          title="Chỉ CO đã duyệt — số này cộng vào Dự toán điều chỉnh"
+        >
+          {coVnd(sums.approved)}
+        </span>
+      </span>
+    </div>
+  );
+
+  return (
+    <div className="rounded-lg border bg-card p-3 shadow-sm">
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-sm font-semibold">Tổng phát sinh theo hạng mục</p>
+        <p className="text-xs text-muted-foreground">Tác động / Đã duyệt</p>
+      </div>
+      {tree.map((hm) => {
+        const hmRows = [...hm.sections.flatMap((s) => s.rows), ...hm.directRows];
+        return (
+          <div key={hm.hmCode}>
+            {line(hm.hmLabel, sumCoImpact(hmRows), "font-medium")}
+            {hm.sections.map((s) =>
+              line(`   ${s.categoryCode} — ${s.categoryName}`, sumCoImpact(s.rows)),
+            )}
+          </div>
+        );
+      })}
+      {unmatched.length > 0 && line("Chưa gán hạng mục", sumCoImpact(unmatched), "text-amber-700")}
+      {line("TỔNG CỘNG", grand, "font-semibold")}
+    </div>
+  );
+}
 
 const DataGrid = dynamic(
   () => import("@/components/data-grid").then((m) => m.DataGrid),
@@ -213,6 +296,8 @@ export function PhatSinhClient({ projectId, initialData, categories, canCreate, 
           <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm CO</Button>
         </div>
       </div>
+
+      <CoSummaryTree rows={initialData} categories={categories} />
 
       <DataGrid<CoGridRow>
         columns={columns}

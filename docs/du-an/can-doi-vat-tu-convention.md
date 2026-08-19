@@ -97,6 +97,28 @@ hệ thống được giữ nguyên và liệt kê "KEEP" trong kết quả impo
 dòng "% vật liệu/máy khác" (chỉ có thành tiền, không có KL/giá) không được import nhưng
 vẫn tính vào phép đối chiếu tổng với sheet.
 
+## 4a. Đối chiếu tên & gán "ngoài DT" (tab Cân Đối VT)
+
+- Bấm mũi tên ▸ đầu dòng dự toán để xem **các giao dịch thành viên** (tên thương mại trên
+  hóa đơn, số HĐ, SL, tiền HĐ/TT).
+- Nhãn **"tên khác DT"** (tím): có giao dịch mang tên không chung từ nào với tên dự toán —
+  di chuột để xem các tên lệch. Đây là chỉ dấu hàng thay thế/tên thương mại, không phải lỗi.
+- Dòng **"ngoài DT"** có nút **"Gán vào DT…"**: chọn dòng dự toán đích → toàn bộ cụm giao
+  dịch cùng mã chuyển sang dòng đó (ghi vết "gán từ <mã cũ>" vào ghi chú từng giao dịch).
+  Hoàn tác: sửa lại từng giao dịch ở tab Giao Dịch.
+
+## 4b. Nhóm vật liệu thay thế (tab Định Mức)
+
+- Chọn ≥2 dòng **cùng hạng mục** → "Nhóm vật tư thay thế" → đặt tên + ghi chú căn cứ
+  (vd "đã hỏi CĐT, dùng cát vàng thay cát mịn"). Nhóm thuộc phạm vi từng dự án.
+- Định mức chấm **cờ theo tổng nhóm**; cờ từng dòng thành viên bị làm mờ "(thuộc nhóm)" —
+  hết cảnh "vượt cát vàng + thừa cát mịn" giả.
+- ĐVT các thành viên giống nhau → so theo khối lượng; khác nhau → chỉ so theo **tiền**
+  (cột SL hiện "—", % gắn ký hiệu ₫). Không quy đổi đơn vị.
+- Xóa nhóm: các dòng trở về đánh giá riêng lẻ; số liệu gốc không đổi.
+- Cấu trúc phân cấp các tab Dự Toán / DT Điều Chỉnh / Phát Sinh đọc từ mã hạng mục
+  `HM<n>-<mục>`; mã không theo chuẩn hiển thị thành nhóm riêng 1 cấp.
+
 ## 5. Ranh giới với module Vật tư NCC
 
 - **`/du-an` (Giao dịch)** = sự thật về **chi phí công trình**.

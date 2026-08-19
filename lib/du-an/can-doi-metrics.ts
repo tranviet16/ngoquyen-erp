@@ -7,7 +7,40 @@
  * a row counts as "đủ" when |còn phải lấy| ≤ max(1.000đ, 0,5% dự toán dòng).
  */
 
+import { normVtName } from "@/lib/text/norm-vt-name";
+
 export type CanDoiBucket = "chua_lay" | "thieu" | "du" | "vuot" | "ngoai_dt";
+
+/** Token hóa tên vật tư để so lệch tên: bỏ token thuần số ("300" trong M300 ↔
+ * "Mac 300" gây khớp giả) và token quá ngắn. */
+export function tokenizeVtName(s: string): Set<string> {
+  return new Set(
+    normVtName(s)
+      .split(" ")
+      .filter((t) => t.length >= 2 && !/^\d+$/.test(t)),
+  );
+}
+
+/** Lệch tên khi ≥1 tên giao dịch không chung TOKEN nào với tên dự toán. */
+export function detectNameMismatch(
+  estimateName: string,
+  txNames: string[],
+): { mismatch: boolean; samples: string[] } {
+  const estTokens = tokenizeVtName(estimateName);
+  const samples: string[] = [];
+  for (const name of txNames) {
+    if (name === estimateName) continue;
+    let shared = false;
+    for (const tok of tokenizeVtName(name)) {
+      if (estTokens.has(tok)) {
+        shared = true;
+        break;
+      }
+    }
+    if (!shared) samples.push(name);
+  }
+  return { mismatch: samples.length > 0, samples: samples.slice(0, 3) };
+}
 
 export const EPSILON_MIN_VND = 1_000;
 export const EPSILON_PCT = 0.005;
@@ -61,6 +94,10 @@ export interface CanDoiRow {
   unit: string;
   bucket: CanDoiBucket;
   unitMismatch: boolean;
+  nameMismatch: boolean;
+  nameMismatchSamples: string[];
+  /** nhóm vật liệu thay thế (null/undefined = không thuộc nhóm) */
+  materialGroupId?: number | null;
   // Dự toán
   estimateQty: number;
   estimateUnitPrice: number;
@@ -130,6 +167,8 @@ export interface CanDoiData {
   groups: CanDoiGroup[];
   total: CanDoiSubtotal;
   worklist: WorklistItem[];
+  /** nhóm vật liệu thay thế của dự án (để hiện nhãn ở chế độ Thi công vs DT) */
+  materialGroups: { id: number; name: string }[];
 }
 
 export function emptySubtotal(): CanDoiSubtotal {

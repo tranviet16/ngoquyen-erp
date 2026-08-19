@@ -53,24 +53,8 @@ const NAME_ALIASES: Record<string, string> = {
   "Chống thấm cổ ống băng thanh Trương nở": "Chống thấm cổ ống bằng thanh trương nở hyperstop",
 };
 
-export function normVtName(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "d")
-    .toLowerCase()
-    // giữ ngữ nghĩa so sánh trước khi strip ký tự đặc biệt (D<=10 ≠ D>10)
-    .replace(/<=/g, " nho hon bang ")
-    .replace(/>=/g, " lon hon bang ")
-    .replace(/</g, " nho hon ")
-    .replace(/>/g, " lon hon ")
-    .replace(/[^a-z0-9]+/g, " ")
-    // "200t" và "200 t" là một; "0,62kw" và "0,62 kw" là một
-    .replace(/(\d)([a-z])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export { normVtName } from "@/lib/text/norm-vt-name";
+import { normVtName } from "@/lib/text/norm-vt-name";
 
 const num = (v: unknown): number | null => {
   if (v == null) return null;

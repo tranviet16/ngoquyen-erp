@@ -1,30 +1,26 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useState, useTransition } from "react";
-import type { ReactElement } from "react";
+import React, { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { type EstimateInput } from "@/lib/du-an/schemas";
-import { createEstimate, updateEstimate, softDeleteEstimate, adminPatchEstimate } from "@/lib/du-an/estimate-service";
+import {
+  adminPatchEstimate,
+  createEstimate,
+  softDeleteEstimate,
+  updateEstimate,
+} from "@/lib/du-an/estimate-service";
 import { vndFormatter } from "@/lib/format";
-import { adminEditable } from "@/lib/utils/admin-editable";
+import { normVtName } from "@/lib/text/norm-vt-name";
+import {
+  buildCategoryTree,
+  type CategoryLite,
+  type HmGroup,
+  type SectionGroup,
+} from "@/lib/du-an/category-tree";
 import { EstimateForm } from "./du-toan-form";
-
-const DataGrid = dynamic(
-  () => import("@/components/data-grid").then((m) => m.DataGrid),
-  { ssr: false },
-) as <T extends RowWithId>(p: {
-  columns: DataGridColumn<T>[];
-  rows: T[];
-  handlers: DataGridHandlers<T>;
-  role?: string;
-  height?: number | string;
-  onSelectionChange?: (ids: number[]) => void;
-}) => ReactElement;
 
 type EstimateRow = {
   id: number;
@@ -41,104 +37,182 @@ type EstimateRow = {
 
 type CategoryOption = { id: number; code: string; name: string };
 
-interface EstimateGridRow extends RowWithId {
-  itemCode: string;
-  itemName: string;
-  categoryId: number;
-  unit: string;
-  qty: number;
-  unitPrice: number;
-  totalVnd: number;
-}
-
 interface Props {
   projectId: number;
   initialData: EstimateRow[];
   categories: CategoryOption[];
-  canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean;
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  isAdmin?: boolean;
 }
 
-export function DuToanClient({ projectId, initialData, categories, canCreate, canEdit, canDelete, isAdmin = false }: Props) {
+function fmt(n: number): string {
+  if (!n) return "—";
+  return vndFormatter(Math.round(n));
+}
+
+function qtyFmt(n: number): string {
+  if (!n) return "—";
+  return n.toLocaleString("vi-VN", { maximumFractionDigits: 4 });
+}
+
+/** Ô số sửa nhanh (pattern OverrideCell): click → input → Enter/blur commit, ESC hủy. */
+function NumericEditCell({
+  value,
+  display,
+  canEdit,
+  allowZero = false,
+  onCommit,
+}: {
+  value: number;
+  display: string;
+  canEdit: boolean;
+  /** đơn giá được phép = 0 (khớp zod min(0)); SL thì không */
+  allowZero?: boolean;
+  onCommit: (n: number) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const committedRef = useRef(false);
+
+  if (!canEdit) return <span>{display}</span>;
+
+  const commit = (raw: string) => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    const parsed = Number(raw.replace(/[,\s]/g, ""));
+    if (!Number.isFinite(parsed) || (allowZero ? parsed < 0 : parsed <= 0)) {
+      toast.error(allowZero ? "Giá trị phải là số ≥ 0" : "Giá trị phải là số > 0");
+      committedRef.current = false;
+      return;
+    }
+    if (parsed === value) {
+      setEditing(false);
+      committedRef.current = false;
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await onCommit(parsed);
+        setEditing(false);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Lưu thất bại");
+        committedRef.current = false;
+      }
+    });
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        disabled={isPending}
+        defaultValue={String(value)}
+        className="w-28 rounded border px-1 py-0.5 text-right text-sm"
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit((e.target as HTMLInputElement).value);
+          if (e.key === "Escape") setEditing(false);
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="cursor-pointer underline-offset-2 hover:underline"
+      title="Bấm để sửa nhanh"
+      onClick={() => {
+        committedRef.current = false;
+        setEditing(true);
+      }}
+    >
+      {display}
+    </button>
+  );
+}
+
+interface Sums {
+  totalVnd: number;
+  qty: number | null; // null khi ĐVT không đồng nhất
+  count: number;
+}
+
+function sumRows(rows: EstimateRow[]): Sums {
+  const units = new Set(rows.map((r) => normVtName(r.unit)));
+  return {
+    totalVnd: rows.reduce((s, r) => s + Number(r.totalVnd), 0),
+    qty: units.size === 1 ? rows.reduce((s, r) => s + Number(r.qty), 0) : null,
+    count: rows.length,
+  };
+}
+
+const COL_COUNT = 8;
+
+export function DuToanClient({
+  projectId,
+  initialData,
+  categories,
+  canCreate,
+  canEdit,
+  canDelete,
+  isAdmin = false,
+}: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EstimateRow | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [adminTarget, setAdminTarget] = useState<EstimateRow | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
 
-  const categoryOptions: SelectOption[] = categories.map((c) => ({
-    id: c.id,
-    name: `${c.code} - ${c.name}`,
-  }));
+  const categoriesById = useMemo(
+    () => new Map<number, CategoryLite>(categories.map((c) => [c.id, c])),
+    [categories],
+  );
+  const tree = useMemo(
+    () => buildCategoryTree(initialData, (r) => r.categoryId, categoriesById),
+    [initialData, categoriesById],
+  );
+  const grandTotal = useMemo(
+    () => initialData.reduce((sum, r) => sum + Number(r.totalVnd), 0),
+    [initialData],
+  );
 
-  const grandTotal = initialData.reduce((sum, r) => sum + Number(r.totalVnd), 0);
+  const toggle = (hm: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(hm)) next.delete(hm);
+      else next.add(hm);
+      return next;
+    });
 
-  const rowsById = new Map(initialData.map((r) => [r.id, r]));
-
-  const rows: EstimateGridRow[] = initialData.map((r) => ({
-    id: r.id,
-    itemCode: r.itemCode,
-    itemName: r.itemName,
-    categoryId: r.categoryId,
-    unit: r.unit,
-    qty: Number(r.qty),
-    unitPrice: Number(r.unitPrice),
-    totalVnd: Number(r.totalVnd),
-  }));
-
-  const columns: DataGridColumn<EstimateGridRow>[] = [
-    { id: "itemCode", title: "Mã hàng", kind: "text", width: 110, readonly: true },
-    { id: "itemName", title: "Tên vật tư/công việc", kind: "text", width: 280 },
-    { id: "categoryId", title: "Hạng mục", kind: "select", width: 180, options: categoryOptions, readonly: true },
-    { id: "unit", title: "ĐVT", kind: "text", width: 70, readonly: adminEditable<EstimateGridRow>(true) },
-    { id: "qty", title: "SL", kind: "number", width: 100 },
-    { id: "unitPrice", title: "Đơn giá", kind: "currency", width: 130 },
-    { id: "totalVnd", title: "Thành tiền", kind: "currency", width: 140, readonly: adminEditable<EstimateGridRow>(true) },
-  ];
-
-  const patchEstimate = async (id: number, patch: Partial<EstimateGridRow>) => {
-    const current = rowsById.get(id);
-    if (!current) throw new Error(`Hạng mục #${id} không tồn tại`);
+  const patchNumeric = async (row: EstimateRow, field: "qty" | "unitPrice", value: number) => {
     const merged: EstimateInput = {
       projectId,
-      categoryId: current.categoryId,
-      itemCode: current.itemCode,
-      itemName: typeof patch.itemName === "string" ? patch.itemName : current.itemName,
-      unit: current.unit,
-      qty: typeof patch.qty === "number" ? patch.qty : Number(current.qty),
-      unitPrice: typeof patch.unitPrice === "number" ? patch.unitPrice : Number(current.unitPrice),
-      note: current.note ?? undefined,
+      categoryId: row.categoryId,
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      unit: row.unit,
+      qty: field === "qty" ? value : Number(row.qty),
+      unitPrice: field === "unitPrice" ? value : Number(row.unitPrice),
+      note: row.note ?? undefined,
     };
-    await updateEstimate(id, merged);
+    await updateEstimate(row.id, merged);
+    toast.success("Đã lưu");
+    startTransition(() => router.refresh());
   };
 
-  const ADMIN_RAW_COLS = new Set<keyof EstimateGridRow>(["unit", "totalVnd"]);
-
-  const handlers: DataGridHandlers<EstimateGridRow> = {
-    onCellEdit: async (id, col, value) => {
-      try {
-        if (isAdmin && ADMIN_RAW_COLS.has(col as keyof EstimateGridRow)) {
-          await adminPatchEstimate(id, { [col]: value } as never, projectId);
-        } else {
-          await patchEstimate(id, { [col]: value } as Partial<EstimateGridRow>);
-        }
-        startTransition(() => router.refresh());
-      } catch (err) {
-        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
-        startTransition(() => router.refresh());
-      }
-    },
-    onDeleteRows: async (ids) => {
-      for (const id of ids) {
-        await softDeleteEstimate(id, projectId);
-      }
+  const handleDelete = async (row: EstimateRow) => {
+    if (!window.confirm(`Xóa dòng "${row.itemName}" (${row.itemCode})?`)) return;
+    try {
+      await softDeleteEstimate(row.id, projectId);
+      toast.success("Đã xóa");
       startTransition(() => router.refresh());
-    },
-  };
-
-  const editSelected = () => {
-    if (selectedIds.length !== 1) return;
-    const target = rowsById.get(selectedIds[0]);
-    if (target) setEditTarget(target);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Xóa thất bại");
+    }
   };
 
   async function handleCreate(data: EstimateInput) {
@@ -154,6 +228,88 @@ export function DuToanClient({ projectId, initialData, categories, canCreate, ca
     startTransition(() => router.refresh());
   }
 
+  const renderItemRow = (r: EstimateRow) => (
+    <tr key={r.id} className="border-t hover:bg-muted/20">
+      <td className="px-2 py-1 font-mono text-xs">{r.itemCode}</td>
+      <td className="px-2 py-1">{r.itemName}</td>
+      <td className="px-2 py-1">{r.unit}</td>
+      <td className="px-2 py-1 text-right">
+        <NumericEditCell
+          value={Number(r.qty)}
+          display={qtyFmt(Number(r.qty))}
+          canEdit={canEdit}
+          onCommit={(n) => patchNumeric(r, "qty", n)}
+        />
+      </td>
+      <td className="px-2 py-1 text-right">
+        <NumericEditCell
+          value={Number(r.unitPrice)}
+          display={fmt(Number(r.unitPrice))}
+          canEdit={canEdit}
+          allowZero
+          onCommit={(n) => patchNumeric(r, "unitPrice", n)}
+        />
+      </td>
+      <td className="px-2 py-1 text-right">{fmt(Number(r.totalVnd))}</td>
+      <td className="px-2 py-1 text-xs text-muted-foreground">{r.note ?? ""}</td>
+      <td className="px-2 py-1 text-right">
+        <span className="inline-flex gap-1">
+          {canEdit && (
+            <button
+              type="button"
+              className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+              onClick={() => setEditTarget(r)}
+            >
+              Sửa
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              className="rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+              title="Sửa raw (admin): ĐVT / thành tiền / ghi chú"
+              onClick={() => setAdminTarget(r)}
+            >
+              Adm
+            </button>
+          )}
+          {canDelete && (
+            <button
+              type="button"
+              className="rounded border px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50"
+              onClick={() => handleDelete(r)}
+            >
+              Xóa
+            </button>
+          )}
+        </span>
+      </td>
+    </tr>
+  );
+
+  const renderSubtotalRow = (
+    label: string,
+    sums: Sums,
+    share: number | null,
+    strong: boolean,
+    indent = false,
+  ) => (
+    <tr className={strong ? "bg-muted/40 font-semibold" : "bg-muted/20 font-medium"}>
+      <td colSpan={3} className={`px-2 py-1.5 ${indent ? "pl-6" : ""}`}>
+        {label}
+        <span className="ml-2 text-xs font-normal text-muted-foreground">{sums.count} dòng</span>
+      </td>
+      <td className="px-2 py-1.5 text-right" title={sums.qty == null ? "Đơn vị khác nhau" : undefined}>
+        {sums.qty == null ? "—" : qtyFmt(sums.qty)}
+      </td>
+      <td className="px-2 py-1.5 text-right" />
+      <td className="px-2 py-1.5 text-right">{fmt(sums.totalVnd)}</td>
+      <td colSpan={2} className="px-2 py-1.5 text-xs text-muted-foreground">
+        {share != null && share > 0 ? `${(share * 100).toFixed(1)}%` : ""}
+      </td>
+    </tr>
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -163,26 +319,59 @@ export function DuToanClient({ projectId, initialData, categories, canCreate, ca
             Tổng: <strong>{vndFormatter(grandTotal)}</strong>
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
-            Sửa đầy đủ
-          </Button>
-          <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm hạng mục</Button>
-        </div>
+        <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>
+          Thêm hạng mục
+        </Button>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Chỉnh sửa nhanh: nhấp đúp vào ô <strong>Tên</strong>, <strong>SL</strong>, <strong>Đơn giá</strong>. Đổi <strong>Hạng mục</strong> hoặc <strong>Mã hàng</strong> qua nút &quot;Sửa đầy đủ&quot;.
+        Sửa nhanh: bấm vào ô <strong>SL</strong> hoặc <strong>Đơn giá</strong>. Các cột khác sửa qua nút
+        &quot;Sửa&quot; từng dòng. Thành tiền = SL × Đơn giá (tự tính).
       </p>
 
-      <DataGrid<EstimateGridRow>
-        columns={columns}
-        rows={rows}
-        handlers={canEdit ? (canDelete ? handlers : { onCellEdit: handlers.onCellEdit }) : {}}
-        role={isAdmin ? "admin" : undefined}
-        height={520}
-        onSelectionChange={setSelectedIds}
-      />
+      <div className="overflow-x-auto rounded border">
+        <table className="w-full min-w-[1000px] text-sm">
+          <thead className="sticky top-0 z-10 bg-background">
+            <tr className="border-b text-left">
+              <th className="w-28 px-2 py-2">Mã</th>
+              <th className="px-2 py-2">Tên vật tư / công việc</th>
+              <th className="w-16 px-2 py-2">ĐVT</th>
+              <th className="w-28 px-2 py-2 text-right">SL</th>
+              <th className="w-28 px-2 py-2 text-right">Đơn giá</th>
+              <th className="w-32 px-2 py-2 text-right">Thành tiền</th>
+              <th className="w-40 px-2 py-2">Ghi chú</th>
+              <th className="w-28 px-2 py-2 text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tree.map((hm) => (
+              <HmBlock
+                key={hm.hmCode}
+                hm={hm}
+                grandTotal={grandTotal}
+                isCollapsed={collapsed.has(hm.hmCode)}
+                onToggle={() => toggle(hm.hmCode)}
+                renderItemRow={renderItemRow}
+                renderSubtotalRow={renderSubtotalRow}
+              />
+            ))}
+            {tree.length === 0 && (
+              <tr>
+                <td colSpan={COL_COUNT} className="px-2 py-6 text-center text-muted-foreground">
+                  Chưa có dòng dự toán nào.
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="sticky bottom-0 bg-muted font-bold">
+              <td colSpan={5} className="px-2 py-1.5">TỔNG CỘNG</td>
+              <td className="px-2 py-1.5 text-right">{fmt(grandTotal)}</td>
+              <td colSpan={2} />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
       <CrudDialog title="Thêm hạng mục dự toán" open={createOpen} onOpenChange={setCreateOpen}>
         <EstimateForm projectId={projectId} categories={categories} onSubmit={handleCreate} />
@@ -201,11 +390,168 @@ export function DuToanClient({ projectId, initialData, categories, canCreate, ca
               unit: editTarget.unit,
               qty: Number(editTarget.qty),
               unitPrice: Number(editTarget.unitPrice),
+              note: editTarget.note ?? undefined,
             }}
             onSubmit={handleEdit}
           />
         )}
       </CrudDialog>
+
+      {adminTarget && (
+        <AdminPatchDialog
+          projectId={projectId}
+          row={adminTarget}
+          onClose={() => setAdminTarget(null)}
+          onSaved={() => {
+            setAdminTarget(null);
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function HmBlock({
+  hm,
+  grandTotal,
+  isCollapsed,
+  onToggle,
+  renderItemRow,
+  renderSubtotalRow,
+}: {
+  hm: HmGroup<EstimateRow>;
+  grandTotal: number;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  renderItemRow: (r: EstimateRow) => React.ReactNode;
+  renderSubtotalRow: (
+    label: string,
+    sums: Sums,
+    share: number | null,
+    strong: boolean,
+    indent?: boolean,
+  ) => React.ReactNode;
+}) {
+  const hmRows = [...hm.sections.flatMap((s) => s.rows), ...hm.directRows];
+  const hmSums = sumRows(hmRows);
+  return (
+    <>
+      <tr className="cursor-pointer border-t bg-muted/40 font-semibold hover:bg-muted/60" onClick={onToggle}>
+        <td colSpan={5} className="px-2 py-2">
+          <span className="mr-1 inline-block w-4 text-muted-foreground">{isCollapsed ? "▸" : "▾"}</span>
+          {hm.hmLabel}
+          <span className="ml-2 text-xs font-normal text-muted-foreground">{hmSums.count} dòng</span>
+        </td>
+        <td className="px-2 py-2 text-right">{fmt(hmSums.totalVnd)}</td>
+        <td colSpan={2} className="px-2 py-2 text-xs text-muted-foreground">
+          {grandTotal > 0 ? `${((hmSums.totalVnd / grandTotal) * 100).toFixed(1)}% toàn công trình` : ""}
+        </td>
+      </tr>
+      {!isCollapsed &&
+        hm.sections.map((section) => (
+          <SectionBlock
+            key={section.categoryId}
+            section={section}
+            hmTotal={hmSums.totalVnd}
+            renderItemRow={renderItemRow}
+            renderSubtotalRow={renderSubtotalRow}
+          />
+        ))}
+      {!isCollapsed && hm.directRows.map(renderItemRow)}
+    </>
+  );
+}
+
+function SectionBlock({
+  section,
+  hmTotal,
+  renderItemRow,
+  renderSubtotalRow,
+}: {
+  section: SectionGroup<EstimateRow>;
+  hmTotal: number;
+  renderItemRow: (r: EstimateRow) => React.ReactNode;
+  renderSubtotalRow: (
+    label: string,
+    sums: Sums,
+    share: number | null,
+    strong: boolean,
+    indent?: boolean,
+  ) => React.ReactNode;
+}) {
+  const sums = sumRows(section.rows);
+  return (
+    <>
+      {renderSubtotalRow(
+        `${section.categoryCode} — ${section.categoryName}`,
+        sums,
+        hmTotal > 0 ? sums.totalVnd / hmTotal : null,
+        false,
+        true,
+      )}
+      {section.rows.map(renderItemRow)}
+    </>
+  );
+}
+
+function AdminPatchDialog({
+  projectId,
+  row,
+  onClose,
+  onSaved,
+}: {
+  projectId: number;
+  row: EstimateRow;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [unit, setUnit] = useState(row.unit);
+  const [totalVnd, setTotalVnd] = useState(String(Number(row.totalVnd)));
+  const [note, setNote] = useState(row.note ?? "");
+  const [isPending, startTransition] = useTransition();
+
+  const save = () => {
+    const total = Number(totalVnd.replace(/[,\s]/g, ""));
+    if (!Number.isFinite(total)) {
+      toast.error("Thành tiền không hợp lệ");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await adminPatchEstimate(row.id, { unit, totalVnd: total, note }, projectId);
+        toast.success("Đã lưu (admin)");
+        onSaved();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Lưu thất bại");
+      }
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="w-[420px] rounded-lg border bg-background p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <p className="font-semibold">Sửa raw (admin)</p>
+        <p className="mb-3 text-xs text-muted-foreground">
+          {row.itemCode} · {row.itemName}. Ghi trực tiếp, không tính lại SL × Đơn giá.
+        </p>
+        <label className="mb-2 block text-sm">
+          ĐVT
+          <input value={unit} onChange={(e) => setUnit(e.target.value)} className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm" />
+        </label>
+        <label className="mb-2 block text-sm">
+          Thành tiền (VNĐ)
+          <input value={totalVnd} onChange={(e) => setTotalVnd(e.target.value)} className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-right text-sm" />
+        </label>
+        <label className="mb-3 block text-sm">
+          Ghi chú
+          <input value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm" />
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={isPending}>Hủy</Button>
+          <Button size="sm" onClick={save} disabled={isPending}>{isPending ? "Đang lưu…" : "Lưu"}</Button>
+        </div>
+      </div>
     </div>
   );
 }

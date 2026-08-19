@@ -387,6 +387,8 @@ model ProjectEstimate {
   totalVnd   Decimal   @default(0) @db.Decimal(18, 2) // qty * unitPrice, computed on write
   // NULL = "Còn phải lấy HĐ" tự tính (totalVnd − Σ amountHd); có giá trị = người dùng ghi đè
   remainingInvoiceOverrideVnd Decimal? @db.Decimal(18, 2)
+  // Nhóm vật liệu thay thế cho nhau (đánh giá định mức theo nhóm); NULL = không thuộc nhóm
+  materialGroupId Int?
   note       String?
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())
@@ -394,10 +396,30 @@ model ProjectEstimate {
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  materialGroup ProjectMaterialGroup? @relation(fields: [materialGroupId], references: [id], onDelete: SetNull)
 
   @@index([projectId, categoryId])
   @@index([importRunId])
+  @@index([materialGroupId])
   @@map("project_estimates")
+}
+
+// Nhóm vật liệu thay thế cho nhau — phạm vi theo từng dự án. Định mức chấm cờ
+// theo nhóm; note lưu căn cứ thay thế ("đã hỏi CĐT, lấy HĐ cát vàng được").
+model ProjectMaterialGroup {
+  id        Int       @id @default(autoincrement())
+  projectId Int
+  name      String
+  note      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  estimates ProjectEstimate[]
+
+  // Partial unique enforced via raw SQL: (projectId, name) WHERE "deletedAt" IS NULL
+  @@index([projectId])
+  @@map("project_material_groups")
 }
 
 model ProjectChangeOrder {

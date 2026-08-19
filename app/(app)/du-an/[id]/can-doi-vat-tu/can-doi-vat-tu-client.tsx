@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { vndFormatter } from "@/lib/format";
-import { setInvoiceOverride } from "@/lib/du-an/can-doi-service";
+import {
+  listEstimateOptions,
+  listMemberTransactions,
+  setInvoiceOverride,
+  type MemberTransaction,
+} from "@/lib/du-an/can-doi-service";
+import { reassignTransactionCluster } from "@/lib/du-an/txn-cluster-service";
+import { normVtName } from "@/lib/text/norm-vt-name";
 import {
   BUCKET_LABELS,
   type CanDoiBucket,
@@ -165,6 +172,152 @@ function OverrideCell({
       {fmt(row.remainingInvoiceVnd)}
       {row.remainingIsOverride && <span> ✎</span>}
     </button>
+  );
+}
+
+function MemberRowsPanel({ rows, colCount }: { rows: MemberTransaction[] | undefined; colCount: number }) {
+  return (
+    <tr className="border-t bg-muted/10">
+      <td colSpan={colCount} className="px-8 py-2">
+        {rows === undefined ? (
+          <span className="text-xs text-muted-foreground">Đang tải giao dịch…</span>
+        ) : rows.length === 0 ? (
+          <span className="text-xs text-muted-foreground">Chưa có giao dịch nào thuộc dòng này.</span>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-muted-foreground">
+                <th className="py-1 pr-2 w-20">Ngày</th>
+                <th className="py-1 pr-2">Tên trên hóa đơn / giao dịch</th>
+                <th className="py-1 pr-2 w-20">Số HĐ</th>
+                <th className="py-1 pr-2 w-20 text-right">SL</th>
+                <th className="py-1 pr-2 w-14">ĐVT</th>
+                <th className="py-1 pr-2 w-28 text-right">Tiền HĐ</th>
+                <th className="py-1 w-28 text-right">Tiền TT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((t) => (
+                <tr key={t.id} className="border-t border-muted">
+                  <td className="py-1 pr-2">{new Date(t.date).toLocaleDateString("vi-VN")}</td>
+                  <td className="py-1 pr-2">{t.itemName}</td>
+                  <td className="py-1 pr-2">{t.invoiceNo ?? "—"}</td>
+                  <td className="py-1 pr-2 text-right">{qtyFmt(t.qtyHd ?? t.qty)}</td>
+                  <td className="py-1 pr-2">{t.unit}</td>
+                  <td className="py-1 pr-2 text-right">{fmt(t.amountHd)}</td>
+                  <td className="py-1 text-right">{fmt(t.amountTt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function AssignDialog({
+  projectId,
+  row,
+  onClose,
+  onReassigned,
+}: {
+  projectId: number;
+  row: CanDoiRow;
+  onClose: () => void;
+  onReassigned: () => void;
+}) {
+  const router = useRouter();
+  const [options, setOptions] = useState<Awaited<ReturnType<typeof listEstimateOptions>> | null>(null);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<number | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    let cancelled = false;
+    listEstimateOptions(projectId)
+      .then((opts) => {
+        if (!cancelled) setOptions(opts);
+      })
+      .catch(() => toast.error("Không tải được danh sách dự toán"));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const filtered = useMemo(() => {
+    if (!options) return [];
+    const q = normVtName(search.trim());
+    const list = q
+      ? options.filter((o) => normVtName(`${o.categoryCode} ${o.itemCode} ${o.itemName}`).includes(q))
+      : options;
+    return list.slice(0, 50);
+  }, [options, search]);
+
+  const commit = () => {
+    if (selected == null) return;
+    startTransition(async () => {
+      try {
+        const result = await reassignTransactionCluster(projectId, row.categoryId, row.itemCode, selected);
+        toast.success(`Đã gán ${result.moved} giao dịch vào dòng dự toán`);
+        onReassigned();
+        onClose();
+        router.refresh();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gán thất bại");
+      }
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="max-h-[80vh] w-[560px] overflow-hidden rounded-lg border bg-background p-4 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="font-semibold">Gán vào dự toán</p>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Toàn bộ giao dịch của &quot;{row.itemName}&quot; ({row.itemCode}) sẽ chuyển sang dòng dự toán được chọn.
+        </p>
+        <input
+          autoFocus
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="🔍 Tìm theo mã / tên vật tư…"
+          className="mb-2 h-8 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+        />
+        <div className="max-h-[45vh] overflow-y-auto rounded border">
+          {options === null ? (
+            <p className="p-3 text-sm text-muted-foreground">Đang tải…</p>
+          ) : filtered.length === 0 ? (
+            <p className="p-3 text-sm text-muted-foreground">Không có dòng dự toán khớp.</p>
+          ) : (
+            filtered.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => setSelected(o.id)}
+                className={`block w-full border-b px-3 py-1.5 text-left text-sm last:border-b-0 hover:bg-muted/40 ${
+                  selected === o.id ? "bg-primary/10 font-medium" : ""
+                }`}
+              >
+                <span className="font-mono text-xs">{o.itemCode}</span> · {o.itemName}{" "}
+                <span className="text-xs text-muted-foreground">({o.unit})</span>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="mt-3 flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={isPending}>
+            Hủy
+          </Button>
+          <Button size="sm" onClick={commit} disabled={selected == null || isPending}>
+            {isPending ? "Đang gán…" : "Gán cả cụm"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -330,7 +483,27 @@ export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
   const [buckets, setBuckets] = useState<Set<CanDoiBucket>>(new Set());
   const [overrideOnly, setOverrideOnly] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [memberCache, setMemberCache] = useState<Map<string, MemberTransaction[]>>(new Map());
+  const [assignRow, setAssignRow] = useState<CanDoiRow | null>(null);
   const storageKey = `candoi-${projectId}`;
+
+  const toggleRowExpand = (row: CanDoiRow) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(row.id)) {
+        next.delete(row.id);
+        return next;
+      }
+      next.add(row.id);
+      return next;
+    });
+    if (!memberCache.has(row.id) && row.estimateId != null) {
+      listMemberTransactions(projectId, row.estimateId)
+        .then((rows) => setMemberCache((prev) => new Map(prev).set(row.id, rows)))
+        .catch(() => toast.error("Không tải được giao dịch của dòng này"));
+    }
+  };
   // Persist chỉ chạy SAU khi restore xong — nếu không, effect persist đầu tiên
   // (mode/expanded còn là mặc định) sẽ ghi đè giá trị vừa đọc từ sessionStorage.
   const restoredRef = useRef(false);
@@ -382,6 +555,10 @@ export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
   const columns = MODE_COLUMNS[mode];
   const colCount = 4 + columns.length;
   const ttEmpty = data.total.ttRowCount === 0;
+  const materialGroupNames = useMemo(
+    () => new Map(data.materialGroups.map((g) => [g.id, g.name])),
+    [data.materialGroups],
+  );
 
   const toggleGroup = (categoryId: number) => {
     setExpanded((prev) => {
@@ -576,6 +753,11 @@ export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
                   projectId={projectId}
                   canEdit={canEdit}
                   highlightId={highlightId}
+                  expandedRows={expandedRows}
+                  memberCache={memberCache}
+                  onToggleRow={toggleRowExpand}
+                  onAssign={setAssignRow}
+                  materialGroupNames={materialGroupNames}
                 />
               );
             })}
@@ -592,6 +774,15 @@ export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
           </tfoot>
         </table>
       </div>
+      {assignRow && (
+        <AssignDialog
+          projectId={projectId}
+          row={assignRow}
+          onClose={() => setAssignRow(null)}
+          // membership vừa đổi → xóa cache để lần expand sau refetch
+          onReassigned={() => setMemberCache(new Map())}
+        />
+      )}
     </div>
   );
 }
@@ -606,6 +797,11 @@ function GroupSection({
   projectId,
   canEdit,
   highlightId,
+  expandedRows,
+  memberCache,
+  onToggleRow,
+  onAssign,
+  materialGroupNames,
 }: {
   group: CanDoiGroup;
   mode: Mode;
@@ -616,8 +812,40 @@ function GroupSection({
   projectId: number;
   canEdit: boolean;
   highlightId: string | null;
+  expandedRows: Set<string>;
+  memberCache: Map<string, MemberTransaction[]>;
+  onToggleRow: (row: CanDoiRow) => void;
+  onAssign: (row: CanDoiRow) => void;
+  materialGroupNames: Map<number, string>;
 }) {
   const sub = group.subtotal;
+  // Chế độ Thi công vs DT: cụm các thành viên cùng nhóm thay thế lại gần nhau
+  // và chèn dòng nhãn nhóm — định mức chấm theo nhóm (chi tiết ở tab Định Mức).
+  const displayRows =
+    mode === "tt-dt"
+      ? (() => {
+          const out: (CanDoiRow | { groupLabel: string; key: string })[] = [];
+          const done = new Set<string>();
+          for (const row of group.rows) {
+            if (done.has(row.id)) continue;
+            if (row.materialGroupId != null) {
+              const members = group.rows.filter((r) => r.materialGroupId === row.materialGroupId);
+              out.push({
+                groupLabel: materialGroupNames.get(row.materialGroupId) ?? "Nhóm thay thế",
+                key: `mg-${row.materialGroupId}`,
+              });
+              for (const m of members) {
+                out.push(m);
+                done.add(m.id);
+              }
+            } else {
+              out.push(row);
+              done.add(row.id);
+            }
+          }
+          return out;
+        })()
+      : group.rows;
   return (
     <>
       <tr className="cursor-pointer border-t bg-muted/30 hover:bg-muted/50" onClick={onToggle}>
@@ -641,43 +869,88 @@ function GroupSection({
         </td>
       </tr>
       {isOpen &&
-        group.rows.map((row) => (
-          <tr
-            key={row.id}
-            id={`candoi-${row.id}`}
-            className={`border-t hover:bg-muted/20 ${highlightId === row.id ? "bg-amber-50 dark:bg-amber-500/10" : ""}`}
-          >
-            <td className="px-2 py-1 font-mono text-xs">{row.itemCode}</td>
-            <td className="px-2 py-1">
-              {row.itemName}
-              {row.kind === "invoice-only" && (
-                <span
-                  className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800"
-                  title="Chỉ có hóa đơn, không có dòng dự toán tương ứng"
-                >
-                  ngoài DT
-                </span>
-              )}
-              {row.unitMismatch && (
-                <span
-                  className="ml-1 rounded bg-sky-100 px-1 text-[10px] text-sky-800"
-                  title="ĐVT hóa đơn khác ĐVT dự toán — chỉ so sánh theo tiền"
-                >
-                  khác ĐVT
-                </span>
-              )}
-            </td>
-            <td className="px-2 py-1">{row.unit}</td>
-            <td className="px-2 py-1">
-              <BucketBadge bucket={row.bucket} />
-            </td>
-            {columns.map((c) => (
-              <td key={c.header} className={`px-2 py-1 ${c.className ?? ""}`}>
-                {c.render(row, { projectId, canEdit })}
+        displayRows.map((entry) => {
+          if ("groupLabel" in entry) {
+            return (
+              <tr key={entry.key} className="border-t bg-violet-50/60 dark:bg-violet-500/10">
+                <td colSpan={colCount} className="px-2 py-1 text-xs font-medium text-violet-800 dark:text-violet-300">
+                  Nhóm thay thế: {entry.groupLabel} — định mức chấm theo tổng nhóm (xem tab Định Mức)
+                </td>
+              </tr>
+            );
+          }
+          const row = entry;
+          return (
+          <React.Fragment key={row.id}>
+            <tr
+              id={`candoi-${row.id}`}
+              className={`border-t hover:bg-muted/20 ${highlightId === row.id ? "bg-amber-50 dark:bg-amber-500/10" : ""}`}
+            >
+              <td className="px-2 py-1 font-mono text-xs">
+                {row.kind === "estimate" && (
+                  <button
+                    type="button"
+                    className="mr-1 inline-block w-4 text-muted-foreground hover:text-foreground"
+                    title="Xem các giao dịch thuộc dòng này"
+                    onClick={() => onToggleRow(row)}
+                  >
+                    {expandedRows.has(row.id) ? "▾" : "▸"}
+                  </button>
+                )}
+                {row.itemCode}
               </td>
-            ))}
-          </tr>
-        ))}
+              <td className="px-2 py-1">
+                {row.itemName}
+                {row.kind === "invoice-only" && (
+                  <span
+                    className="ml-1 rounded bg-amber-100 px-1 text-[10px] text-amber-800"
+                    title="Chỉ có hóa đơn, không có dòng dự toán tương ứng"
+                  >
+                    ngoài DT
+                  </span>
+                )}
+                {row.unitMismatch && (
+                  <span
+                    className="ml-1 rounded bg-sky-100 px-1 text-[10px] text-sky-800"
+                    title="ĐVT hóa đơn khác ĐVT dự toán — chỉ so sánh theo tiền"
+                  >
+                    khác ĐVT
+                  </span>
+                )}
+                {row.nameMismatch && (
+                  <span
+                    className="ml-1 rounded bg-violet-100 px-1 text-[10px] text-violet-800"
+                    title={`Tên trên hóa đơn khác tên dự toán: ${row.nameMismatchSamples.join("; ")}`}
+                  >
+                    tên khác DT
+                  </span>
+                )}
+                {row.kind === "invoice-only" && canEdit && (
+                  <button
+                    type="button"
+                    className="ml-2 rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+                    onClick={() => onAssign(row)}
+                  >
+                    Gán vào DT…
+                  </button>
+                )}
+              </td>
+              <td className="px-2 py-1">{row.unit}</td>
+              <td className="px-2 py-1">
+                <BucketBadge bucket={row.bucket} />
+              </td>
+              {columns.map((c) => (
+                <td key={c.header} className={`px-2 py-1 ${c.className ?? ""}`}>
+                  {c.render(row, { projectId, canEdit })}
+                </td>
+              ))}
+            </tr>
+            {expandedRows.has(row.id) && row.kind === "estimate" && (
+              <MemberRowsPanel rows={memberCache.get(row.id)} colCount={colCount} />
+            )}
+          </React.Fragment>
+          );
+        })}
       {isOpen && <SubtotalRow label={`Cộng ${group.name}`} sub={sub} mode={mode} colCount={colCount} />}
     </>
   );

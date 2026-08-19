@@ -25,6 +25,7 @@ import {
   type WorklistItem,
   addRowToSubtotal,
   bucketOf,
+  detectNameMismatch,
   emptySubtotal,
   pctOrNull,
 } from "./can-doi-metrics";
@@ -40,11 +41,13 @@ interface EstimateAggRow {
   est_total: unknown;
   adjusted_total: unknown;
   override_vnd: unknown;
+  group_id: number | null;
   qty_hd: unknown;
   amount_hd: unknown;
   qty_tt: unknown;
   amount_tt: unknown;
   tx_units: string[] | null;
+  tx_names: string[] | null;
 }
 
 interface OrphanAggRow {
@@ -75,11 +78,13 @@ export async function listCanDoiVatTu(projectId: number): Promise<CanDoiData> {
              pe.qty AS est_qty, pe."unitPrice" AS est_unit_price, pe."totalVnd" AS est_total,
              vea.adjusted_total_vnd AS adjusted_total,
              pe."remainingInvoiceOverrideVnd" AS override_vnd,
+             pe."materialGroupId" AS group_id,
              COALESCE(SUM(COALESCE(pt."qtyHd", pt.qty)) FILTER (WHERE pt."amountHd" <> 0), 0) AS qty_hd,
              COALESCE(SUM(pt."amountHd") FILTER (WHERE pt."amountHd" <> 0), 0) AS amount_hd,
              COALESCE(SUM(pt.qty) FILTER (WHERE pt."amountTt" <> 0), 0) AS qty_tt,
              COALESCE(SUM(pt."amountTt") FILTER (WHERE pt."amountTt" <> 0), 0) AS amount_tt,
-             ARRAY_AGG(DISTINCT TRIM(pt.unit)) FILTER (WHERE pt.id IS NOT NULL) AS tx_units
+             ARRAY_AGG(DISTINCT TRIM(pt.unit)) FILTER (WHERE pt.id IS NOT NULL) AS tx_units,
+             ARRAY_AGG(DISTINCT pt."itemName") FILTER (WHERE pt.id IS NOT NULL) AS tx_names
       FROM project_estimates pe
       LEFT JOIN vw_project_estimate_adjusted vea ON vea.estimate_id = pe.id
       LEFT JOIN project_transactions pt
@@ -114,6 +119,12 @@ export async function listCanDoiVatTu(projectId: number): Promise<CanDoiData> {
     }),
   ]);
 
+  const materialGroups = await prisma.projectMaterialGroup.findMany({
+    where: { projectId, deletedAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+
   const rows: CanDoiRow[] = [];
 
   for (const r of estimateRows) {
@@ -131,6 +142,7 @@ export async function listCanDoiVatTu(projectId: number): Promise<CanDoiData> {
     const txUnits = distinctUnits(r.tx_units);
     const mixedTxUnits = txUnits.length > 1;
     const unitMismatch = mixedTxUnits || (txUnits.length === 1 && txUnits[0] !== estUnit);
+    const nameCheck = detectNameMismatch(r.itemName, r.tx_names ?? []);
 
     const remainingInvoiceVnd = override ?? estimateAdjustedTotalVnd - invoiceAmountVnd;
     const hasTt = actualAmountVnd !== 0;
@@ -164,6 +176,9 @@ export async function listCanDoiVatTu(projectId: number): Promise<CanDoiData> {
       unit: estUnit,
       bucket,
       unitMismatch,
+      nameMismatch: nameCheck.mismatch,
+      nameMismatchSamples: nameCheck.samples,
+      materialGroupId: r.group_id ?? null,
       estimateQty,
       estimateUnitPrice,
       estimateTotalVnd,
@@ -212,6 +227,8 @@ export async function listCanDoiVatTu(projectId: number): Promise<CanDoiData> {
       unit: String(r.unit ?? "").trim(),
       bucket: "ngoai_dt",
       unitMismatch: false,
+      nameMismatch: false,
+      nameMismatchSamples: [],
       estimateQty: 0,
       estimateUnitPrice: 0,
       estimateTotalVnd: 0,
@@ -275,7 +292,88 @@ export async function listCanDoiVatTu(projectId: number): Promise<CanDoiData> {
       bucket: r.bucket,
     }));
 
-  return { groups, total, worklist };
+  return { groups, total, worklist, materialGroups };
+}
+
+export interface MemberTransaction {
+  id: number;
+  date: Date;
+  itemName: string;
+  invoiceNo: string | null;
+  qty: number;
+  qtyHd: number | null;
+  unit: string;
+  amountHd: number;
+  amountTt: number;
+}
+
+/** Các giao dịch thuộc một dòng dự toán (join theo categoryId + itemCode). */
+export async function listMemberTransactions(
+  projectId: number,
+  estimateId: number,
+): Promise<MemberTransaction[]> {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
+  const estimate = await prisma.projectEstimate.findFirst({
+    where: { id: estimateId, projectId, deletedAt: null },
+    select: { categoryId: true, itemCode: true },
+  });
+  if (!estimate) throw new Error("Không tìm thấy dòng dự toán");
+  const txns = await prisma.projectTransaction.findMany({
+    where: {
+      projectId,
+      categoryId: estimate.categoryId,
+      itemCode: estimate.itemCode,
+      deletedAt: null,
+    },
+    orderBy: [{ date: "desc" }, { id: "desc" }],
+    select: {
+      id: true, date: true, itemName: true, invoiceNo: true,
+      qty: true, qtyHd: true, unit: true, amountHd: true, amountTt: true,
+    },
+  });
+  return txns.map((t) => ({
+    id: t.id,
+    date: t.date,
+    itemName: t.itemName,
+    invoiceNo: t.invoiceNo,
+    qty: Number(t.qty),
+    qtyHd: t.qtyHd == null ? null : Number(t.qtyHd),
+    unit: t.unit,
+    amountHd: Number(t.amountHd),
+    amountTt: Number(t.amountTt),
+  }));
+}
+
+/** Danh sách dự toán gọn cho picker "Gán vào dự toán". */
+export async function listEstimateOptions(
+  projectId: number,
+): Promise<{ id: number; itemCode: string; itemName: string; unit: string; categoryCode: string }[]> {
+  await requireReleasedModuleRequest("du-an", {
+    minLevel: "read",
+    scope: { kind: "project", projectId },
+  });
+  const [estimates, categories] = await Promise.all([
+    prisma.projectEstimate.findMany({
+      where: { projectId, deletedAt: null },
+      orderBy: { itemCode: "asc" },
+      select: { id: true, itemCode: true, itemName: true, unit: true, categoryId: true },
+    }),
+    prisma.projectCategory.findMany({
+      where: { projectId, deletedAt: null },
+      select: { id: true, code: true },
+    }),
+  ]);
+  const codeById = new Map(categories.map((c) => [c.id, c.code]));
+  return estimates.map((e) => ({
+    id: e.id,
+    itemCode: e.itemCode,
+    itemName: e.itemName,
+    unit: e.unit,
+    categoryCode: codeById.get(e.categoryId) ?? "",
+  }));
 }
 
 /** Set or clear (null) the per-row "Còn phải lấy HĐ" override. */
