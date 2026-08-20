@@ -1,11 +1,11 @@
 /**
  * Adapter: Dự toán chính thức — tab "Tổng hợp VT" (vd "1. Du toan xay dung MN Trai Chuoi.xls")
- * Target: project_estimates của dự án MNTC-GD1 — CẬP NHẬT TẠI CHỖ theo KL × Giá gốc.
+ * Target: project_estimates của dự án MNTC-GD1 — CẬP NHẬT TẠI CHỖ theo KL × Giá T.B.
  *
  * Khác các adapter khác: không chèn dữ liệu mới hàng loạt mà đối chiếu từng vật tư
  * (tên + ĐVT chuẩn hóa) với dự toán hiện có để giữ nguyên liên kết hóa đơn
  * (categoryId + itemCode) và các ghi đè "Còn phải lấy HĐ":
- *   - Khớp → update qty/unitPrice/totalVnd (giá trị = Giá gốc, KL cộng gộp các khối).
+ *   - Khớp → update qty/unitPrice/totalVnd (giá trị = Giá T.B, KL cộng gộp các khối).
  *   - Chỉ có trong file → insert mới (tag importRunId).
  *   - Chỉ có trong hệ thống → giữ nguyên, liệt kê trong summary.errors (mã KEEP).
  * Chạy lại với cùng file là idempotent (lần 2 mọi dòng đều khớp) → supportsRollback: false.
@@ -15,7 +15,7 @@
  *   NC/MÁY: mọi khối → HM1-NC / HM1-MAY (sheet cân đối ghi "NC+máy cộng cả vào bảng chung").
  *
  * Gate: tổng parse từng (khối, mục) so với dòng "TỔNG ..." của chính sheet, lệch >2% chặn
- * import (2% vì các dòng "% vật liệu khác" không có KL/Giá gốc bị loại theo yêu cầu nhập).
+ * import (2% vì các dòng "% vật liệu khác" không có KL/Giá T.B bị loại theo yêu cầu nhập).
  */
 
 import * as XLSX from "xlsx";
@@ -64,7 +64,7 @@ const num = (v: unknown): number | null => {
 
 interface BlockSectionSum {
   parsed: number;
-  /** Thành tiền của các dòng không có KL/Giá gốc (vd "% vật liệu khác") — không import
+  /** Thành tiền của các dòng không có KL/Giá T.B (vd "% vật liệu khác") — không import
    * nhưng vẫn tính vào phép đối chiếu với dòng TỔNG của sheet. */
   skippedAmount: number;
   sheetTotal: number | null;
@@ -72,7 +72,7 @@ interface BlockSectionSum {
 
 export const DuToanTongHopVtAdapter: ImportAdapter = {
   name: "du-toan-tong-hop-vt",
-  label: "Dự toán — Tổng hợp VT (KL × Giá gốc, cập nhật tại chỗ)",
+  label: "Dự toán — Tổng hợp VT (KL × Giá T.B, cập nhật tại chỗ)",
   supportsRollback: false,
 
   async parse(buffer: Buffer): Promise<ParsedData> {
@@ -122,7 +122,7 @@ export const DuToanTongHopVtAdapter: ImportAdapter = {
       if (!block || !(block in BLOCK_TO_HM)) continue;
       // dòng "TỔNG ..." của sheet — mốc đối chiếu
       if (/^TỔNG/i.test(c2)) {
-        const tt = num(r?.[6]);
+        const tt = num(r?.[8]);
         if (section && tt != null) {
           const key = `${block}|${section}`;
           const cur = blockSections.get(key) ?? { parsed: 0, skippedAmount: 0, sheetTotal: null };
@@ -136,16 +136,16 @@ export const DuToanTongHopVtAdapter: ImportAdapter = {
       const bs = blockSections.get(bsKey) ?? { parsed: 0, skippedAmount: 0, sheetTotal: null };
       blockSections.set(bsKey, bs);
       const kl = num(r?.[4]);
-      const giaGoc = num(r?.[5]);
-      if (kl == null || giaGoc == null) {
-        const amount = num(r?.[6]) ?? 0;
+      const giaTb = num(r?.[7]);
+      if (kl == null || giaTb == null) {
+        const amount = num(r?.[8]) ?? 0;
         if (c2 && amount !== 0) {
           skippedNoNumbers++;
           bs.skippedAmount += amount;
         }
         continue;
       }
-      const tt = num(r?.[6]) ?? kl * giaGoc;
+      const tt = num(r?.[8]) ?? kl * giaTb;
       bs.parsed += tt;
 
       const hm = BLOCK_TO_HM[block];
@@ -274,7 +274,7 @@ export const DuToanTongHopVtAdapter: ImportAdapter = {
             qty: item.qty.toFixed(4),
             unitPrice: price.toFixed(2),
             totalVnd: item.totalVnd.toFixed(2),
-            note: "Dự toán theo Tổng hợp VT (KL × Giá gốc)",
+            note: "Dự toán theo Tổng hợp VT (KL × Giá T.B)",
           },
         });
         imported++;
@@ -309,7 +309,7 @@ export const DuToanTongHopVtAdapter: ImportAdapter = {
             qty: item.qty.toFixed(4),
             unitPrice: price.toFixed(2),
             totalVnd: item.totalVnd.toFixed(2),
-            note: "Dự toán theo Tổng hợp VT (KL × Giá gốc)",
+            note: "Dự toán theo Tổng hợp VT (KL × Giá T.B)",
             importRunId: importRunId ?? null,
           },
         });

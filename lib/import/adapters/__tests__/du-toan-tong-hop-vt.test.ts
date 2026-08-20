@@ -52,15 +52,16 @@ describe("DuToanTongHopVtAdapter (file thật)", () => {
     expect(data.meta.unknownBlocks).toEqual([]);
   });
 
-  it("gộp NC + MÁY của mọi khối về HM1 đúng số đã kiểm chứng", () => {
-    expect(Math.round(sumGroup(data, "HM1-NC"))).toBe(1_939_727_106);
-    expect(Math.round(sumGroup(data, "HM1-MAY"))).toBe(507_576_355);
+  it("gộp NC + MÁY của mọi khối về HM1 đúng số đã kiểm chứng (Giá T.B)", () => {
+    // Σ các dòng TỔNG NHÂN CÔNG / TỔNG MÁY (cột Thành tiền T.B) của 7 khối, sai số làm tròn ≤ 2đ
+    expect(Math.round(sumGroup(data, "HM1-NC"))).toBe(2_134_640_459);
+    expect(Math.round(sumGroup(data, "HM1-MAY"))).toBe(489_012_465);
   });
 
-  it("tách VL theo hạng mục điện / nước", () => {
-    expect(Math.round(sumGroup(data, "HM2-VL"))).toBe(386_742_987);
-    // HM3 gồm cả "Chống thấm cổ ống bằng thanh trương nở hyperstop" (11.04M)
-    expect(Math.round(sumGroup(data, "HM3-VL"))).toBe(348_857_141);
+  it("tách VL theo hạng mục điện / nước (Giá T.B)", () => {
+    expect(Math.round(sumGroup(data, "HM2-VL"))).toBe(340_062_844);
+    // HM3 gồm cả "Chống thấm cổ ống bằng thanh trương nở hyperstop"
+    expect(Math.round(sumGroup(data, "HM3-VL"))).toBe(579_984_469);
   });
 
   it("tách 'Nước (lít)' và 'Nước (m3)' thành 2 vật tư", () => {

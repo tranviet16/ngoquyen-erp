@@ -91,7 +91,7 @@ nhập số thực tế, sửa SL về khối lượng thực nhận và giữ S
 ### Cập nhật dự toán từ file dự toán chính thức
 
 Adapter **"Dự toán — Tổng hợp VT"** trong `/admin/import` đọc tab "Tổng hợp VT" của file
-dự toán (KL × **Giá gốc**) và cập nhật dự toán **tại chỗ** — liên kết hóa đơn và ghi đè
+dự toán (KL × **Giá T.B**) và cập nhật dự toán **tại chỗ** — liên kết hóa đơn và ghi đè
 giữ nguyên. Chạy lại cùng file bao nhiêu lần cũng được (idempotent). Vật tư chỉ có trong
 hệ thống được giữ nguyên và liệt kê "KEEP" trong kết quả import — rà tay nếu cần. Các
 dòng "% vật liệu/máy khác" (chỉ có thành tiền, không có KL/giá) không được import nhưng
