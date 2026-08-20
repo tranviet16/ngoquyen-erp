@@ -11,9 +11,11 @@ import type {
   ResourceSpec,
   FilterValue,
   SortDir,
+  SortState,
   PrismaArgs,
   PrismaWhere,
 } from "./types";
+import { stableSemanticSort } from "./semantic-compare";
 
 // ---------------------------------------------------------------------------
 // parseTableQuery
@@ -218,6 +220,14 @@ function buildFilterClause(
  * column is not whitelisted, falls back to `spec.defaultSort` (which is always
  * pre-whitelisted by the spec author).
  */
+function buildOrderEntry(sort: SortState): Record<string, unknown> {
+  const parts = sort.col.split(".");
+  return parts.reduceRight<Record<string, unknown>>(
+    (acc, key, idx) => ({ [key]: idx === parts.length - 1 ? sort.dir : acc }),
+    {},
+  );
+}
+
 function buildOrderBy(
   state: TableQueryState,
   spec: ResourceSpec
@@ -238,7 +248,11 @@ function buildOrderBy(
     return { [key]: acc };
   }, null);
 
-  return [nested];
+  const orderBy = [nested];
+  if (spec.tieBreaker && spec.tieBreaker.col !== resolved.col) {
+    orderBy.push(buildOrderEntry(spec.tieBreaker));
+  }
+  return orderBy;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +261,9 @@ function buildOrderBy(
 
 /**
  * Serialize a TableQueryState back to a URL query string.
- * Default values (page=1, defaultPageSize, defaultSort) are stripped.
+ * Neutral defaults are stripped. An explicit sort is always preserved, even
+ * when it matches `defaultSort`, so the UI can distinguish user-selected
+ * ascending/descending from the neutral source order.
  */
 export function buildQueryString(
   state: TableQueryState,
@@ -260,12 +276,7 @@ export function buildQueryString(
   }
 
   if (state.sort) {
-    const isDefault =
-      state.sort.col === spec.defaultSort.col &&
-      state.sort.dir === spec.defaultSort.dir;
-    if (!isDefault) {
-      params.set("sort", `${state.sort.col}:${state.sort.dir}`);
-    }
+    params.set("sort", `${state.sort.col}:${state.sort.dir}`);
   }
 
   for (const [col, filter] of Object.entries(state.filters)) {
@@ -281,6 +292,27 @@ export function buildQueryString(
   }
 
   return params.toString();
+}
+
+export function hasDisplayOrderSort(state: TableQueryState, spec: ResourceSpec): boolean {
+  return Boolean(state.sort && spec.displayOrder?.[state.sort.col]);
+}
+
+export function applyDisplayOrderPage<T extends Record<string, unknown>>(
+  rows: readonly T[],
+  state: TableQueryState,
+  spec: ResourceSpec,
+): T[] {
+  if (!state.sort) return [...rows];
+  const order = spec.displayOrder?.[state.sort.col];
+  if (!order) return [...rows];
+  const rank = new Map(order.map((value, index) => [value, index]));
+  return stableSemanticSort(
+    rows,
+    (row) => rank.get(String(row[state.sort!.col])) ?? null,
+    state.sort.dir,
+    "number",
+  ).slice((state.page - 1) * state.pageSize, state.page * state.pageSize);
 }
 
 function serializeFilter(

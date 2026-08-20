@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { Prisma } from "@prisma/client";
+import { stableSemanticSort } from "@/lib/table/semantic-compare";
+import type { SortDir } from "@/lib/table/types";
 import {
   normalizeJournalText,
   resolveJournalCategoryId,
@@ -46,7 +48,10 @@ export interface JournalFilter {
   q?: string;
   page?: number;
   pageSize?: number;
+  sort?: { col: JournalSortKey; dir: SortDir };
 }
+
+export type JournalSortKey = "date" | "group" | "category" | "description" | "source" | "amountVnd";
 
 export interface JournalAggregate {
   totalAmountVnd: Prisma.Decimal;
@@ -56,7 +61,7 @@ export interface JournalAggregate {
 
 export async function listJournalEntries(filter: JournalFilter = {}) {
   await requireReleasedModuleRequest("tai-chinh");
-  const { dateFrom, dateTo, entryType, costBehavior, expenseCategoryId, q, page = 1, pageSize = 50 } = filter;
+  const { dateFrom, dateTo, entryType, costBehavior, expenseCategoryId, q, page = 1, pageSize = 50, sort } = filter;
   const where: Prisma.JournalEntryWhereInput = {
     deletedAt: null,
     ...(entryType ? { entryType } : {}),
@@ -71,12 +76,24 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
     } : {}),
   };
 
-  const [items, total, agg] = await Promise.all([
+  const dir = sort?.dir ?? "desc";
+  const orderBy: Prisma.JournalEntryOrderByWithRelationInput[] = (() => {
+    switch (sort?.col) {
+      case "group": return [{ entryType: dir }, { costBehavior: dir }, { id: "asc" }];
+      case "category": return [{ expenseCategory: { name: dir } }, { id: "asc" }];
+      case "description": return [{ description: dir }, { id: "asc" }];
+      case "amountVnd": return [{ amountVnd: dir }, { id: "asc" }];
+      case "date": return [{ date: dir }, { id: "asc" }];
+      default: return [{ date: "desc" }, { createdAt: "desc" }, { id: "asc" }];
+    }
+  })();
+  const sourceSort = sort?.col === "source" ? sort.dir : null;
+
+  const [loadedItems, total, agg] = await Promise.all([
     prisma.journalEntry.findMany({
       where,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      orderBy: sourceSort ? [{ id: "asc" }] : orderBy,
+      ...(sourceSort ? {} : { skip: (page - 1) * pageSize, take: pageSize }),
       include: {
         expenseCategory: { select: { id: true, name: true, code: true } },
         fromAccountRef: { select: { id: true, name: true } },
@@ -90,6 +107,18 @@ export async function listJournalEntries(filter: JournalFilter = {}) {
       _avg: { amountVnd: true },
     }),
   ]);
+  const items = sourceSort
+    ? stableSemanticSort(
+        loadedItems,
+        (entry) => entry.entryType === "chi"
+          ? entry.fromAccountRef?.name ?? entry.fromAccount
+          : entry.entryType === "thu"
+            ? entry.toAccountRef?.name ?? entry.toAccount
+            : `${entry.fromAccountRef?.name ?? entry.fromAccount ?? ""} → ${entry.toAccountRef?.name ?? entry.toAccount ?? ""}`,
+        sourceSort,
+        "text",
+      ).slice((page - 1) * pageSize, page * pageSize)
+    : loadedItems;
 
   const aggregate: JournalAggregate = {
     totalAmountVnd: agg._sum.amountVnd ?? new Prisma.Decimal(0),

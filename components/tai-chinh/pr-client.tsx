@@ -9,6 +9,8 @@ import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import { createPrAdjustment } from "@/lib/tai-chinh/pr-adjustment-service";
 import {
   deleteAllPrRowsAction,
@@ -93,7 +95,19 @@ export function PrClient({ rows }: Props) {
   const [excludedEntityIds, setExcludedEntityIds] = useState<number[]>([]);
   const [isPending, startTransition] = useTransition();
 
-  const filtered = filterType ? rows.filter((r) => r.type === filterType) : rows;
+  const filtered = useMemo(() => filterType ? rows.filter((r) => r.type === filterType) : rows, [filterType, rows]);
+  const sortColumns = useMemo(() => ({
+    source: { accessor: (row: ConsolidatedRow) => SOURCE_LABELS[row.source], kind: "text" as const },
+    entity: { accessor: (row: ConsolidatedRow) => row.entityName, kind: "text" as const },
+    party: { accessor: (row: ConsolidatedRow) => row.partyName, kind: "text" as const },
+    type: { accessor: (row: ConsolidatedRow) => row.type === "payable" ? "Phải trả" : "Phải thu", kind: "text" as const },
+    sourceAmount: { accessor: (row: ConsolidatedRow) => row.sourceAmountVnd, kind: "currency" as const },
+    amount: { accessor: (row: ConsolidatedRow) => row.amountVnd, kind: "currency" as const },
+    override: { accessor: (row: ConsolidatedRow) => row.overrideAmountVnd, kind: "currency" as const },
+    period: { accessor: (row: ConsolidatedRow) => row.periodYear && row.periodMonth ? `${row.periodYear}-${String(row.periodMonth).padStart(2, "0")}` : null, kind: "date" as const },
+    note: { accessor: (row: ConsolidatedRow) => row.note, kind: "text" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(filtered, sortColumns);
   const totals = useMemo(() => ({
     payable: rows.filter((r) => r.type === "payable").reduce((s, r) => s + Number(r.amountVnd), 0),
     receivable: rows.filter((r) => r.type === "receivable").reduce((s, r) => s + Number(r.amountVnd), 0),
@@ -332,22 +346,22 @@ export function PrClient({ rows }: Props) {
         <table className="w-full min-w-[1040px] text-sm">
           <thead className="border-b bg-muted/40">
             <tr>
-              <th className="px-3 py-2 text-left">Nguồn</th>
-              <th className="px-3 py-2 text-left">Chủ thể</th>
-              <th className="px-3 py-2 text-left">Đối tác / lô</th>
-              <th className="px-3 py-2 text-left">Loại</th>
-              <th className="px-3 py-2 text-right">Source</th>
-              <th className="px-3 py-2 text-right">Hiệu lực</th>
-              <th className="px-3 py-2 text-left">Override</th>
-              <th className="px-3 py-2 text-left">Kỳ</th>
-              <th className="px-3 py-2 text-left">Ghi chú</th>
+              <SortableTableHead column="source" label="Nguồn" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="entity" label="Chủ thể" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="party" label="Đối tác / lô" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="type" label="Loại" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="sourceAmount" label="Source" sort={sort} onToggle={toggleSort} align="right" />
+              <SortableTableHead column="amount" label="Hiệu lực" sort={sort} onToggle={toggleSort} align="right" />
+              <SortableTableHead column="override" label="Override" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="period" label="Kỳ" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="note" label="Ghi chú" sort={sort} onToggle={toggleSort} />
               <th className="px-3 py-2 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">Không có dữ liệu</td></tr>
-            ) : filtered.map((r) => {
+            ) : sortedRows.map((r) => {
               const lineId = r.sourceLineId;
               return (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20">

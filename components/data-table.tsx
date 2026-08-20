@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import type { ResourceSpec } from "@/lib/table/types";
+import { stableSemanticSort, type SemanticKind } from "@/lib/table/semantic-compare";
+import { nextSortState, type SortSelection } from "@/lib/table/sort-state";
 import { TableShell } from "@/components/data-table/table-shell";
 import { useTableState } from "@/components/data-table/use-table-state";
 import type { DataTableProps } from "@/components/data-table/types";
@@ -34,6 +36,7 @@ function LegacyDataTable<T extends Record<string, unknown>>({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [pendingEdits, setPendingEdits] = useState(0);
+  const [sort, setSort] = useState<SortSelection>({ mode: "default" });
 
   const createQueryString = useCallback(
     (updates: Record<string, string>) => {
@@ -68,10 +71,40 @@ function LegacyDataTable<T extends Record<string, unknown>>({
     [router, pathname, createQueryString]
   );
 
+  const sortedData = useMemo(() => {
+    if (sort.mode === "default") return [...data];
+    const column = columns.find((item) => {
+      const sortKey = item.sortKey ?? (item.fk ? `${item.fk.relation}.${item.fk.sortField}` : item.key);
+      return sortKey === sort.col;
+    });
+    if (!column) return [...data];
+    const kind: SemanticKind | undefined = column.kind === "select" || column.kind === "fk"
+      ? "text"
+      : column.kind;
+    return stableSemanticSort(
+      data,
+      (row) => {
+        if (column.sortAccessor) return column.sortAccessor(row);
+        const raw = row[column.key];
+        if (column.kind === "select" || column.kind === "fk") {
+          const options = column.fk?.options ?? column.filterOptions ?? [];
+          return options.find((option) => String(option.id) === String(raw))?.name ?? raw;
+        }
+        return raw;
+      },
+      sort.mode,
+      kind,
+    );
+  }, [columns, data, sort]);
+
+  const handleSort = useCallback((col: string) => {
+    setSort((current) => nextSortState(col, current));
+  }, []);
+
   return (
     <TableShell
       columns={columns}
-      data={data}
+      data={sortedData}
       total={total}
       page={page}
       pageSize={pageSize}
@@ -87,6 +120,9 @@ function LegacyDataTable<T extends Record<string, unknown>>({
       emptyText={emptyText}
       emptyDescription={emptyDescription}
       onCellEdit={onCellEdit}
+      sortCol={sort.mode === "default" ? undefined : sort.col}
+      sortDir={sort.mode === "default" ? undefined : sort.mode}
+      onSortChange={handleSort}
     />
   );
 }
@@ -147,6 +183,7 @@ function EnhancedDataTable<T extends Record<string, unknown>>({
       sortDir={state.sort?.dir}
       filters={state.filters}
       onSortChange={setSort}
+      sortableKeys={new Set(Object.keys(resourceSpec.sortable))}
       onFilterChange={setFilter}
     />
   );

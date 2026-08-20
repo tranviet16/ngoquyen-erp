@@ -72,6 +72,7 @@ export const DU_AN_SPEC: ResourceSpec = deriveResourceSpec(DU_AN_COLUMNS, {
   sortable: {},
   filterable: {},
   defaultSort: { col: "createdAt", dir: "desc" },
+  tieBreaker: { col: "id", dir: "asc" },
   defaultPageSize: 20,
 });
 

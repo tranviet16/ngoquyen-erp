@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { parseTableQuery, buildPrismaArgs, hasDisplayOrderSort, applyDisplayOrderPage } from "@/lib/table/query-params";
 import { ITEM_SPEC } from "@/lib/master-data/items/table-spec";
 import { ItemsClient } from "./items-client";
 
@@ -17,14 +17,17 @@ export default async function ItemsPage({ searchParams }: Props) {
 
   const state = parseTableQuery(params, ITEM_SPEC);
   const args = buildPrismaArgs(state, ITEM_SPEC);
+  const displaySort = hasDisplayOrderSort(state, ITEM_SPEC);
 
-  const [rows, total] = await Promise.all([
+  const [loadedRows, total] = await Promise.all([
     prisma.item.findMany({
       ...args,
+      ...(displaySort ? { skip: undefined, take: undefined, orderBy: [{ id: "asc" as const }] } : {}),
       where: { ...args.where, deletedAt: null },
     }),
     prisma.item.count({ where: { ...args.where, deletedAt: null } }),
   ]);
+  const rows = displaySort ? applyDisplayOrderPage(loadedRows, state, ITEM_SPEC) : loadedRows;
 
   return (
     <Suspense>

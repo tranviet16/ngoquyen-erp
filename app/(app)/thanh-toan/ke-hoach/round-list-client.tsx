@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +50,15 @@ export function RoundListClient({ initialRounds, initialFilter, canCreate, edita
   const [month, setMonth] = useState(initialFilter.month);
   const [status, setStatus] = useState(initialFilter.status ?? "");
   const [open, setOpen] = useState(false);
+  const sortColumns = useMemo(() => ({
+    month: { accessor: (row: RoundRow) => row.month, kind: "date" as const },
+    sequence: { accessor: (row: RoundRow) => row.sequence, kind: "number" as const },
+    status: { accessor: (row: RoundRow) => STATUS_LABEL[row.status as RoundStatus], kind: "text" as const },
+    creator: { accessor: (row: RoundRow) => row.createdBy?.name, kind: "text" as const },
+    itemCount: { accessor: (row: RoundRow) => row._count.items, kind: "number" as const },
+    createdAt: { accessor: (row: RoundRow) => row.createdAt, kind: "date" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(initialRounds, sortColumns);
 
   function applyFilter() {
     const params = new URLSearchParams();
@@ -92,16 +103,16 @@ export function RoundListClient({ initialRounds, initialFilter, canCreate, edita
       </div>
 
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+        <table className="min-w-[600px] w-full text-sm">
           <thead className="bg-muted/50 text-xs uppercase">
             <tr>
               <th className="px-3 py-2 text-left">#</th>
-              <th className="px-3 py-2 text-left">Tháng</th>
-              <th className="px-3 py-2 text-left">Đợt</th>
-              <th className="px-3 py-2 text-left">Trạng thái</th>
-              <th className="px-3 py-2 text-left">Người lập</th>
-              <th className="px-3 py-2 text-right">Số dòng</th>
-              <th className="px-3 py-2 text-left">Ngày tạo</th>
+              <SortableTableHead column="month" label="Tháng" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="sequence" label="Đợt" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="status" label="Trạng thái" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="creator" label="Người lập" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="itemCount" label="Số dòng" sort={sort} onToggle={toggleSort} align="right" />
+              <SortableTableHead column="createdAt" label="Ngày tạo" sort={sort} onToggle={toggleSort} />
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -113,7 +124,7 @@ export function RoundListClient({ initialRounds, initialFilter, canCreate, edita
                 </td>
               </tr>
             )}
-            {initialRounds.map((r, i) => (
+            {sortedRows.map((r, i) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2">{i + 1}</td>
                 <td className="px-3 py-2">{r.month}</td>

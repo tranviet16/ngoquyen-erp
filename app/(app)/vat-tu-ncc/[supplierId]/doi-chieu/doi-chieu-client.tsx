@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ import { type ReconciliationInput } from "@/lib/vat-tu-ncc/schemas";
 import { ReconciliationForm } from "@/components/vat-tu-ncc/reconciliation-form";
 import { formatDate, formatVND } from "@/lib/utils/format";
 import { Plus } from "lucide-react";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 export interface ReconListRow {
   id: number;
@@ -38,6 +40,18 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [, startTransition] = useTransition();
+  const sortColumns = useMemo(() => ({
+    period: { accessor: (row: ReconListRow) => row.periodFrom, kind: "date" as const },
+    opening: { accessor: (row: ReconListRow) => row.opening, kind: "currency" as const },
+    totalIn: { accessor: (row: ReconListRow) => row.totalIn, kind: "currency" as const },
+    totalPaid: { accessor: (row: ReconListRow) => row.totalPaid, kind: "currency" as const },
+    closing: { accessor: (row: ReconListRow) => row.closing, kind: "currency" as const },
+    status: { accessor: (row: ReconListRow) => row.signedBySupplier
+      ? `Đã ký ${row.signedDate ? formatDate(row.signedDate) : ""}`
+      : "Chưa ký", kind: "text" as const },
+    note: { accessor: (row: ReconListRow) => row.note, kind: "text" as const },
+  }), []);
+  const reconSort = useSortableRows(initialData, sortColumns);
 
   async function handleCreate(data: ReconciliationInput) {
     try {
@@ -88,16 +102,16 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
       </div>
 
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+        <table className="min-w-[600px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr className="text-left">
-              <th className="px-3 py-2 font-medium">Kỳ đối chiếu</th>
-              <th className="px-3 py-2 font-medium text-right">A. Dư mang sang</th>
-              <th className="px-3 py-2 font-medium text-right">B. Cộng P/S</th>
-              <th className="px-3 py-2 font-medium text-right">C. Chuyển khoản</th>
-              <th className="px-3 py-2 font-medium text-right">Tổng nợ</th>
-              <th className="px-3 py-2 font-medium">Trạng thái</th>
-              <th className="px-3 py-2 font-medium">Ghi chú</th>
+              <SortableTableHead column="period" label="Kỳ đối chiếu" sort={reconSort.sort} onToggle={reconSort.toggleSort} className="font-medium" />
+              <SortableTableHead column="opening" label="A. Dư mang sang" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
+              <SortableTableHead column="totalIn" label="B. Cộng P/S" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
+              <SortableTableHead column="totalPaid" label="C. Chuyển khoản" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
+              <SortableTableHead column="closing" label="Tổng nợ" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
+              <SortableTableHead column="status" label="Trạng thái" sort={reconSort.sort} onToggle={reconSort.toggleSort} className="font-medium" />
+              <SortableTableHead column="note" label="Ghi chú" sort={reconSort.sort} onToggle={reconSort.toggleSort} className="font-medium" />
               <th className="px-3 py-2 font-medium text-right">Thao tác</th>
             </tr>
           </thead>
@@ -107,7 +121,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
                 Chưa có kỳ đối chiếu. Chốt kỳ ở tab &quot;Chốt kỳ&quot; hoặc bấm &quot;Tạo kỳ đối chiếu&quot;.
               </td></tr>
             )}
-            {initialData.map((r) => (
+            {reconSort.sortedRows.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2 whitespace-nowrap">
                   <Link href={`/vat-tu-ncc/${supplierId}/doi-chieu/${r.id}`} className="text-primary hover:underline">

@@ -38,9 +38,9 @@ type Project = {
 };
 
 const CATEGORY_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
-  { key: "code", header: "Mã hạng mục", className: "w-[160px] font-mono" },
-  { key: "name", header: "Tên hạng mục" },
-  { key: "sortOrder", header: "Thứ tự", className: "w-[80px]", align: "right" },
+  { key: "code", header: "Mã hạng mục", kind: "text", filterable: false, className: "w-[160px] font-mono" },
+  { key: "name", header: "Tên hạng mục", kind: "text", filterable: false },
+  { key: "sortOrder", header: "Thứ tự", kind: "number", filterable: false, className: "w-[80px]", align: "right" },
 ];
 
 interface ProjectDetailClientProps {

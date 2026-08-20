@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 import { vndFormatter } from "@/lib/format";
 import type { EstimateAdjustedRow } from "@/lib/du-an/norm-service";
 import {
@@ -51,6 +53,18 @@ function sumRows(rows: EstimateAdjustedRow[]): Sums {
 
 const COL_COUNT = 9;
 
+const sortColumns = {
+  itemCode: { accessor: (row: EstimateAdjustedRow) => row.itemCode, kind: "text" as const },
+  itemName: { accessor: (row: EstimateAdjustedRow) => row.itemName, kind: "text" as const },
+  unit: { accessor: (row: EstimateAdjustedRow) => row.unit, kind: "text" as const },
+  originalQty: { accessor: (row: EstimateAdjustedRow) => row.original_qty, kind: "number" as const },
+  originalUnitPrice: { accessor: (row: EstimateAdjustedRow) => row.original_unit_price, kind: "currency" as const },
+  originalTotal: { accessor: (row: EstimateAdjustedRow) => row.original_total_vnd, kind: "currency" as const },
+  coCount: { accessor: (row: EstimateAdjustedRow) => row.co_count, kind: "number" as const },
+  coImpact: { accessor: (row: EstimateAdjustedRow) => row.co_cost_impact, kind: "currency" as const },
+  adjustedTotal: { accessor: (row: EstimateAdjustedRow) => row.adjusted_total_vnd, kind: "currency" as const },
+};
+
 function SubtotalCells({ sums, grand }: { sums: Sums; grand?: Sums }) {
   return (
     <>
@@ -96,9 +110,14 @@ export function DuToanDieuChinhClient({ rows: source, categories }: Props) {
     () => new Map(categories.map((c) => [c.id, c])),
     [categories],
   );
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    source,
+    sortColumns,
+    (row) => String(row.categoryId),
+  );
   const tree = useMemo(
-    () => buildCategoryTree(source, (r) => r.categoryId, categoriesById),
-    [source, categoriesById],
+    () => buildCategoryTree(sortedRows, (r) => r.categoryId, categoriesById),
+    [sortedRows, categoriesById],
   );
   const grand = useMemo(() => sumRows(source), [source]);
 
@@ -131,15 +150,15 @@ export function DuToanDieuChinhClient({ rows: source, categories }: Props) {
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b text-left">
-              <th className="w-28 px-2 py-2">Mã</th>
-              <th className="px-2 py-2">Tên vật tư / công việc</th>
-              <th className="w-16 px-2 py-2">ĐVT</th>
-              <th className="w-24 px-2 py-2 text-right">SL gốc</th>
-              <th className="w-28 px-2 py-2 text-right">Đơn giá gốc</th>
-              <th className="w-32 px-2 py-2 text-right">Tổng gốc</th>
-              <th className="w-16 px-2 py-2 text-right">Số CO</th>
-              <th className="w-32 px-2 py-2 text-right">Tác động CO</th>
-              <th className="w-32 px-2 py-2 text-right">Tổng điều chỉnh</th>
+              <SortableTableHead column="itemCode" label="Mã" sort={sort} onToggle={toggleSort} className="w-28" />
+              <SortableTableHead column="itemName" label="Tên vật tư / công việc" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="unit" label="ĐVT" sort={sort} onToggle={toggleSort} className="w-16" />
+              <SortableTableHead column="originalQty" label="SL gốc" sort={sort} onToggle={toggleSort} align="right" className="w-24" />
+              <SortableTableHead column="originalUnitPrice" label="Đơn giá gốc" sort={sort} onToggle={toggleSort} align="right" className="w-28" />
+              <SortableTableHead column="originalTotal" label="Tổng gốc" sort={sort} onToggle={toggleSort} align="right" className="w-32" />
+              <SortableTableHead column="coCount" label="Số CO" sort={sort} onToggle={toggleSort} align="right" className="w-16" />
+              <SortableTableHead column="coImpact" label="Tác động CO" sort={sort} onToggle={toggleSort} align="right" className="w-32" />
+              <SortableTableHead column="adjustedTotal" label="Tổng điều chỉnh" sort={sort} onToggle={toggleSort} align="right" className="w-32" />
             </tr>
           </thead>
           <tbody>

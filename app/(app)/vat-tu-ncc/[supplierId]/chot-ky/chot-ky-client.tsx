@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import {
   type PeriodClosePreview,
 } from "@/lib/vat-tu-ncc/period-close-service";
 import { formatVND } from "@/lib/utils/format";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface Props {
   supplierId: number;
@@ -31,6 +33,18 @@ export function ChotKyClient({ supplierId, canEdit }: Props) {
   const [prices, setPrices] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [committing, startCommit] = useTransition();
+  type Delivery = PeriodClosePreview["deliveries"][number];
+  const sortColumns = useMemo(() => ({
+    date: { accessor: (row: Delivery) => row.date, kind: "date" as const },
+    item: { accessor: (row: Delivery) => row.itemLabel, kind: "text" as const },
+    qty: { accessor: (row: Delivery) => row.qty, kind: "number" as const },
+    unit: { accessor: (row: Delivery) => row.unit, kind: "text" as const },
+    project: { accessor: (row: Delivery) => row.projectLabel, kind: "text" as const },
+    entity: { accessor: (row: Delivery) => row.entityName, kind: "text" as const },
+    price: { accessor: (row: Delivery) => prices[row.id] === "" ? null : Number(prices[row.id]), kind: "currency" as const },
+    amount: { accessor: (row: Delivery) => prices[row.id] === "" ? null : row.qty * Number(prices[row.id]), kind: "currency" as const },
+  }), [prices]);
+  const deliverySort = useSortableRows(preview?.deliveries ?? [], sortColumns);
 
   const parseMonth = () => {
     const [y, m] = month.split("-").map(Number);
@@ -152,21 +166,21 @@ export function ChotKyClient({ supplierId, canEdit }: Props) {
           )}
 
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="bg-muted/50">
                 <tr className="text-left">
-                  <th className="px-3 py-2 font-medium">Ngày</th>
-                  <th className="px-3 py-2 font-medium">Vật tư</th>
-                  <th className="px-3 py-2 font-medium text-right">SL</th>
-                  <th className="px-3 py-2 font-medium">ĐVT</th>
-                  <th className="px-3 py-2 font-medium">Công trình</th>
-                  <th className="px-3 py-2 font-medium">Chủ Thể</th>
-                  <th className="px-3 py-2 font-medium text-right w-36">Đơn giá</th>
-                  <th className="px-3 py-2 font-medium text-right">Thành tiền</th>
+                  <SortableTableHead column="date" label="Ngày" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                  <SortableTableHead column="item" label="Vật tư" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                  <SortableTableHead column="qty" label="SL" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} align="right" className="font-medium" />
+                  <SortableTableHead column="unit" label="ĐVT" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                  <SortableTableHead column="project" label="Công trình" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                  <SortableTableHead column="entity" label="Chủ Thể" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                  <SortableTableHead column="price" label="Đơn giá" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} align="right" className="w-36 font-medium" />
+                  <SortableTableHead column="amount" label="Thành tiền" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} align="right" className="font-medium" />
                 </tr>
               </thead>
               <tbody>
-                {preview.deliveries.map((d) => {
+                {deliverySort.sortedRows.map((d) => {
                   const price = Number(prices[d.id]);
                   const hasPrice = prices[d.id] !== "" && Number.isFinite(price);
                   return (

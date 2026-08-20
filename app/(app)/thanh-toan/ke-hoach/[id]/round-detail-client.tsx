@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useTransition, useRef, useEffect } from "react";
+import { Fragment, useMemo, useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import {
 } from "../../actions";
 import type { PaymentCategory, RoundStatus } from "@/lib/payment/payment-service";
 import { CATEGORY_LABEL } from "../round-list-client";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 const STATUS_LABEL: Record<RoundStatus, string> = {
   draft: "Nháp",
@@ -147,6 +149,19 @@ export function RoundDetailClient({
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const sortColumns = useMemo(() => ({
+    category: { accessor: (item: Item) => CATEGORY_LABEL[item.category as PaymentCategory], kind: "text" as const },
+    entity: { accessor: (item: Item) => item.entity.name, kind: "text" as const },
+    project: { accessor: (item: Item) => item.project ? `${item.project.code} - ${item.project.name}` : null, kind: "text" as const },
+    supplier: { accessor: (item: Item) => item.supplier.name, kind: "text" as const },
+    debt: { accessor: (item: Item) => item.congNo.toString(), kind: "currency" as const },
+    cumulative: { accessor: (item: Item) => item.luyKe.toString(), kind: "currency" as const },
+    refreshed: { accessor: (item: Item) => item.balancesRefreshedAt, kind: "date" as const },
+    requested: { accessor: (item: Item) => item.soDeNghi.toString(), kind: "currency" as const },
+    approved: { accessor: (item: Item) => item.soDuyet?.toString(), kind: "currency" as const },
+    note: { accessor: (item: Item) => item.note, kind: "text" as const },
+  }), []);
+  const itemSort = useSortableRows(round.items, sortColumns);
 
   const canSubmit = canEdit && round.items.length > 0;
 
@@ -272,25 +287,25 @@ export function RoundDetailClient({
       </div>
 
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+        <table className="min-w-[900px] w-full text-sm">
           <thead className="bg-muted/50 text-xs uppercase">
             <tr>
-              <th className="sticky left-0 bg-muted/50 px-2 py-2 text-left">Loại</th>
+              <SortableTableHead column="category" label="Loại" sort={itemSort.sort} onToggle={itemSort.toggleSort} className="sticky left-0 bg-muted/50" />
               <th className="px-2 py-2 text-left">STT</th>
-              <th className="px-2 py-2 text-left">Chủ thể</th>
-              <th className="px-2 py-2 text-left">Công trình</th>
-              <th className="px-2 py-2 text-left">NCC</th>
-              <th className="px-2 py-2 text-right">Công nợ</th>
-              <th className="px-2 py-2 text-right">Luỹ kế</th>
-              <th className="px-2 py-2 text-left">Cập nhật SĐ</th>
-              <th className="px-2 py-2 text-right">Số đề nghị</th>
-              <th className="px-2 py-2 text-right">Số duyệt</th>
-              <th className="px-2 py-2 text-left">Ghi chú</th>
+              <SortableTableHead column="entity" label="Chủ thể" sort={itemSort.sort} onToggle={itemSort.toggleSort} />
+              <SortableTableHead column="project" label="Công trình" sort={itemSort.sort} onToggle={itemSort.toggleSort} />
+              <SortableTableHead column="supplier" label="NCC" sort={itemSort.sort} onToggle={itemSort.toggleSort} />
+              <SortableTableHead column="debt" label="Công nợ" sort={itemSort.sort} onToggle={itemSort.toggleSort} align="right" />
+              <SortableTableHead column="cumulative" label="Luỹ kế" sort={itemSort.sort} onToggle={itemSort.toggleSort} align="right" />
+              <SortableTableHead column="refreshed" label="Cập nhật SĐ" sort={itemSort.sort} onToggle={itemSort.toggleSort} />
+              <SortableTableHead column="requested" label="Số đề nghị" sort={itemSort.sort} onToggle={itemSort.toggleSort} align="right" />
+              <SortableTableHead column="approved" label="Số duyệt" sort={itemSort.sort} onToggle={itemSort.toggleSort} align="right" />
+              <SortableTableHead column="note" label="Ghi chú" sort={itemSort.sort} onToggle={itemSort.toggleSort} />
               <th className="px-2 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {round.items.map((item, idx) => (
+            {itemSort.sortedRows.map((item, idx) => (
               <ItemRow
                 key={item.id}
                 idx={idx + 1}

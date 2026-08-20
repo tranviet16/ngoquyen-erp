@@ -2,15 +2,14 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { FilterValue } from "@/lib/table/types";
+import { nextSortState, type SortSelection } from "@/lib/table/sort-state";
 import type { DataGridColumn, RowWithId } from "./types";
 import { applyFilter, applySort } from "./apply-filter-sort";
 
-type SortDir = "asc" | "desc";
-export type SortState = { col: string; dir: SortDir };
-
 interface GridView<T> {
-  sort: SortState | null;
+  sort: SortSelection;
   setSort: (colId: string) => void;
+  setSortSelection: (sort: SortSelection) => void;
   filters: Record<string, FilterValue>;
   setFilter: (colId: string, value: FilterValue | null) => void;
   resetFilters: () => void;
@@ -22,16 +21,12 @@ export function useGridView<T extends RowWithId>(
   rows: T[],
   columns: DataGridColumn<T>[],
 ): GridView<T> {
-  const [sort, setSortState] = useState<SortState | null>(null);
+  const [sort, setSortState] = useState<SortSelection>({ mode: "default" });
   const [filters, setFilters] = useState<Record<string, FilterValue>>({});
 
-  // Cycle: null → asc → desc → null
+  // Cycle: default → asc → desc → default
   const setSort = useCallback((colId: string) => {
-    setSortState((prev) => {
-      if (prev?.col !== colId) return { col: colId, dir: "asc" };
-      if (prev.dir === "asc") return { col: colId, dir: "desc" };
-      return null;
-    });
+    setSortState((prev) => nextSortState(colId, prev));
   }, []);
 
   const setFilter = useCallback((colId: string, value: FilterValue | null) => {
@@ -56,5 +51,14 @@ export function useGridView<T extends RowWithId>(
 
   const isFiltered = Object.keys(filters).length > 0;
 
-  return { sort, setSort, filters, setFilter, resetFilters, view, isFiltered };
+  return {
+    sort,
+    setSort,
+    setSortSelection: setSortState,
+    filters,
+    setFilter,
+    resetFilters,
+    view,
+    isFiltered,
+  };
 }

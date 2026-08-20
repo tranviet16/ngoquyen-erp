@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import {
 } from "@/lib/vat-tu-ncc/price-quote-service";
 import { formatDate, formatNumber } from "@/lib/utils/format";
 import { Plus } from "lucide-react";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 type QuoteRow = {
   id: number;
@@ -39,7 +41,17 @@ export function BaoGiaClient({ supplierId, initialData, items, canCreate, canEdi
   const [note, setNote] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
-  const itemMap = new Map(items.map((i) => [i.id, i]));
+  const itemMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const sortColumns = useMemo(() => ({
+    item: { accessor: (row: QuoteRow) => {
+      const item = itemMap.get(row.itemId);
+      return item ? `${item.code} - ${item.name}` : `#${row.itemId}`;
+    }, kind: "text" as const },
+    price: { accessor: (row: QuoteRow) => Number(row.unitPrice), kind: "currency" as const },
+    effectiveFrom: { accessor: (row: QuoteRow) => row.effectiveFrom, kind: "date" as const },
+    note: { accessor: (row: QuoteRow) => row.note, kind: "text" as const },
+  }), [itemMap]);
+  const { sort, sortedRows, toggleSort } = useSortableRows(initialData, sortColumns);
 
   async function handleCreate() {
     const price = Number(unitPrice);
@@ -136,13 +148,13 @@ export function BaoGiaClient({ supplierId, initialData, items, canCreate, canEdi
       )}
 
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm">
+        <table className="min-w-[600px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr className="text-left">
-              <th className="px-3 py-2 font-medium">Vật tư</th>
-              <th className="px-3 py-2 font-medium text-right">Đơn giá</th>
-              <th className="px-3 py-2 font-medium">Hiệu lực từ</th>
-              <th className="px-3 py-2 font-medium">Ghi chú</th>
+              <SortableTableHead column="item" label="Vật tư" sort={sort} onToggle={toggleSort} className="font-medium" />
+              <SortableTableHead column="price" label="Đơn giá" sort={sort} onToggle={toggleSort} align="right" className="font-medium" />
+              <SortableTableHead column="effectiveFrom" label="Hiệu lực từ" sort={sort} onToggle={toggleSort} className="font-medium" />
+              <SortableTableHead column="note" label="Ghi chú" sort={sort} onToggle={toggleSort} className="font-medium" />
               <th className="px-3 py-2 font-medium text-right">Thao tác</th>
             </tr>
           </thead>
@@ -152,7 +164,7 @@ export function BaoGiaClient({ supplierId, initialData, items, canCreate, canEdi
                 Chưa có báo giá nào. Thêm mức giá đầu tiên để chốt kỳ tự điền giá theo ngày phiếu.
               </td></tr>
             )}
-            {initialData.map((q) => {
+            {sortedRows.map((q) => {
               const item = itemMap.get(q.itemId);
               return (
                 <tr key={q.id} className="border-t">

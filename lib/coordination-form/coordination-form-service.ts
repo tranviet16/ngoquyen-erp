@@ -7,16 +7,19 @@ import {
   type UserContext,
 } from "@/lib/department-rbac";
 import { getDeptAccessMap, hasDeptAccess, type DeptAccessMap } from "@/lib/dept-access";
-import { nextStatus, type FormStatus, type FormAction } from "./state-machine";
+import { nextStatus, statusLabel, type FormStatus, type FormAction } from "./state-machine";
 import { nextFormCode, isUniqueViolation } from "./code-generator";
 import type { CreateDraftInput, UpdateDraftInput } from "./schemas";
 import type { CoordinationForm, CoordinationFormApproval, Department, User } from "@prisma/client";
 import { getDeptLeaders } from "@/lib/department-rbac";
-import { isOverdue } from "./sla";
+import { hoursRemaining, isOverdue } from "./sla";
+import { stableSemanticSort } from "@/lib/table/semantic-compare";
+import type { SortDir } from "@/lib/table/types";
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
 const PAGE_SIZE = 20;
+export type CoordinationSortKey = "code" | "creatorDept" | "executorDept" | "content" | "priority" | "status" | "sla" | "createdAt";
 
 export type FormWithRelations = CoordinationForm & {
   creator: Pick<User, "id" | "name" | "email">;
@@ -58,6 +61,7 @@ export async function listForms(opts: {
   status?: FormStatus;
   mine?: boolean;
   page?: number;
+  sort?: { col: CoordinationSortKey; dir: SortDir };
 }): Promise<{
   items: FormWithRelations[];
   total: number;
@@ -92,26 +96,44 @@ export async function listForms(opts: {
     },
   };
 
-  const [initialItems, total] = await Promise.all([
+  const [loadedItems, total] = await Promise.all([
     prisma.coordinationForm.findMany({
       where,
       include,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      orderBy: opts.sort ? { id: "asc" } : [{ createdAt: "desc" }, { id: "asc" }],
+      ...(opts.sort ? {} : { skip: (page - 1) * PAGE_SIZE, take: PAGE_SIZE }),
     }),
     prisma.coordinationForm.count({ where }),
   ]);
-  let items = initialItems;
+  const priorityLabel: Record<string, string> = { cao: "Cao", trung_binh: "Trung bình", thap: "Thấp" };
+  const accessors: Record<CoordinationSortKey, (form: FormWithRelations) => unknown> = {
+    code: (form) => form.code,
+    creatorDept: (form) => form.creatorDept.name,
+    executorDept: (form) => form.executorDept.name,
+    content: (form) => form.content,
+    priority: (form) => priorityLabel[form.priority] ?? form.priority,
+    status: (form) => statusLabel(form.status as FormStatus),
+    sla: (form) => form.status === "pending_leader" ? hoursRemaining(form) : null,
+    createdAt: (form) => form.createdAt,
+  };
+  let items = opts.sort
+    ? stableSemanticSort(
+        loadedItems as FormWithRelations[],
+        accessors[opts.sort.col],
+        opts.sort.dir,
+        opts.sort.col === "sla" ? "number" : opts.sort.col === "createdAt" ? "date" : "text",
+      ).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    : loadedItems;
 
   const overdueIds = items.filter((f) => isOverdue(f)).map((f) => f.id);
   if (overdueIds.length > 0) {
     await batchEscalate(overdueIds);
-    items = await prisma.coordinationForm.findMany({
+    const refreshedItems = await prisma.coordinationForm.findMany({
       where: { id: { in: items.map((f) => f.id) } },
       include,
-      orderBy: { createdAt: "desc" },
     });
+    const refreshedById = new Map(refreshedItems.map((form) => [form.id, form]));
+    items = items.map((form) => refreshedById.get(form.id) ?? form);
   }
 
   return { items: items as FormWithRelations[], total, page, pageSize: PAGE_SIZE };

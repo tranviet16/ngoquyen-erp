@@ -5,15 +5,41 @@ import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
 import { formatDate, formatVND, formatNumber } from "@/lib/utils/format";
 import { PrintButton } from "@/components/export-buttons";
+import { ServerSortableTableHead } from "@/components/server-sortable-table-head";
+import { stableSemanticSort, type SemanticKind } from "@/lib/table/semantic-compare";
+import { nextSortState, toSortSelection, type SortSelection } from "@/lib/table/sort-state";
 import { SignReconButton } from "./sign-button";
 
 interface Props {
   params: Promise<{ supplierId: string; reconciliationId: string }>;
+  searchParams: Promise<{ sort?: string }>;
 }
 
 export const dynamic = "force-dynamic";
 
-export default async function ReconDetailPage({ params }: Props) {
+function AmountSortHead({ basePath, sort }: { basePath: string; sort: SortSelection }) {
+  const active = sort.mode !== "default" && sort.col === "amount";
+  const mode = active ? sort.mode : "default";
+  const next = nextSortState("amount", sort);
+  const href = next.mode === "default" ? basePath : `${basePath}?sort=amount:${next.mode}`;
+  const currentLabel = mode === "asc" ? "tăng dần" : mode === "desc" ? "giảm dần" : "mặc định";
+  const nextLabel = next.mode === "asc" ? "tăng dần" : next.mode === "desc" ? "giảm dần" : "mặc định";
+
+  return (
+    <th colSpan={2} scope="col" aria-sort={mode === "asc" ? "ascending" : mode === "desc" ? "descending" : "none"} className="p-0">
+      <Link
+        href={href}
+        aria-label={`Thành tiền: đang sắp xếp ${currentLabel}; chọn để sắp xếp ${nextLabel}`}
+        className="flex min-h-11 items-center justify-end gap-1 px-2 py-2 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        title={mode === "default" ? "Thứ tự mặc định" : mode === "asc" ? "Tăng dần" : "Giảm dần"}
+      >
+        Thành tiền <span aria-hidden>{mode === "asc" ? "↑" : mode === "desc" ? "↓" : "↕"}</span>
+      </Link>
+    </th>
+  );
+}
+
+export default async function ReconDetailPage({ params, searchParams }: Props) {
   const { supplierId, reconciliationId } = await params;
   const sid = Number(supplierId);
   const rid = Number(reconciliationId);
@@ -25,6 +51,27 @@ export default async function ReconDetailPage({ params }: Props) {
   if (view.supplierId !== sid) notFound();
 
   const totalDebt = view.closing;
+  const sp = await searchParams;
+  const [sortCol, sortDir] = sp.sort?.split(":") ?? [];
+  const layHangColumns: Record<string, {
+    accessor: (row: (typeof view.layHangRows)[number]) => unknown;
+    kind: SemanticKind;
+  }> = {
+    date: { accessor: (row) => row.date, kind: "date" },
+    itemLabel: { accessor: (row) => row.itemLabel, kind: "text" },
+    qty: { accessor: (row) => row.qty, kind: "number" },
+    projectLabel: { accessor: (row) => row.projectLabel, kind: "text" },
+    unitPrice: { accessor: (row) => row.unitPrice, kind: "number" },
+    amount: { accessor: (row) => row.amount, kind: "currency" },
+  };
+  const sort = !view.signedBySupplier && sortCol && layHangColumns[sortCol] && (sortDir === "asc" || sortDir === "desc")
+    ? toSortSelection(sortCol, sortDir)
+    : { mode: "default" } as const;
+  const activeColumn = sort.mode === "default" ? undefined : layHangColumns[sort.col];
+  const layHangRows = activeColumn
+    ? stableSemanticSort(view.layHangRows, activeColumn.accessor, sort.mode, activeColumn.kind)
+    : [...view.layHangRows];
+  const sortParams = new URLSearchParams();
 
   return (
     <div className="space-y-4 print:text-black">
@@ -70,7 +117,8 @@ export default async function ReconDetailPage({ params }: Props) {
           {view.note && <p><strong>Ghi chú:</strong> {view.note}</p>}
         </div>
 
-        <table className="w-full text-sm border-collapse [&_td]:border [&_th]:border [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:py-1">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px] text-sm border-collapse [&_td]:border [&_th]:border [&_td]:px-2 [&_td]:py-1 [&_th]:px-2 [&_th]:py-1">
           <tbody>
             <tr className="bg-muted/50 font-semibold">
               <td colSpan={7}>A. Dư nợ mang sang</td>
@@ -78,14 +126,26 @@ export default async function ReconDetailPage({ params }: Props) {
             </tr>
             <tr className="bg-muted/30 text-left">
               <th className="w-10">STT</th>
-              <th>Ngày</th>
-              <th>Tên vật tư</th>
-              <th className="text-right">KL</th>
-              <th>Công trình</th>
-              <th className="text-right">Đơn giá</th>
-              <th colSpan={2} className="text-right">Thành tiền</th>
+              {view.signedBySupplier ? <th>Ngày</th> : (
+                <ServerSortableTableHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} column="date" label="Ngày" sort={sort} />
+              )}
+              {view.signedBySupplier ? <th>Tên vật tư</th> : (
+                <ServerSortableTableHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} column="itemLabel" label="Tên vật tư" sort={sort} />
+              )}
+              {view.signedBySupplier ? <th className="text-right">KL</th> : (
+                <ServerSortableTableHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} column="qty" label="KL" sort={sort} align="right" />
+              )}
+              {view.signedBySupplier ? <th>Công trình</th> : (
+                <ServerSortableTableHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} column="projectLabel" label="Công trình" sort={sort} />
+              )}
+              {view.signedBySupplier ? <th className="text-right">Đơn giá</th> : (
+                <ServerSortableTableHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} column="unitPrice" label="Đơn giá" sort={sort} align="right" />
+              )}
+              {view.signedBySupplier ? <th colSpan={2} className="text-right">Thành tiền</th> : (
+                <AmountSortHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} sort={sort} />
+              )}
             </tr>
-            {view.layHangRows.map((r, i) => (
+            {layHangRows.map((r, i) => (
               <tr key={r.id}>
                 <td className="text-center">{i + 1}</td>
                 <td className="whitespace-nowrap">{formatDate(r.date)}</td>
@@ -150,6 +210,7 @@ export default async function ReconDetailPage({ params }: Props) {
             </tr>
           </tbody>
         </table>
+        </div>
 
         <p className="text-sm">
           Đề nghị quý Nhà cung cấp kiểm tra, đối chiếu và ký xác nhận số liệu trên. Mọi chênh lệch

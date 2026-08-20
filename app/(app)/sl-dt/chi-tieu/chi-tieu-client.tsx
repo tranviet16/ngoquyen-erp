@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition, useRef, useEffect, useMemo } from "react";
 import { BarChart3, Calculator, FileText } from "lucide-react";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 import { fmtNum } from "@/lib/sl-dt/format";
 import {
   updateProgressStatus,
@@ -27,6 +29,26 @@ const QT_OPTIONS = ["Đã ký", "Chưa ký"];
 const groupCls = {
   sl: "bg-amber-50 dark:bg-amber-950/30",
   dt: "bg-emerald-50 dark:bg-emerald-950/30",
+};
+
+const sortColumns = {
+  lotName: { accessor: (row: ChiTieuRow) => row.lotName, kind: "text" as const },
+  estimateValue: { accessor: (row: ChiTieuRow) => row.estimateValue, kind: "currency" as const },
+  prevSlLuyKeTho: { accessor: (row: ChiTieuRow) => row.prevSlLuyKeTho, kind: "number" as const },
+  prevDtThoLuyKe: { accessor: (row: ChiTieuRow) => row.prevDtThoLuyKe, kind: "currency" as const },
+  slKeHoachKy: { accessor: (row: ChiTieuRow) => row.slKeHoachKy, kind: "number" as const },
+  slThucKyTho: { accessor: (row: ChiTieuRow) => row.slThucKyTho, kind: "number" as const },
+  dtKeHoachKy: { accessor: (row: ChiTieuRow) => row.dtKeHoachKy, kind: "currency" as const },
+  dtThoKy: { accessor: (row: ChiTieuRow) => row.dtThoKy, kind: "currency" as const },
+  slTrat: { accessor: (row: ChiTieuRow) => row.slTrat, kind: "number" as const },
+  dtTratKy: { accessor: (row: ChiTieuRow) => row.dtTratKy, kind: "currency" as const },
+  dtCanThucHien: { accessor: (row: ChiTieuRow) => row.dtCanThucHien, kind: "currency" as const },
+  targetMilestone: { accessor: (row: ChiTieuRow) => row.targetMilestone ?? row.suggestedTarget, kind: "text" as const },
+  milestoneText: { accessor: (row: ChiTieuRow) => row.milestoneText, kind: "text" as const },
+  hoSoQuyetToan: { accessor: (row: ChiTieuRow) => row.hoSoQuyetToan, kind: "text" as const },
+  tinhTrang: { accessor: (row: ChiTieuRow) => row.tinhTrang, kind: "text" as const },
+  settlementStatus: { accessor: (row: ChiTieuRow) => row.settlementStatus, kind: "text" as const },
+  ghiChu: { accessor: (row: ChiTieuRow) => row.ghiChu, kind: "text" as const },
 };
 
 const ADMIN_NUM_FIELDS = [
@@ -76,6 +98,29 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
   const [form, setForm] = useState<EditForm>(empty);
   const [labelEdit, setLabelEdit] = useState<string | null>(null); // "scope:key"
   const [labelDraft, setLabelDraft] = useState<string>("");
+  const lotRows = useMemo(() => rows.filter((row) => row.kind === "lot"), [rows]);
+  const groupedSort = useGroupedSortableRows(
+    lotRows,
+    sortColumns,
+    (row) => `${row.phaseCode}\u0000${row.groupCode}`,
+  );
+  const displayRows = useMemo(() => {
+    const sortedByGroup = new Map<string, ChiTieuRow[]>();
+    for (const row of groupedSort.sortedRows) {
+      const key = `${row.phaseCode}\u0000${row.groupCode}`;
+      const groupRows = sortedByGroup.get(key) ?? [];
+      groupRows.push(row);
+      sortedByGroup.set(key, groupRows);
+    }
+    const offsets = new Map<string, number>();
+    return rows.map((row) => {
+      if (row.kind !== "lot") return row;
+      const key = `${row.phaseCode}\u0000${row.groupCode}`;
+      const offset = offsets.get(key) ?? 0;
+      offsets.set(key, offset + 1);
+      return sortedByGroup.get(key)?.[offset] ?? row;
+    });
+  }, [groupedSort.sortedRows, rows]);
 
   const rowRefs = useRef(new Map<number, HTMLTableRowElement>());
   const editingRef = useRef<{ lotId: number; original: ChiTieuRow } | null>(null);
@@ -312,31 +357,31 @@ export function ChiTieuClient({ rows, year, month, milestoneOptions, role }: Pro
         <thead className="bg-muted/40 sticky top-0 z-10">
           <tr>
             <th rowSpan={2} className="px-2 py-1 text-center border-r w-10">STT</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[160px]">Danh mục</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">Dự toán phần thô</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">SL lũy kế đầu kỳ</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[110px]">DT lũy kế đầu kỳ</th>
+            <SortableTableHead rowSpan={2} column="lotName" label="Danh mục" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="border-r min-w-[160px]" />
+            <SortableTableHead rowSpan={2} column="estimateValue" label="Dự toán phần thô" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className="border-r min-w-[110px]" />
+            <SortableTableHead rowSpan={2} column="prevSlLuyKeTho" label="SL lũy kế đầu kỳ" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className="border-r min-w-[110px]" />
+            <SortableTableHead rowSpan={2} column="prevDtThoLuyKe" label="DT lũy kế đầu kỳ" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className="border-r min-w-[110px]" />
             <th colSpan={2} className={`px-2 py-1 text-center border-r border-l ${groupCls.sl}`}>Sản lượng kỳ này</th>
             <th colSpan={2} className={`px-2 py-1 text-center border-r border-l ${groupCls.dt}`}>Doanh thu kỳ này</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[100px]">SL trát</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[100px]">DT trát</th>
-            <th rowSpan={2} className="px-2 py-1 text-right border-r min-w-[120px] bg-blue-50 dark:bg-blue-500/15">DT cần thực hiện theo tiến độ</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[160px]">Công việc cần hoàn thành theo DT lũy kế</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[160px]">Tiến độ thực tế</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[120px]">Hồ sơ QT</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[140px] bg-blue-50 dark:bg-blue-500/15">Tình trạng thực hiện DT</th>
-            <th rowSpan={2} className="px-2 py-1 text-left border-r min-w-[120px]">Tình trạng (settlement)</th>
-            <th rowSpan={2} className="px-2 py-1 text-left min-w-[140px]">Ghi chú</th>
+            <SortableTableHead rowSpan={2} column="slTrat" label="SL trát" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className="border-r min-w-[100px]" />
+            <SortableTableHead rowSpan={2} column="dtTratKy" label="DT trát" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className="border-r min-w-[100px]" />
+            <SortableTableHead rowSpan={2} column="dtCanThucHien" label="DT cần thực hiện theo tiến độ" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className="border-r min-w-[120px] bg-blue-50 dark:bg-blue-500/15" />
+            <SortableTableHead rowSpan={2} column="targetMilestone" label="Công việc cần hoàn thành theo DT lũy kế" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="border-r min-w-[160px]" />
+            <SortableTableHead rowSpan={2} column="milestoneText" label="Tiến độ thực tế" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="border-r min-w-[160px]" />
+            <SortableTableHead rowSpan={2} column="hoSoQuyetToan" label="Hồ sơ QT" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="border-r min-w-[120px]" />
+            <SortableTableHead rowSpan={2} column="tinhTrang" label="Tình trạng thực hiện DT" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="border-r min-w-[140px] bg-blue-50 dark:bg-blue-500/15" />
+            <SortableTableHead rowSpan={2} column="settlementStatus" label="Tình trạng (settlement)" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="border-r min-w-[120px]" />
+            <SortableTableHead rowSpan={2} column="ghiChu" label="Ghi chú" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="min-w-[140px]" />
           </tr>
           <tr>
-            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.sl}`}>Chỉ tiêu</th>
-            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.sl}`}>Thực hiện</th>
-            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.dt}`}>Chỉ tiêu</th>
-            <th className={`px-2 py-1 text-right border-r min-w-[100px] ${groupCls.dt}`}>Thực hiện</th>
+            <SortableTableHead column="slKeHoachKy" label="Chỉ tiêu" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className={`border-r min-w-[100px] ${groupCls.sl}`} />
+            <SortableTableHead column="slThucKyTho" label="Thực hiện" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className={`border-r min-w-[100px] ${groupCls.sl}`} />
+            <SortableTableHead column="dtKeHoachKy" label="Chỉ tiêu" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className={`border-r min-w-[100px] ${groupCls.dt}`} />
+            <SortableTableHead column="dtThoKy" label="Thực hiện" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} align="right" className={`border-r min-w-[100px] ${groupCls.dt}`} />
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, idx) => {
+          {displayRows.map((r, idx) => {
             if (r.kind === "lot") stt++;
             const rowCls =
               r.kind === "grand" ? "border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold [&>td]:!bg-transparent [&>td]:py-2.5"

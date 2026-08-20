@@ -4,6 +4,10 @@ import React, { useEffect, useMemo, useRef, useState, useTransition } from "reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
+import type { SemanticKind } from "@/lib/table/semantic-compare";
 import { vndFormatter } from "@/lib/format";
 import {
   listEstimateOptions,
@@ -176,6 +180,16 @@ function OverrideCell({
 }
 
 function MemberRowsPanel({ rows, colCount }: { rows: MemberTransaction[] | undefined; colCount: number }) {
+  const memberRows = rows ?? [];
+  const memberSort = useSortableRows(memberRows, {
+    date: { accessor: (row) => row.date, kind: "date" },
+    itemName: { accessor: (row) => row.itemName, kind: "text" },
+    invoiceNo: { accessor: (row) => row.invoiceNo, kind: "text" },
+    qty: { accessor: (row) => row.qtyHd ?? row.qty, kind: "number" },
+    unit: { accessor: (row) => row.unit, kind: "text" },
+    amountHd: { accessor: (row) => row.amountHd, kind: "currency" },
+    amountTt: { accessor: (row) => row.amountTt, kind: "currency" },
+  });
   return (
     <tr className="border-t bg-muted/10">
       <td colSpan={colCount} className="px-8 py-2">
@@ -187,17 +201,17 @@ function MemberRowsPanel({ rows, colCount }: { rows: MemberTransaction[] | undef
           <table className="w-full text-xs">
             <thead>
               <tr className="text-left text-muted-foreground">
-                <th className="py-1 pr-2 w-20">Ngày</th>
-                <th className="py-1 pr-2">Tên trên hóa đơn / giao dịch</th>
-                <th className="py-1 pr-2 w-20">Số HĐ</th>
-                <th className="py-1 pr-2 w-20 text-right">SL</th>
-                <th className="py-1 pr-2 w-14">ĐVT</th>
-                <th className="py-1 pr-2 w-28 text-right">Tiền HĐ</th>
-                <th className="py-1 w-28 text-right">Tiền TT</th>
+                <SortableTableHead column="date" label="Ngày" sort={memberSort.sort} onToggle={memberSort.toggleSort} className="w-20" />
+                <SortableTableHead column="itemName" label="Tên trên hóa đơn / giao dịch" sort={memberSort.sort} onToggle={memberSort.toggleSort} />
+                <SortableTableHead column="invoiceNo" label="Số HĐ" sort={memberSort.sort} onToggle={memberSort.toggleSort} className="w-20" />
+                <SortableTableHead column="qty" label="SL" sort={memberSort.sort} onToggle={memberSort.toggleSort} align="right" className="w-20" />
+                <SortableTableHead column="unit" label="ĐVT" sort={memberSort.sort} onToggle={memberSort.toggleSort} className="w-14" />
+                <SortableTableHead column="amountHd" label="Tiền HĐ" sort={memberSort.sort} onToggle={memberSort.toggleSort} align="right" className="w-28" />
+                <SortableTableHead column="amountTt" label="Tiền TT" sort={memberSort.sort} onToggle={memberSort.toggleSort} align="right" className="w-28" />
               </tr>
             </thead>
             <tbody>
-              {rows.map((t) => (
+              {memberSort.sortedRows.map((t) => (
                 <tr key={t.id} className="border-t border-muted">
                   <td className="py-1 pr-2">{new Date(t.date).toLocaleDateString("vi-VN")}</td>
                   <td className="py-1 pr-2">{t.itemName}</td>
@@ -333,27 +347,36 @@ function StatCard({ label, value, sub, children }: { label: string; value: strin
 }
 
 interface ColumnDef {
+  key: string;
   header: string;
   className?: string;
+  accessor: (row: CanDoiRow) => unknown;
+  kind?: SemanticKind;
   render: (row: CanDoiRow, ctx: { projectId: number; canEdit: boolean }) => React.ReactNode;
 }
 
 const HD_COLUMNS: ColumnDef[] = [
-  { header: "DT SL", className: "text-right", render: (r) => qtyFmt(r.estimateQty) },
+  { key: "estimateQty", header: "DT SL", className: "text-right", accessor: (r) => r.estimateQty, kind: "number", render: (r) => qtyFmt(r.estimateQty) },
   {
+    key: "estimateAdjustedTotalVnd",
     header: "Dự toán",
     className: "text-right",
+    accessor: (r) => r.estimateAdjustedTotalVnd,
+    kind: "currency",
     render: (r) => (
       <span title={r.estimateAdjustedTotalVnd !== r.estimateTotalVnd ? `Gốc: ${fmt(r.estimateTotalVnd)}` : undefined}>
         {fmt(r.estimateAdjustedTotalVnd)}
       </span>
     ),
   },
-  { header: "HĐ SL", className: "text-right", render: (r) => (r.unitMismatch ? "—" : qtyFmt(r.qtyHd)) },
-  { header: "Hóa đơn đã lấy", className: "text-right", render: (r) => fmt(r.invoiceAmountVnd) },
+  { key: "qtyHd", header: "HĐ SL", className: "text-right", accessor: (r) => r.unitMismatch ? null : r.qtyHd, kind: "number", render: (r) => (r.unitMismatch ? "—" : qtyFmt(r.qtyHd)) },
+  { key: "invoiceAmountVnd", header: "Hóa đơn đã lấy", className: "text-right", accessor: (r) => r.invoiceAmountVnd, kind: "currency", render: (r) => fmt(r.invoiceAmountVnd) },
   {
+    key: "pctHdMoney",
     header: "%HĐ",
     className: "text-right",
+    accessor: (r) => r.pctHdMoney,
+    kind: "number",
     render: (r) => (
       <div className="min-w-[70px]">
         <span>{pctFmt(r.pctHdMoney)}</span>
@@ -362,18 +385,24 @@ const HD_COLUMNS: ColumnDef[] = [
     ),
   },
   {
+    key: "remainingInvoiceVnd",
     header: "Còn phải lấy HĐ",
     className: "text-right",
+    accessor: (r) => r.remainingInvoiceVnd,
+    kind: "currency",
     render: (r, ctx) => <OverrideCell projectId={ctx.projectId} row={r} canEdit={ctx.canEdit} />,
   },
 ];
 
 const TT_DT_COLUMNS: ColumnDef[] = [
-  { header: "DT SL", className: "text-right", render: (r) => qtyFmt(r.estimateQty) },
-  { header: "TT SL", className: "text-right", render: (r) => qtyFmt(r.qtyTt) },
+  { key: "estimateQty", header: "DT SL", className: "text-right", accessor: (r) => r.estimateQty, kind: "number", render: (r) => qtyFmt(r.estimateQty) },
+  { key: "qtyTt", header: "TT SL", className: "text-right", accessor: (r) => r.qtyTt, kind: "number", render: (r) => qtyFmt(r.qtyTt) },
   {
+    key: "pctTtQty",
     header: "%SL",
     className: "text-right",
+    accessor: (r) => r.pctTtQty,
+    kind: "number",
     render: (r) => (
       <span className={r.pctTtQty != null && r.pctTtQty > 1 ? "font-medium text-red-600" : ""}>
         {pctFmt(r.pctTtQty)}
@@ -381,11 +410,14 @@ const TT_DT_COLUMNS: ColumnDef[] = [
       </span>
     ),
   },
-  { header: "Giá DT", className: "text-right", render: (r) => fmt(r.estimateUnitPrice) },
-  { header: "Giá bq TT", className: "text-right", render: (r) => fmt(r.avgPriceTt) },
+  { key: "estimateUnitPrice", header: "Giá DT", className: "text-right", accessor: (r) => r.estimateUnitPrice, kind: "currency", render: (r) => fmt(r.estimateUnitPrice) },
+  { key: "avgPriceTt", header: "Giá bq TT", className: "text-right", accessor: (r) => r.avgPriceTt, kind: "currency", render: (r) => fmt(r.avgPriceTt) },
   {
+    key: "priceDiffTtDt",
     header: "Chênh giá",
     className: "text-right",
+    accessor: (r) => r.priceDiffTtDt,
+    kind: "currency",
     render: (r) =>
       r.priceDiffTtDt == null ? (
         "—"
@@ -396,31 +428,43 @@ const TT_DT_COLUMNS: ColumnDef[] = [
       ),
   },
   {
+    key: "priceImpactTt",
     header: "Tác động giá",
     className: "text-right",
+    accessor: (r) => r.priceImpactTt,
+    kind: "currency",
     render: (r) => <span className={diffClass(r.priceImpactTt)}>{fmt(r.priceImpactTt)}</span>,
   },
 ];
 
 const TT_HD_COLUMNS: ColumnDef[] = [
-  { header: "TT SL", className: "text-right", render: (r) => qtyFmt(r.qtyTt) },
-  { header: "HĐ SL", className: "text-right", render: (r) => qtyFmt(r.qtyHd) },
+  { key: "qtyTt", header: "TT SL", className: "text-right", accessor: (r) => r.qtyTt, kind: "number", render: (r) => qtyFmt(r.qtyTt) },
+  { key: "qtyHd", header: "HĐ SL", className: "text-right", accessor: (r) => r.qtyHd, kind: "number", render: (r) => qtyFmt(r.qtyHd) },
   {
+    key: "qtyDiffTtHd",
     header: "Chênh SL",
     className: "text-right",
+    accessor: (r) => r.qtyDiffTtHd,
+    kind: "number",
     render: (r) => (r.qtyDiffTtHd == null ? "—" : <span className={diffClass(r.qtyDiffTtHd)}>{qtyFmt(r.qtyDiffTtHd) === "—" ? "0" : qtyFmt(r.qtyDiffTtHd)}</span>),
   },
-  { header: "Giá bq HĐ", className: "text-right", render: (r) => fmt(r.avgPriceHd) },
-  { header: "Giá bq TT", className: "text-right", render: (r) => fmt(r.avgPriceTt) },
+  { key: "avgPriceHd", header: "Giá bq HĐ", className: "text-right", accessor: (r) => r.avgPriceHd, kind: "currency", render: (r) => fmt(r.avgPriceHd) },
+  { key: "avgPriceTt", header: "Giá bq TT", className: "text-right", accessor: (r) => r.avgPriceTt, kind: "currency", render: (r) => fmt(r.avgPriceTt) },
   {
+    key: "priceDiffTtHd",
     header: "Chênh giá",
     className: "text-right",
+    accessor: (r) => r.priceDiffTtHd,
+    kind: "currency",
     render: (r) =>
       r.priceDiffTtHd == null ? "—" : <span className={diffClass(r.priceDiffTtHd)}>{fmt(r.priceDiffTtHd)}</span>,
   },
   {
+    key: "diffActualVsInvoiceVnd",
     header: "Chênh tiền TT−HĐ",
     className: "text-right",
+    accessor: (r) => r.diffActualVsInvoiceVnd,
+    kind: "currency",
     render: (r) => <span className={diffClass(r.diffActualVsInvoiceVnd)}>{fmt(r.diffActualVsInvoiceVnd)}</span>,
   },
 ];
@@ -474,6 +518,11 @@ interface Props {
   projectId: number;
   data: CanDoiData;
   canEdit: boolean;
+}
+
+interface GroupedCanDoiRow {
+  categoryId: number;
+  row: CanDoiRow;
 }
 
 export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
@@ -553,6 +602,59 @@ export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
   }, [data.groups, filterActive, search, buckets, overrideOnly]);
 
   const columns = MODE_COLUMNS[mode];
+  const groupedRows = useMemo<GroupedCanDoiRow[]>(() => {
+    const result: GroupedCanDoiRow[] = [];
+    for (const group of filteredGroups) {
+      const rendered = new Set<string>();
+      for (const row of group.rows) {
+        if (rendered.has(row.id)) continue;
+        if (row.materialGroupId != null) {
+          for (const member of group.rows) {
+            if (member.materialGroupId === row.materialGroupId && !rendered.has(member.id)) {
+              result.push({ categoryId: group.categoryId, row: member });
+              rendered.add(member.id);
+            }
+          }
+        } else {
+          result.push({ categoryId: group.categoryId, row });
+          rendered.add(row.id);
+        }
+      }
+    }
+    return result;
+  }, [filteredGroups]);
+  const groupedSortColumns = useMemo(() => {
+    const result: Record<string, { accessor: (entry: GroupedCanDoiRow) => unknown; kind?: SemanticKind }> = {
+      itemCode: { accessor: (entry) => entry.row.itemCode, kind: "text" },
+      itemName: { accessor: (entry) => entry.row.itemName, kind: "text" },
+      unit: { accessor: (entry) => entry.row.unit, kind: "text" },
+      bucket: { accessor: (entry) => BUCKET_LABELS[entry.row.bucket], kind: "text" },
+    };
+    for (const column of columns) {
+      result[column.key] = {
+        accessor: (entry) => column.accessor(entry.row),
+        kind: column.kind,
+      };
+    }
+    return result;
+  }, [columns]);
+  const groupedSort = useGroupedSortableRows(
+    groupedRows,
+    groupedSortColumns,
+    (entry) => `${entry.categoryId}\u0000${entry.row.materialGroupId == null ? "ungrouped" : `material:${entry.row.materialGroupId}`}`,
+  );
+  const sortedGroups = useMemo(() => {
+    const rowsByCategory = new Map<number, CanDoiRow[]>();
+    for (const entry of groupedSort.sortedRows) {
+      const categoryRows = rowsByCategory.get(entry.categoryId) ?? [];
+      categoryRows.push(entry.row);
+      rowsByCategory.set(entry.categoryId, categoryRows);
+    }
+    return filteredGroups.map((group) => ({
+      ...group,
+      rows: rowsByCategory.get(group.categoryId) ?? [],
+    }));
+  }, [filteredGroups, groupedSort.sortedRows]);
   const colCount = 4 + columns.length;
   const ttEmpty = data.total.ttRowCount === 0;
   const materialGroupNames = useMemo(
@@ -727,19 +829,19 @@ export function CanDoiVatTuClient({ projectId, data, canEdit }: Props) {
         <table className="w-full min-w-[1100px] text-sm">
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b text-left">
-              <th className="w-28 px-2 py-2">Mã</th>
-              <th className="px-2 py-2">Tên vật tư / công việc</th>
-              <th className="w-16 px-2 py-2">ĐVT</th>
-              <th className="w-20 px-2 py-2">Trạng thái</th>
+              <SortableTableHead column="itemCode" label="Mã" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="w-28" />
+              <SortableTableHead column="itemName" label="Tên vật tư / công việc" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} />
+              <SortableTableHead column="unit" label="ĐVT" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="w-16" />
+              <SortableTableHead column="bucket" label="Trạng thái" sort={groupedSort.sort} onToggle={groupedSort.toggleSort} className="w-20" />
               {columns.map((c) => (
-                <th key={c.header} className={`w-28 px-2 py-2 ${c.className ?? ""}`}>
-                  {c.header}
-                </th>
+                <SortableTableHead key={c.key} column={c.key} label={c.header} sort={groupedSort.sort}
+                  onToggle={groupedSort.toggleSort} align={c.className?.includes("text-right") ? "right" : "left"}
+                  className={`w-28 ${c.className ?? ""}`} />
               ))}
             </tr>
           </thead>
           <tbody>
-            {filteredGroups.map((group) => {
+            {sortedGroups.map((group) => {
               const isOpen = filterActive || expanded.has(group.categoryId);
               return (
                 <GroupSection

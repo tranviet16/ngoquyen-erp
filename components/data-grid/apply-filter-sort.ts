@@ -3,9 +3,9 @@
  * Depends on FilterValue from lib/table/types — no React deps.
  */
 import type { FilterValue } from "@/lib/table/types";
+import { stableSemanticSort, type SemanticKind } from "@/lib/table/semantic-compare";
+import type { SortSelection } from "@/lib/table/sort-state";
 import type { DataGridColumn, RowWithId } from "./types";
-
-type SortState = { col: string; dir: "asc" | "desc" };
 
 /**
  * Returns the display text for a cell, used by text-filter matching.
@@ -35,6 +35,7 @@ function getCellText<T>(row: T, col: DataGridColumn<T>): string {
  * - Otherwise: raw cell value.
  */
 function getCellSortValue<T>(row: T, col: DataGridColumn<T>): unknown {
+  if (col.sortAccessor) return col.sortAccessor(row);
   if (col.fk) {
     const related = (row as Record<string, unknown>)[col.fk.relation] as Record<string, unknown> | undefined;
     return related?.[col.fk.sortField] ?? null;
@@ -108,46 +109,37 @@ export function applyFilter<T extends RowWithId>(
   );
 }
 
-function compareValues(a: unknown, b: unknown): number {
-  // null/undefined → sort last
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-
-  // Numeric (including numeric strings like "100", "20")
-  const na = Number(a);
-  const nb = Number(b);
-  if (
-    Number.isFinite(na) &&
-    Number.isFinite(nb) &&
-    !(typeof a === "string" && a.trim() === "") &&
-    !(typeof b === "string" && b.trim() === "")
-  ) {
-    return na - nb;
+function semanticKind(kind?: DataGridColumn<never>["kind"]): SemanticKind | undefined {
+  switch (kind) {
+    case "number":
+    case "currency":
+    case "date":
+    case "boolean":
+      return kind;
+    case "text":
+    case "select":
+    case "fk":
+      return "text";
+    default:
+      return undefined;
   }
-  // Dates — ISO string compare works lexicographically; other strings → locale
-  if (typeof a === "string" && typeof b === "string") {
-    return a.localeCompare(b, "vi");
-  }
-  return String(a).localeCompare(String(b), "vi");
 }
 
 export function applySort<T extends RowWithId>(
-  rows: T[],
-  sort: SortState | null,
+  rows: readonly T[],
+  sort: SortSelection,
   columns?: DataGridColumn<T>[],
 ): T[] {
-  if (!sort) return rows;
-  const { col, dir } = sort;
-  const factor = dir === "asc" ? 1 : -1;
+  if (sort.mode === "default") return [...rows];
 
-  // Build column map if columns provided (for name-based sort on select/fk cols)
-  const colDef = columns?.find((c) => (c.id as string) === col);
-
-  // Array.sort is stable in ES2019+ (Node 12+, all modern browsers)
-  return [...rows].sort((a, b) => {
-    const av = colDef ? getCellSortValue(a, colDef) : (a as Record<string, unknown>)[col];
-    const bv = colDef ? getCellSortValue(b, colDef) : (b as Record<string, unknown>)[col];
-    return factor * compareValues(av, bv);
-  });
+  const colDef = columns?.find((column) => column.id === sort.col);
+  return stableSemanticSort(
+    rows,
+    (row) =>
+      colDef
+        ? getCellSortValue(row, colDef)
+        : (row as Record<string, unknown>)[sort.col],
+    sort.mode,
+    semanticKind(colDef?.kind as DataGridColumn<never>["kind"] | undefined),
+  );
 }

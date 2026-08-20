@@ -4,14 +4,36 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatVND } from "@/lib/utils/format";
 import { LineChart, Wallet } from "lucide-react";
 import { Prisma } from "@prisma/client";
+import { ServerSortableTableHead } from "@/components/server-sortable-table-head";
+import { stableSemanticSort, type SemanticKind } from "@/lib/table/semantic-compare";
+import type { SortSelection } from "@/lib/table/sort-state";
 
 export const dynamic = "force-dynamic";
 
-export default async function BaoCaoThanhKhoanPage() {
+export default async function BaoCaoThanhKhoanPage({ searchParams }: { searchParams: Promise<{ balanceSort?: string; forecastSort?: string }> }) {
   const [forecast, balances] = await Promise.all([
     getCashflowForecast(),
     getCashAccountBalances(),
   ]);
+  const sp = await searchParams;
+  const params = new URLSearchParams(Object.entries(sp).filter((entry): entry is [string, string] => Boolean(entry[1])));
+  const parseSort = (raw: string | undefined, allowed: ReadonlySet<string>): SortSelection => {
+    const [col, dir] = raw?.split(":") ?? [];
+    return allowed.has(col) && (dir === "asc" || dir === "desc") ? { mode: dir, col } : { mode: "default" };
+  };
+  const balanceAccessors: Record<string, { accessor: (row: (typeof balances)[number]) => unknown; kind: SemanticKind }> = {
+    name: { accessor: (row) => row.name, kind: "text" }, openingVnd: { accessor: (row) => row.openingVnd, kind: "currency" },
+    inflowVnd: { accessor: (row) => row.inflowVnd, kind: "currency" }, outflowVnd: { accessor: (row) => row.outflowVnd, kind: "currency" },
+    closingVnd: { accessor: (row) => row.closingVnd, kind: "currency" },
+  };
+  const forecastAccessors: Record<string, { accessor: (row: (typeof forecast)[number]) => unknown; kind: SemanticKind }> = {
+    label: { accessor: (row) => row.label, kind: "text" }, loanPaymentsVnd: { accessor: (row) => row.loanPaymentsVnd, kind: "currency" },
+    expectedReceiptsVnd: { accessor: (row) => row.expectedReceiptsVnd, kind: "currency" }, netVnd: { accessor: (row) => row.netVnd, kind: "currency" },
+  };
+  const balanceSort = parseSort(sp.balanceSort, new Set(Object.keys(balanceAccessors)));
+  const forecastSort = parseSort(sp.forecastSort, new Set(Object.keys(forecastAccessors)));
+  const displayedBalances = balanceSort.mode === "default" ? [...balances] : stableSemanticSort(balances, balanceAccessors[balanceSort.col].accessor, balanceSort.mode, balanceAccessors[balanceSort.col].kind);
+  const displayedForecast = forecastSort.mode === "default" ? [...forecast] : stableSemanticSort(forecast, forecastAccessors[forecastSort.col].accessor, forecastSort.mode, forecastAccessors[forecastSort.col].kind);
 
   const totalOpening = balances.reduce((s, b) => s.add(b.openingVnd), new Prisma.Decimal(0));
   const totalInflow = balances.reduce((s, b) => s.add(b.inflowVnd), new Prisma.Decimal(0));
@@ -51,15 +73,15 @@ export default async function BaoCaoThanhKhoanPage() {
               <table className="w-full text-sm border-collapse">
                 <thead className="bg-muted/40">
                   <tr>
-                    <th className="border-b px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nguồn tiền</th>
-                    <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Đầu kỳ</th>
-                    <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Tiền vào</th>
-                    <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Tiền ra</th>
-                    <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cuối kỳ</th>
+                    {[["name", "Nguồn tiền"], ["openingVnd", "Đầu kỳ"], ["inflowVnd", "Tiền vào"], ["outflowVnd", "Tiền ra"], ["closingVnd", "Cuối kỳ"]].map(([column, label], index) => (
+                      <ServerSortableTableHead key={column} basePath="/tai-chinh/bao-cao-thanh-khoan" params={params}
+                        paramName="balanceSort" column={column} label={label} sort={balanceSort}
+                        align={index === 0 ? "left" : "right"} className="border-b text-xs uppercase tracking-wider" />
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {balances.map((b) => (
+                  {displayedBalances.map((b) => (
                     <tr key={b.id} className="even:bg-muted/20 hover:bg-muted/40 transition-colors">
                       <td className="border-b px-4 py-2 font-medium">{b.name}</td>
                       <td className="border-b px-4 py-2 text-right tabular-nums">{formatVND(Number(b.openingVnd))}</td>
@@ -119,14 +141,15 @@ export default async function BaoCaoThanhKhoanPage() {
                 <table className="w-full text-sm border-collapse">
                   <thead className="bg-muted/40">
                     <tr>
-                      <th className="border-b px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tháng</th>
-                      <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">Trả nợ vay (gốc + lãi)</th>
-                      <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">Thu CDT dự kiến</th>
-                      <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ròng</th>
+                      {[["label", "Tháng"], ["loanPaymentsVnd", "Trả nợ vay (gốc + lãi)"], ["expectedReceiptsVnd", "Thu CDT dự kiến"], ["netVnd", "Ròng"]].map(([column, label], index) => (
+                        <ServerSortableTableHead key={column} basePath="/tai-chinh/bao-cao-thanh-khoan" params={params}
+                          paramName="forecastSort" column={column} label={label} sort={forecastSort}
+                          align={index === 0 ? "left" : "right"} className="border-b text-xs uppercase tracking-wider" />
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {forecast.map((f) => (
+                    {displayedForecast.map((f) => (
                       <tr key={f.label} className="even:bg-muted/20 hover:bg-muted/40 transition-colors">
                         <td className="border-b px-4 py-2 font-medium">{f.label}</td>
                         <td className="border-b px-4 py-2 text-right tabular-nums text-red-700 dark:text-red-300">

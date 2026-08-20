@@ -2,11 +2,32 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { getRuns, getAdapters } from "./import-actions";
 import { ImportUploadForm } from "./import-upload-form";
 import { DeleteRunButton } from "./delete-run-button";
+import { ServerSortableTableHead } from "@/components/server-sortable-table-head";
+import { stableSemanticSort, type SemanticKind } from "@/lib/table/semantic-compare";
+import type { SortSelection } from "@/lib/table/sort-state";
 
-export default async function AdminImportPage() {
+export default async function AdminImportPage({ searchParams }: { searchParams: Promise<{ sort?: string }> }) {
   await requireActiveAdmin();
 
   const [runs, adapters] = await Promise.all([getRuns(), getAdapters()]);
+  const { sort: rawSort } = await searchParams;
+  const [sortCol, sortDir] = rawSort?.split(":") ?? [];
+  const sortColumns: Record<string, { accessor: (row: (typeof runs)[number]) => unknown; kind: SemanticKind }> = {
+    id: { accessor: (row) => row.id, kind: "number" },
+    fileName: { accessor: (row) => row.fileName, kind: "text" },
+    adapter: { accessor: (row) => row.adapter, kind: "text" },
+    status: { accessor: (row) => row.status, kind: "text" },
+    rowsImported: { accessor: (row) => row.rowsImported, kind: "number" },
+    rowsSkipped: { accessor: (row) => row.rowsSkipped, kind: "number" },
+    createdAt: { accessor: (row) => row.createdAt, kind: "date" },
+  };
+  const sort: SortSelection = (sortDir === "asc" || sortDir === "desc") && sortColumns[sortCol]
+    ? { mode: sortDir, col: sortCol }
+    : { mode: "default" };
+  const displayedRuns = sort.mode === "default"
+    ? [...runs]
+    : stableSemanticSort(runs, sortColumns[sort.col].accessor, sort.mode, sortColumns[sort.col].kind);
+  const sortParams = new URLSearchParams(rawSort ? { sort: rawSort } : {});
   const rollbackByAdapter = new Map(adapters.map((a) => [a.name, a.supportsRollback]));
 
   function statusBadge(status: string) {
@@ -42,19 +63,19 @@ export default async function AdminImportPage() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="p-2 text-left">#</th>
-                  <th className="p-2 text-left">File</th>
-                  <th className="p-2 text-left">Adapter</th>
-                  <th className="p-2 text-left">Trạng thái</th>
-                  <th className="p-2 text-right">Đã nhập</th>
-                  <th className="p-2 text-right">Bỏ qua</th>
-                  <th className="p-2 text-left">Thời gian</th>
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="id" label="#" sort={sort} />
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="fileName" label="File" sort={sort} />
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="adapter" label="Adapter" sort={sort} />
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="status" label="Trạng thái" sort={sort} />
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="rowsImported" label="Đã nhập" sort={sort} align="right" />
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="rowsSkipped" label="Bỏ qua" sort={sort} align="right" />
+                  <ServerSortableTableHead basePath="/admin/import" params={sortParams} column="createdAt" label="Thời gian" sort={sort} />
                   <th className="p-2 text-left">Chi tiết</th>
                   <th className="p-2 text-left"></th>
                 </tr>
               </thead>
               <tbody>
-                {runs.map((r) => (
+                {displayedRuns.map((r) => (
                   <tr key={r.id} className="border-b hover:bg-muted/20">
                     <td className="p-2 font-mono text-xs">{r.id}</td>
                     <td className="p-2 max-w-[200px] truncate" title={r.fileName}>{r.fileName}</td>

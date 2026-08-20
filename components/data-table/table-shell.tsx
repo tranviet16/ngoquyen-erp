@@ -41,6 +41,7 @@ export interface TableShellProps<T extends Record<string, unknown>> {
   sortDir?: SortDir;
   filters?: Record<string, FilterValue>;
   onSortChange?: (col: string, dir: SortDir | null) => void;
+  sortableKeys?: ReadonlySet<string>;
   onFilterChange?: (col: string, val: FilterValue | null) => void;
 }
 
@@ -66,6 +67,7 @@ export function TableShell<T extends Record<string, unknown>>({
   sortDir,
   filters,
   onSortChange,
+  sortableKeys,
   onFilterChange,
 }: TableShellProps<T>) {
   const colSpan = columns.length + (actionColumn ? 1 : 0);
@@ -102,13 +104,15 @@ export function TableShell<T extends Record<string, unknown>>({
             <TableRow className="hover:bg-transparent">
               {columns.map((col) => {
                 const cls = cn(col.align && ALIGN_CLASS[col.align], col.className);
-                if (hasSort && col.sortable) {
+                const sortKey = col.sortKey ?? (col.fk ? `${col.fk.relation}.${col.fk.sortField}` : col.key);
+                const isSortable = sortableKeys?.has(sortKey) ?? Boolean(col.kind && col.sortable !== false);
+                if (hasSort && isSortable) {
                   return (
-                    <SortHeader key={col.key} colKey={col.key} header={col.header} sortable
+                    <SortHeader key={col.key} colKey={sortKey} header={col.header} sortable
                       currentCol={sortCol} currentDir={sortDir} onSortChange={onSortChange!} className={cls} />
                   );
                 }
-                return <TableHead key={col.key} className={cls}>{col.header}</TableHead>;
+                return <TableHead key={col.key} className={cls} scope="col">{col.header}</TableHead>;
               })}
               {actionColumn && <TableHead className="w-[120px] text-right">Thao tác</TableHead>}
             </TableRow>

@@ -1,3 +1,7 @@
+"use client";
+
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 import { formatVND } from "@/lib/utils/format";
 import type { ObligationReportRow } from "@/lib/tai-chinh/state-obligation-report";
 
@@ -23,6 +27,14 @@ interface Totals {
 
 const ZERO: Totals = { opening: 0, increase: 0, decrease: 0, closing: 0 };
 
+const sortColumns = {
+  name: { accessor: (row: ObligationReportRow) => row.name, kind: "text" as const },
+  opening: { accessor: (row: ObligationReportRow) => row.opening, kind: "currency" as const },
+  increase: { accessor: (row: ObligationReportRow) => row.increase, kind: "currency" as const },
+  decrease: { accessor: (row: ObligationReportRow) => row.decrease, kind: "currency" as const },
+  closing: { accessor: (row: ObligationReportRow) => row.closing, kind: "currency" as const },
+};
+
 function sum(rows: ObligationReportRow[]): Totals {
   return rows.reduce(
     (acc, r) => ({
@@ -36,6 +48,12 @@ function sum(rows: ObligationReportRow[]): Totals {
 }
 
 export function ObligationReportTable({ rows }: Props) {
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    rows,
+    sortColumns,
+    (row) => row.category,
+  );
+
   if (rows.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -51,26 +69,21 @@ export function ObligationReportTable({ rows }: Props) {
       <table className="w-full border-collapse text-sm">
         <thead className="bg-muted/40">
           <tr>
-            <th className="border-b px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Nghĩa vụ
-            </th>
-            <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Đầu kỳ
-            </th>
-            <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-              PS phải trả
-            </th>
-            <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-              Đã nộp
-            </th>
-            <th className="border-b px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Cuối kỳ
-            </th>
+            <SortableTableHead column="name" label="Nghĩa vụ" sort={sort} onToggle={toggleSort}
+              className="border-b text-xs font-semibold uppercase tracking-wider" />
+            <SortableTableHead column="opening" label="Đầu kỳ" sort={sort} onToggle={toggleSort}
+              align="right" className="border-b text-xs font-semibold uppercase tracking-wider" />
+            <SortableTableHead column="increase" label="PS phải trả" sort={sort} onToggle={toggleSort}
+              align="right" className="border-b text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300" />
+            <SortableTableHead column="decrease" label="Đã nộp" sort={sort} onToggle={toggleSort}
+              align="right" className="border-b text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300" />
+            <SortableTableHead column="closing" label="Cuối kỳ" sort={sort} onToggle={toggleSort}
+              align="right" className="border-b text-xs font-semibold uppercase tracking-wider" />
           </tr>
         </thead>
         <tbody>
           {CATEGORY_ORDER.map((cat) => {
-            const catRows = rows.filter((r) => r.category === cat);
+            const catRows = sortedRows.filter((r) => r.category === cat);
             if (catRows.length === 0) return null;
             const catTotal = sum(catRows);
             return (

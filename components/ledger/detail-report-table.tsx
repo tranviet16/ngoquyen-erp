@@ -1,3 +1,7 @@
+"use client";
+
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 import type { DetailRow, SubtotalRow } from "@/lib/cong-no-vt/balance-report-service";
 
 interface Props {
@@ -63,6 +67,16 @@ const COLS: ColDef[] = [
   { id: "daTraHd", header: "Đã trả" },
   { id: "cuoiKyHd", header: "Cuối kỳ" },
 ];
+
+const sortColumns = {
+  projectName: { accessor: (row: DetailRow) => row.projectName, kind: "text" as const },
+  ...Object.fromEntries(
+    COLS.map((column) => [
+      column.id,
+      { accessor: (row: DetailRow) => row[column.id], kind: "currency" as const },
+    ]),
+  ),
+};
 
 function getVal(row: DetailRow | SubtotalRow, id: ColId): string {
   return row[id];
@@ -140,7 +154,12 @@ function SubtotalTr({
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function DetailReportTable({ rows, subtotals, partyLabel }: Props) {
-  const groups = buildGroups(rows);
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    rows,
+    sortColumns,
+    (row) => `${row.entityId}\u0000${row.partyId}`,
+  );
+  const groups = buildGroups(sortedRows);
 
   if (rows.length === 0) {
     return (
@@ -164,9 +183,8 @@ export function DetailReportTable({ rows, subtotals, partyLabel }: Props) {
             <th rowSpan={2} className="px-3 py-2 border min-w-[160px] text-left">
               {partyLabel}
             </th>
-            <th rowSpan={2} className="px-3 py-2 border min-w-[160px] text-left">
-              Công trình
-            </th>
+            <SortableTableHead rowSpan={2} column="projectName" label="Công trình" sort={sort}
+              onToggle={toggleSort} className="border min-w-[160px]" />
             <th colSpan={4} className="px-3 py-2 border text-center">
               Thực tế (TT)
             </th>
@@ -175,15 +193,13 @@ export function DetailReportTable({ rows, subtotals, partyLabel }: Props) {
             </th>
           </tr>
           <tr className="bg-muted text-xs font-semibold uppercase tracking-wide">
-            {FIELD_HEADERS.map((h) => (
-              <th key={`tt-${h}`} className="px-3 py-2 border text-right min-w-[110px]">
-                {h}
-              </th>
+            {FIELD_HEADERS.map((h, index) => (
+              <SortableTableHead key={`tt-${h}`} column={COLS[index].id} label={h} sort={sort}
+                onToggle={toggleSort} align="right" className="border min-w-[110px]" />
             ))}
-            {FIELD_HEADERS.map((h) => (
-              <th key={`hd-${h}`} className="px-3 py-2 border text-right min-w-[110px]">
-                {h}
-              </th>
+            {FIELD_HEADERS.map((h, index) => (
+              <SortableTableHead key={`hd-${h}`} column={COLS[index + 4].id} label={h} sort={sort}
+                onToggle={toggleSort} align="right" className="border min-w-[110px]" />
             ))}
           </tr>
         </thead>

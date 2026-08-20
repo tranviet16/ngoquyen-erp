@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   DataEditor,
   GridCellKind,
@@ -8,6 +8,7 @@ import {
   type GridColumn,
   type GridSelection,
   type Item,
+  type SpriteMap,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { allCells } from "@glideapps/glide-data-grid-cells";
@@ -22,6 +23,14 @@ import { FilterBar } from "./filter-bar";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "./types";
 
 const ROW_MARKER_WIDTH = 30;
+const SORT_HEADER_ICONS: SpriteMap = {
+  sortDefault: ({ fgColor }) =>
+    `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m7 7 3-3 3 3M10 4v12m3-3-3 3-3-3" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  sortAsc: ({ fgColor }) =>
+    `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m6 12 4-4 4 4" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  sortDesc: ({ fgColor }) =>
+    `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="m6 8 4 4 4-4" stroke="${fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+};
 
 interface Props<T extends RowWithId> {
   columns: DataGridColumn<T>[];
@@ -48,11 +57,33 @@ export function DataGrid<T extends RowWithId>({
     initialRows,
     handlers,
   );
-  const { sort, setSort, filters, setFilter, resetFilters, view, isFiltered } = useGridView(
-    rows,
-    columns,
-  );
+  const {
+    sort,
+    setSort,
+    setSortSelection,
+    filters,
+    setFilter,
+    resetFilters,
+    view,
+    isFiltered,
+  } = useGridView(rows, columns);
   const [selection, setSelection] = useState<GridSelection | undefined>();
+  const sortSelectId = useId();
+
+  const sortableColumns = useMemo(
+    () => columns.filter((column) => column.sortable !== false),
+    [columns],
+  );
+  const activeSortTitle =
+    sort.mode === "default"
+      ? undefined
+      : columns.find((column) => column.id === sort.col)?.title;
+  const sortAnnouncement =
+    sort.mode === "default"
+      ? "Thứ tự mặc định."
+      : `Đã sắp xếp ${activeSortTitle ?? sort.col}: ${
+          sort.mode === "asc" ? "tăng dần" : "giảm dần"
+        }.`;
 
   // Column widths derived from column spec
   const colWidths = useMemo(() => columns.map((c) => c.width ?? 140), [columns]);
@@ -60,13 +91,16 @@ export function DataGrid<T extends RowWithId>({
   const gridColumns = useMemo<GridColumn[]>(
     () =>
       columns.map((c) => {
-        let title = c.title;
-        if (c.sortable && sort?.col === c.id) {
-          title = sort.dir === "asc" ? `${c.title} ▲` : `${c.title} ▼`;
-        } else if (c.sortable) {
-          title = `${c.title} ⇅`;
-        }
-        return { title, id: c.id, width: c.width ?? 140 };
+        const sortable = c.sortable !== false;
+        const indicatorIcon =
+          sortable && sort.mode !== "default" && sort.col === c.id
+            ? sort.mode === "asc"
+              ? "sortAsc"
+              : "sortDesc"
+            : sortable
+              ? "sortDefault"
+              : undefined;
+        return { title: c.title, id: c.id, width: c.width ?? 140, indicatorIcon };
       }),
     [columns, sort],
   );
@@ -148,10 +182,28 @@ export function DataGrid<T extends RowWithId>({
   const handleHeaderClicked = useCallback(
     (colIdx: number) => {
       const col = columns[colIdx];
-      if (!col?.sortable) return;
+      if (!col || col.sortable === false) return;
       setSort(col.id);
     },
     [columns, setSort],
+  );
+
+  const sortSelectValue =
+    sort.mode === "default" ? "default" : `${sort.mode}:${sort.col}`;
+  const handleSortSelect = useCallback(
+    (value: string) => {
+      if (value === "default") {
+        setSortSelection({ mode: "default" });
+        return;
+      }
+      const separator = value.indexOf(":");
+      const mode = value.slice(0, separator);
+      const col = value.slice(separator + 1);
+      if ((mode === "asc" || mode === "desc") && col) {
+        setSortSelection({ mode, col });
+      }
+    },
+    [setSortSelection],
   );
 
   const filterBarHeight = columns.some((c) => c.filterable) ? 28 : 0;
@@ -161,7 +213,7 @@ export function DataGrid<T extends RowWithId>({
   return (
     <div className="space-y-2">
       {/* Toolbar */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {handlers.onAddRow && (
           <Button size="sm" variant="outline" onClick={handleAdd}>
             <Plus className="h-4 w-4 mr-1" /> Thêm dòng
@@ -177,6 +229,29 @@ export function DataGrid<T extends RowWithId>({
             <Trash2 className="h-4 w-4 mr-1" />
             Xóa {selectedRowIds.length > 0 ? `(${selectedRowIds.length})` : ""}
           </Button>
+        )}
+        {sortableColumns.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <label htmlFor={sortSelectId} className="text-xs text-muted-foreground">
+              Sắp xếp
+            </label>
+            <select
+              id={sortSelectId}
+              value={sortSelectValue}
+              onChange={(event) => handleSortSelect(event.target.value)}
+              className="h-11 max-w-44 rounded-md border bg-background px-2 text-base md:h-8 md:text-sm"
+            >
+              <option value="default">Thứ tự mặc định</option>
+              {sortableColumns.flatMap((column) => [
+                <option key={`${column.id}:asc`} value={`asc:${column.id}`}>
+                  {column.title}: tăng dần
+                </option>,
+                <option key={`${column.id}:desc`} value={`desc:${column.id}`}>
+                  {column.title}: giảm dần
+                </option>,
+              ])}
+            </select>
+          </div>
         )}
         <span className="text-xs text-muted-foreground ml-auto flex items-center gap-2">
           {dirty > 0 && (
@@ -196,6 +271,9 @@ export function DataGrid<T extends RowWithId>({
           )}
         </span>
       </div>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {sortAnnouncement}
+      </p>
 
       {/* Grid container */}
       <div className="rounded-md border overflow-hidden" style={{ height }}>
@@ -217,6 +295,8 @@ export function DataGrid<T extends RowWithId>({
           gridSelection={selection}
           onGridSelectionChange={setSelection}
           onHeaderClicked={handleHeaderClicked}
+          headerHeight={44}
+          headerIcons={SORT_HEADER_ICONS}
           customRenderers={allCells}
           smoothScrollX
           smoothScrollY

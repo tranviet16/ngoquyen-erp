@@ -22,6 +22,10 @@ export interface ColumnDef<T> {
   kind?: "text" | "number" | "date" | "select" | "boolean" | "currency" | "fk";
   /** Default: `true` when `kind` is set. Set to `false` to opt out of sorting. */
   sortable?: boolean;
+  /** Override the query key used for server sorting. */
+  sortKey?: string;
+  /** Semantic value used by client-side/legacy sorting. */
+  sortAccessor?: (row: T) => unknown;
   /** Default: `true` when `kind` is set. Set to `false` to opt out of filtering. */
   filterable?: boolean;
   filterOptions?: { id: string; name: string }[];

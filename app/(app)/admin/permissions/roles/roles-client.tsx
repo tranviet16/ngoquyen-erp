@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RoleForm, type RoleFormData } from "./role-form";
 import { deleteRole } from "./actions";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 export interface RoleListItem extends RoleFormData {
   moduleCount: number;
@@ -19,6 +21,13 @@ export function RolesClient({ roles }: { roles: RoleListItem[] }) {
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editing, setEditing] = useState<RoleFormData | undefined>(undefined);
+  const sortColumns = useMemo(() => ({
+    name: { accessor: (row: RoleListItem) => row.name, kind: "text" as const },
+    id: { accessor: (row: RoleListItem) => row.id, kind: "text" as const },
+    modules: { accessor: (row: RoleListItem) => row.id === "admin" ? null : row.moduleCount, kind: "number" as const },
+    users: { accessor: (row: RoleListItem) => row.userCount, kind: "number" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(roles, sortColumns);
 
   function openCreate() {
     setFormMode("create");
@@ -72,19 +81,19 @@ export function RolesClient({ roles }: { roles: RoleListItem[] }) {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded border bg-card">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded border bg-card">
+        <table className="min-w-[600px] w-full text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-3 py-2 text-left">Tên</th>
-              <th className="px-3 py-2 text-left">Mã</th>
-              <th className="px-3 py-2 text-right">Số module</th>
-              <th className="px-3 py-2 text-right">Người dùng</th>
+              <SortableTableHead column="name" label="Tên" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="id" label="Mã" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="modules" label="Số module" sort={sort} onToggle={toggleSort} align="right" />
+              <SortableTableHead column="users" label="Người dùng" sort={sort} onToggle={toggleSort} align="right" />
               <th className="px-3 py-2 text-right">Hành động</th>
             </tr>
           </thead>
           <tbody>
-            {roles.map((r) => (
+            {sortedRows.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2 font-medium">
                   {r.name}

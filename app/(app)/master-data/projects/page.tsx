@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { parseTableQuery, buildPrismaArgs, hasDisplayOrderSort, applyDisplayOrderPage } from "@/lib/table/query-params";
 import { PROJECT_SPEC } from "@/lib/master-data/projects/table-spec";
 import { serializeDecimals } from "@/lib/serialize";
 import { ProjectsClient } from "./projects-client";
@@ -18,16 +18,19 @@ export default async function ProjectsPage({ searchParams }: Props) {
 
   const state = parseTableQuery(params, PROJECT_SPEC);
   const args = buildPrismaArgs(state, PROJECT_SPEC);
+  const displaySort = hasDisplayOrderSort(state, PROJECT_SPEC);
   const where = { ...args.where, deletedAt: null };
 
-  const [rows, total] = await Promise.all([
+  const [loadedRows, total] = await Promise.all([
     prisma.project.findMany({
       ...args,
+      ...(displaySort ? { skip: undefined, take: undefined, orderBy: [{ id: "asc" as const }] } : {}),
       where,
       include: { _count: { select: { categories: { where: { deletedAt: null } } } } },
     }),
     prisma.project.count({ where }),
   ]);
+  const rows = displaySort ? applyDisplayOrderPage(loadedRows, state, PROJECT_SPEC) : loadedRows;
 
   return (
     <Suspense>

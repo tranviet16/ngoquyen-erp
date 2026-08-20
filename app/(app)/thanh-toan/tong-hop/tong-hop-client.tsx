@@ -1,9 +1,14 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import {
+  useSortableRows,
+  type SortableColumn,
+} from "@/components/sortable-table/use-sortable-rows";
 import type { AggregateRow, PaymentCategory } from "@/lib/payment/payment-service";
 
 const CATEGORY_LABEL: Record<PaymentCategory, string> = {
@@ -81,8 +86,25 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
   const router = useRouter();
   const [m, setM] = useState(month);
 
-  const entities = uniqueEntities(rows);
-  const pivot = buildPivot(rows, entities);
+  const entities = useMemo(() => uniqueEntities(rows), [rows]);
+  const pivot = useMemo(() => buildPivot(rows, entities), [entities, rows]);
+  const sortColumns = useMemo(() => {
+    const columns: Record<string, SortableColumn<PivotRow>> = {
+      supplierName: { accessor: (row) => row.supplierName, kind: "text" },
+      total_deNghi: { accessor: (row) => row.totals.deNghi, kind: "currency" },
+      total_duyet: { accessor: (row) => row.totals.duyet, kind: "currency" },
+    };
+    for (const category of CATEGORIES) {
+      for (const entity of entities) {
+        for (const metric of ["deNghi", "duyet"] as const) {
+          const key = `${category}_${entity.id}_${metric}`;
+          columns[key] = { accessor: (row) => row.cells[key], kind: "currency" };
+        }
+      }
+    }
+    return columns;
+  }, [entities]);
+  const pivotSort = useSortableRows(pivot, sortColumns);
 
   // Grand totals
   const grandCells = makeCells(entities);
@@ -118,7 +140,12 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
       <div className="flex items-end gap-3 rounded-md border bg-card p-3">
         <div>
           <label className="text-xs text-muted-foreground">Tháng</label>
-          <Input type="month" value={m} onChange={(e) => setM(e.target.value)} />
+          <Input
+            type="month"
+            value={m}
+            onChange={(e) => setM(e.target.value)}
+            className="text-base md:text-sm"
+          />
         </div>
         <Button variant="outline" onClick={apply}>
           Xem
@@ -131,7 +158,7 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
         </div>
       ) : (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[600px] text-sm">
             <thead className="bg-muted/50 text-xs">
               {/* Row 1: fixed cols + category groups (each spans N entities × 2 metrics) + Totals */}
               <tr>
@@ -141,12 +168,14 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
                 >
                   STT
                 </th>
-                <th
+                <SortableTableHead
                   rowSpan={2}
-                  className="sticky left-0 border bg-muted/50 px-2 py-2 text-left"
-                >
-                  Đơn vị TT
-                </th>
+                  column="supplierName"
+                  label="Đơn vị TT"
+                  sort={pivotSort.sort}
+                  onToggle={pivotSort.toggleSort}
+                  className="sticky left-0 border bg-muted/50"
+                />
                 {CATEGORIES.map((cat) => (
                   <th
                     key={cat}
@@ -165,21 +194,45 @@ export function TongHopClient({ month, rows }: { month: string; rows: AggregateR
                 {CATEGORIES.map((cat) =>
                   entities.map((en) => (
                     <Fragment key={`${cat}_${en.id}`}>
-                      <th className="border px-2 py-1 text-right text-nowrap">
-                        {en.name} — Đề nghị
-                      </th>
-                      <th className="border px-2 py-1 text-right text-nowrap">
-                        {en.name} — Duyệt
-                      </th>
+                      <SortableTableHead
+                        column={`${cat}_${en.id}_deNghi`}
+                        label={`${en.name} — Đề nghị`}
+                        sort={pivotSort.sort}
+                        onToggle={pivotSort.toggleSort}
+                        align="right"
+                        className="border text-nowrap"
+                      />
+                      <SortableTableHead
+                        column={`${cat}_${en.id}_duyet`}
+                        label={`${en.name} — Duyệt`}
+                        sort={pivotSort.sort}
+                        onToggle={pivotSort.toggleSort}
+                        align="right"
+                        className="border text-nowrap"
+                      />
                     </Fragment>
                   ))
                 )}
-                <th className="border px-2 py-1 text-right">Đề nghị</th>
-                <th className="border px-2 py-1 text-right">Duyệt</th>
+                <SortableTableHead
+                  column="total_deNghi"
+                  label="Đề nghị"
+                  sort={pivotSort.sort}
+                  onToggle={pivotSort.toggleSort}
+                  align="right"
+                  className="border"
+                />
+                <SortableTableHead
+                  column="total_duyet"
+                  label="Duyệt"
+                  sort={pivotSort.sort}
+                  onToggle={pivotSort.toggleSort}
+                  align="right"
+                  className="border"
+                />
               </tr>
             </thead>
             <tbody>
-              {pivot.map((p, i) => (
+              {pivotSort.sortedRows.map((p, i) => (
                 <tr key={p.supplierId} className="border-t">
                   <td className="border px-2 py-2">{i + 1}</td>
                   <td className="sticky left-0 border bg-background px-2 py-2 whitespace-nowrap">

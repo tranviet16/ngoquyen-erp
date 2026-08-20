@@ -57,6 +57,9 @@ const PROJECT_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   },
   {
     key: "_count",
+    kind: "number",
+    sortKey: "categories._count",
+    filterable: false,
     header: "Hạng mục",
     className: "w-[100px]",
     align: "right",

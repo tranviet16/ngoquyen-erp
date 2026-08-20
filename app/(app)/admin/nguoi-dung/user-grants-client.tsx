@@ -14,6 +14,8 @@ import {
   updateUserAttributesAction,
 } from "./actions";
 import { CreateUserAccountDialog } from "./create-user-account-dialog";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface DeptOpt {
   id: number;
@@ -55,6 +57,17 @@ export function UserGrantsClient({
         (u.name ?? "").toLowerCase().includes(q),
     );
   }, [users, search]);
+  const sortColumns = useMemo(() => ({
+    name: { accessor: (user: UserWithGrants) => user.name, kind: "text" as const },
+    username: { accessor: (user: UserWithGrants) => user.username, kind: "text" as const },
+    email: { accessor: (user: UserWithGrants) => user.email, kind: "text" as const },
+    status: { accessor: (user: UserWithGrants) => user.isActive ? "Đang hoạt động" : "Đã khóa", kind: "text" as const },
+    role: { accessor: (user: UserWithGrants) => roles.find((role) => role.id === user.role)?.name ?? user.role, kind: "text" as const },
+    department: { accessor: (user: UserWithGrants) => user.departmentName, kind: "text" as const },
+    flags: { accessor: (user: UserWithGrants) => `${user.isDirector ? "Giám đốc" : ""} ${user.isLeader ? "Lãnh đạo" : ""}`.trim(), kind: "text" as const },
+    grants: { accessor: (user: UserWithGrants) => user.grants.map((grant) => `${grant.deptName} ${LEVEL_LABEL[grant.level]}`).join(", "), kind: "text" as const },
+  }), [roles]);
+  const userSort = useSortableRows(filtered, sortColumns);
 
   return (
     <div className="space-y-4 p-4 sm:p-6">
@@ -76,19 +89,19 @@ export function UserGrantsClient({
         <table className="w-full min-w-[1100px] text-sm">
           <thead className="bg-muted/50">
             <tr>
-              <th className="px-3 py-2 text-left">Tên</th>
-              <th className="px-3 py-2 text-left">Tên đăng nhập</th>
-              <th className="px-3 py-2 text-left">Email</th>
-              <th className="px-3 py-2 text-left">Trạng thái</th>
-              <th className="px-3 py-2 text-left">Role</th>
-              <th className="px-3 py-2 text-left">Phòng</th>
-              <th className="px-3 py-2 text-left">Cờ</th>
-              <th className="px-3 py-2 text-left">Quyền xem phòng khác</th>
+              <SortableTableHead column="name" label="Tên" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="username" label="Tên đăng nhập" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="email" label="Email" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="status" label="Trạng thái" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="role" label="Role" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="department" label="Phòng" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="flags" label="Cờ" sort={userSort.sort} onToggle={userSort.toggleSort} />
+              <SortableTableHead column="grants" label="Quyền xem phòng khác" sort={userSort.sort} onToggle={userSort.toggleSort} />
               <th className="px-3 py-2 text-left">Hành động</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((u) => (
+            {userSort.sortedRows.map((u) => (
               <UserRow
                 key={u.id}
                 user={u}

@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { auth } from "@/lib/auth";
 import { getViewableProjectIds } from "@/lib/acl";
 import { prisma } from "@/lib/prisma";
-import { parseTableQuery, buildPrismaArgs } from "@/lib/table/query-params";
+import { parseTableQuery, buildPrismaArgs, hasDisplayOrderSort, applyDisplayOrderPage } from "@/lib/table/query-params";
 import { DU_AN_SPEC } from "@/lib/master-data/du-an/table-spec";
 import { DuAnListClient } from "./du-an-list-client";
 
@@ -42,20 +42,23 @@ export default async function DuAnPage({ searchParams }: Props) {
   }
 
   const args = buildPrismaArgs(state, DU_AN_SPEC);
+  const displaySort = hasDisplayOrderSort(state, DU_AN_SPEC);
   const where = {
     ...args.where,
     deletedAt: null,
     ...(v.kind === "subset" ? { id: { in: v.ids } } : {}),
   };
 
-  const [rows, total] = await Promise.all([
+  const [loadedRows, total] = await Promise.all([
     prisma.project.findMany({
       ...args,
+      ...(displaySort ? { skip: undefined, take: undefined, orderBy: [{ id: "asc" as const }] } : {}),
       where,
       include: { _count: { select: { categories: { where: { deletedAt: null } } } } },
     }),
     prisma.project.count({ where }),
   ]);
+  const rows = displaySort ? applyDisplayOrderPage(loadedRows, state, DU_AN_SPEC) : loadedRows;
 
   const items = rows.map((p) => ({
     id: p.id,

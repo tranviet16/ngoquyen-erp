@@ -75,6 +75,12 @@ const LOAN_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   },
   {
     key: "_pending",
+    kind: "number",
+    filterable: false,
+    sortAccessor: (row) => {
+      const payments = (row.payments as { status: string }[]) ?? [];
+      return payments.filter((payment) => payment.status === "pending").length;
+    },
     header: "Kỳ chưa trả",
     className: "w-[120px]",
     render: (row) => {

@@ -93,6 +93,7 @@ export function ObligationPeriodMatrixClient({ rows, cashAccounts, period }: Pro
       kind: "currency",
       width: 140,
       readonly: true,
+      sortAccessor: (row) => row.opening,
       format: (value) => formatVND(value as number, ""),
     },
     {
@@ -101,6 +102,7 @@ export function ObligationPeriodMatrixClient({ rows, cashAccounts, period }: Pro
       kind: "currency",
       width: 150,
       readonly: (row) => row.phaiTraMultiRow,
+      sortAccessor: (row) => row.phaiTraAmount,
       format: (value, row) =>
         row.phaiTraMultiRow ? `${formatVND(value as number, "")} (nhiều dòng)` : formatVND(value as number, ""),
     },
@@ -110,6 +112,7 @@ export function ObligationPeriodMatrixClient({ rows, cashAccounts, period }: Pro
       kind: "currency",
       width: 150,
       readonly: (row) => row.daNopMultiRow,
+      sortAccessor: (row) => row.daNopAmount,
       format: (value, row) =>
         row.daNopMultiRow ? `${formatVND(value as number, "")} (nhiều dòng)` : formatVND(value as number, ""),
     },
@@ -127,6 +130,7 @@ export function ObligationPeriodMatrixClient({ rows, cashAccounts, period }: Pro
       kind: "currency",
       width: 150,
       readonly: true,
+      sortAccessor: (row) => row.closing,
       format: (value) => formatVND(value as number, ""),
     },
   ];

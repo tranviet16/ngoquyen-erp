@@ -56,6 +56,7 @@ export const ITEM_SPEC: ResourceSpec = deriveResourceSpec(ITEM_COLUMNS, {
   sortable: {},
   filterable: {},
   defaultSort: { col: "code", dir: "asc" },
+  tieBreaker: { col: "id", dir: "asc" },
   defaultPageSize: 20,
 });
 

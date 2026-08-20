@@ -1,4 +1,9 @@
+"use client";
+
+import { useMemo } from "react";
 import type { UserMetrics } from "@/lib/van-hanh/performance-types";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 function pct(v: number | null) {
   return v === null ? "—" : `${v}%`;
@@ -8,6 +13,15 @@ function days(v: number | null) {
 }
 
 export function MemberTable({ rows }: { rows: UserMetrics[] }) {
+  const columns = useMemo(() => ({
+    member: { accessor: (row: UserMetrics) => row.name, kind: "text" as const },
+    completed: { accessor: (row: UserMetrics) => row.completed, kind: "number" as const },
+    onTime: { accessor: (row: UserMetrics) => row.onTimePct, kind: "number" as const },
+    avgDays: { accessor: (row: UserMetrics) => row.avgCloseDays, kind: "number" as const },
+    overdue: { accessor: (row: UserMetrics) => row.overdue, kind: "number" as const },
+    active: { accessor: (row: UserMetrics) => row.active, kind: "number" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(rows, columns);
   if (rows.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-4 text-center">
@@ -17,19 +31,19 @@ export function MemberTable({ rows }: { rows: UserMetrics[] }) {
   }
   return (
     <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full text-sm">
+      <table className="min-w-[600px] w-full text-sm">
         <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="text-left px-3 py-2 font-medium">Thành viên</th>
-            <th className="text-right px-3 py-2 font-medium">Hoàn thành</th>
-            <th className="text-right px-3 py-2 font-medium">Đúng hạn</th>
-            <th className="text-right px-3 py-2 font-medium">TB ngày</th>
-            <th className="text-right px-3 py-2 font-medium">Quá hạn</th>
-            <th className="text-right px-3 py-2 font-medium">Đang xử lý</th>
+            <SortableTableHead column="member" label="Thành viên" sort={sort} onToggle={toggleSort} className="font-medium" />
+            <SortableTableHead column="completed" label="Hoàn thành" sort={sort} onToggle={toggleSort} align="right" className="font-medium" />
+            <SortableTableHead column="onTime" label="Đúng hạn" sort={sort} onToggle={toggleSort} align="right" className="font-medium" />
+            <SortableTableHead column="avgDays" label="TB ngày" sort={sort} onToggle={toggleSort} align="right" className="font-medium" />
+            <SortableTableHead column="overdue" label="Quá hạn" sort={sort} onToggle={toggleSort} align="right" className="font-medium" />
+            <SortableTableHead column="active" label="Đang xử lý" sort={sort} onToggle={toggleSort} align="right" className="font-medium" />
           </tr>
         </thead>
         <tbody>
-          {rows.map((u) => (
+          {sortedRows.map((u) => (
             <tr key={u.userId} className="border-t hover:bg-muted/20">
               <td className="px-3 py-2">
                 <a

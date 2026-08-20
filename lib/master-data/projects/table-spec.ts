@@ -54,6 +54,9 @@ export const PROJECT_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   // _count is virtual — no kind → auto-skipped by deriveResourceSpec
   {
     key: "_count",
+    kind: "number",
+    sortKey: "categories._count",
+    filterable: false,
     header: "Hạng mục",
     className: "w-[100px]",
     align: "right",
@@ -65,6 +68,7 @@ export const PROJECT_SPEC: ResourceSpec = deriveResourceSpec(PROJECT_COLUMNS, {
   sortable: {},
   filterable: {},
   defaultSort: { col: "createdAt", dir: "desc" },
+  tieBreaker: { col: "id", dir: "asc" },
   defaultPageSize: 20,
 });
 

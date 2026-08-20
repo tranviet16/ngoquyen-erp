@@ -1,4 +1,5 @@
-import { listJournalEntries, type CostBehavior } from "@/lib/tai-chinh/journal-service";
+import { listJournalEntries, type CostBehavior, type JournalSortKey } from "@/lib/tai-chinh/journal-service";
+import type { SortDir } from "@/lib/table/types";
 import { listExpenseCategories } from "@/lib/tai-chinh/expense-category-service";
 import { ExpenseFilterClient } from "@/components/tai-chinh/expense-filter-client";
 
@@ -11,6 +12,7 @@ interface SearchParams {
   t?: string;        // dateTo
   q?: string;        // keyword
   page?: string;
+  sort?: string;
 }
 
 const GROUP_MAP: Record<string, { entryType?: string; costBehavior?: CostBehavior }> = {
@@ -30,6 +32,11 @@ export default async function PhanLoaiChiPhiPage({
   const group = sp.g ?? "";
   const mapped = GROUP_MAP[group] ?? {};
   const page = Math.max(1, Number(sp.page) || 1);
+  const [sortCol, sortDir] = sp.sort?.split(":") ?? [];
+  const allowedSorts = new Set<JournalSortKey>(["date", "group", "category", "description", "source", "amountVnd"]);
+  const sort = allowedSorts.has(sortCol as JournalSortKey) && (sortDir === "asc" || sortDir === "desc")
+    ? { col: sortCol as JournalSortKey, dir: sortDir as SortDir }
+    : undefined;
 
   const [result, categories] = await Promise.all([
     listJournalEntries({
@@ -41,6 +48,7 @@ export default async function PhanLoaiChiPhiPage({
       q: sp.q || undefined,
       page,
       pageSize: 50,
+      sort,
     }),
     listExpenseCategories(),
   ]);
@@ -66,6 +74,8 @@ export default async function PhanLoaiChiPhiPage({
         t: sp.t ?? "",
         q: sp.q ?? "",
         page,
+        sortCol: sort?.col,
+        sortDir: sort?.dir,
       }}
       categories={categories.map((c) => ({ id: c.id, label: `${c.code} - ${c.name}` }))}
       rows={rows}

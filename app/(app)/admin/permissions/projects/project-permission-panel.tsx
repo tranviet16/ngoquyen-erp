@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -8,6 +8,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { AccessLevel } from "@/lib/acl/modules";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import {
   setProjectPermission,
   setProjectGrantAll,
@@ -96,12 +98,26 @@ export function ProjectPermissionPanel({
   const selectedUser = users.find((u) => u.id === selectedUserId) ?? null;
 
   // Per-user permission lookup
-  const userPerms = new Map<number, AccessLevel>();
-  for (const p of permissions) {
-    if (p.userId === selectedUserId) {
-      userPerms.set(p.projectId, p.level);
+  const userPerms = useMemo(() => {
+    const result = new Map<number, AccessLevel>();
+    for (const permission of permissions) {
+      if (permission.userId === selectedUserId) {
+        result.set(permission.projectId, permission.level);
+      }
     }
-  }
+    return result;
+  }, [permissions, selectedUserId]);
+  const projectSortColumns = useMemo(() => ({
+    project: {
+      accessor: (project: ProjectRow) => `${project.name} ${project.code}`,
+      kind: "text" as const,
+    },
+    level: {
+      accessor: (project: ProjectRow) => levelLabel(userPerms.get(project.id) ?? "default"),
+      kind: "text" as const,
+    },
+  }), [userPerms]);
+  const projectSort = useSortableRows(projects, projectSortColumns);
 
   const grantAll = grantAlls.find((g) => g.userId === selectedUserId) ?? null;
   const exceptionCount = grantAll
@@ -164,7 +180,7 @@ export function ProjectPermissionPanel({
               placeholder="Tìm người dùng…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded border border-input bg-background px-2 py-1.5 text-base outline-none focus:ring-2 focus:ring-ring md:text-sm"
             />
             <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
               <input
@@ -226,12 +242,24 @@ export function ProjectPermissionPanel({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4">
-                <table className="w-full text-sm border-collapse">
+              <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
+                <table className="w-full min-w-[600px] text-sm border-collapse">
                   <thead>
                     <tr className="border-b">
-                      <th className="pb-2 text-left font-medium">Dự án</th>
-                      <th className="pb-2 text-left font-medium w-40">Mức quyền</th>
+                      <SortableTableHead
+                        column="project"
+                        label="Dự án"
+                        sort={projectSort.sort}
+                        onToggle={projectSort.toggleSort}
+                        className="border-b"
+                      />
+                      <SortableTableHead
+                        column="level"
+                        label="Mức quyền"
+                        sort={projectSort.sort}
+                        onToggle={projectSort.toggleSort}
+                        className="w-40 border-b"
+                      />
                     </tr>
                   </thead>
                   <tbody>
@@ -271,7 +299,7 @@ export function ProjectPermissionPanel({
                             )
                           }
                           disabled={isPending}
-                          className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                          className="w-full rounded border border-input bg-background px-2 py-1 text-base md:text-sm"
                         >
                           {PROJECT_LEVELS.map((l) => (
                             <option key={l} value={l}>
@@ -283,7 +311,7 @@ export function ProjectPermissionPanel({
                     </tr>
 
                     {/* Per-project rows */}
-                    {projects.map((proj) => {
+                    {projectSort.sortedRows.map((proj) => {
                       const current = userPerms.get(proj.id) ?? "default";
                       return (
                         <tr key={proj.id} className="border-b last:border-0">
@@ -303,7 +331,7 @@ export function ProjectPermissionPanel({
                                 )
                               }
                               disabled={isPending}
-                              className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                              className="w-full rounded border border-input bg-background px-2 py-1 text-base md:text-sm"
                             >
                               {PROJECT_LEVELS.map((l) => (
                                 <option key={l} value={l}>

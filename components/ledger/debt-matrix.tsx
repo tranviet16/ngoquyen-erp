@@ -1,6 +1,8 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface EntityInfo {
   id: number;
@@ -56,6 +58,28 @@ function addInto(t: DebtMatrixCell, s: DebtMatrixCell) {
 }
 
 export function DebtMatrix({ rows, entities, partyLabel }: Props) {
+  const sortColumns = useMemo(() => {
+    const columns: Record<string, { accessor: (row: DebtMatrixRow) => unknown; kind: "currency" }> = {};
+    for (const entity of entities) {
+      for (const group of GROUPS) {
+        columns[`${entity.id}:${group.tt}`] = {
+          accessor: (row) => row.cells[String(entity.id)]?.[group.tt],
+          kind: "currency",
+        };
+        columns[`${entity.id}:${group.hd}`] = {
+          accessor: (row) => row.cells[String(entity.id)]?.[group.hd],
+          kind: "currency",
+        };
+      }
+    }
+    for (const group of GROUPS) {
+      columns[`total:${group.tt}`] = { accessor: (row) => row.totals[group.tt], kind: "currency" };
+      columns[`total:${group.hd}`] = { accessor: (row) => row.totals[group.hd], kind: "currency" };
+    }
+    return columns;
+  }, [entities]);
+  const { sort, sortedRows, toggleSort } = useSortableRows(rows, sortColumns);
+
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Không có dữ liệu</p>;
   }
@@ -119,21 +143,25 @@ export function DebtMatrix({ rows, entities, partyLabel }: Props) {
             {entities.map((e) =>
               GROUPS.map((g) => (
                 <Fragment key={`${e.id}-${g.label}-sub`}>
-                  <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">TT</th>
-                  <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">HĐ</th>
+                  <SortableTableHead column={`${e.id}:${g.tt}`} label="TT" sort={sort} onToggle={toggleSort}
+                    align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
+                  <SortableTableHead column={`${e.id}:${g.hd}`} label="HĐ" sort={sort} onToggle={toggleSort}
+                    align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
                 </Fragment>
               )),
             )}
             {GROUPS.map((g) => (
               <Fragment key={`tot-${g.label}-sub`}>
-                <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">TT</th>
-                <th className="border p-1 text-center text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20">HĐ</th>
+                <SortableTableHead column={`total:${g.tt}`} label="TT" sort={sort} onToggle={toggleSort}
+                  align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
+                <SortableTableHead column={`total:${g.hd}`} label="HĐ" sort={sort} onToggle={toggleSort}
+                  align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
               </Fragment>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {sortedRows.map((row) => (
             <tr key={row.partyId} className="hover:bg-muted/30">
               <td className="border p-2 font-medium sticky left-0 bg-background z-10">
                 {row.partyName || `${partyLabel} #${row.partyId}`}

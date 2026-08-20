@@ -4,6 +4,8 @@ import React, { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 import { vndFormatter } from "@/lib/format";
 import type { NormRow } from "@/lib/du-an/norm-service";
 import {
@@ -23,6 +25,20 @@ const FLAG_STYLES: Record<string, string> = {
   green: "bg-emerald-100 text-emerald-800",
   yellow: "bg-amber-100 text-amber-800",
   red: "bg-red-100 text-red-800",
+};
+
+const sortColumns = {
+  itemCode: { accessor: (row: NormRow) => row.itemCode, kind: "text" as const },
+  itemName: { accessor: (row: NormRow) => row.itemName, kind: "text" as const },
+  unit: { accessor: (row: NormRow) => row.unit, kind: "text" as const },
+  estimateQty: { accessor: (row: NormRow) => row.estimate_qty, kind: "number" as const },
+  estimateTotal: { accessor: (row: NormRow) => row.estimate_total_vnd, kind: "currency" as const },
+  actualQty: { accessor: (row: NormRow) => row.actual_qty, kind: "number" as const },
+  actualAmount: { accessor: (row: NormRow) => row.actual_amount_tt, kind: "currency" as const },
+  usedPct: { accessor: (row: NormRow) => row.used_pct, kind: "number" as const },
+  remainingQty: { accessor: (row: NormRow) => row.remaining_qty, kind: "number" as const },
+  remainingAmount: { accessor: (row: NormRow) => row.remaining_amount_vnd, kind: "currency" as const },
+  flag: { accessor: (row: NormRow) => FLAG_LABELS[row.flag ?? ""] ?? row.flag, kind: "text" as const },
 };
 
 interface Props {
@@ -174,15 +190,39 @@ export function DinhMucClient({ projectId, rows, groups, thresholds, canEdit }: 
     () => rollupNormByGroup(rows, groups, thresholds),
     [rows, groups, thresholds],
   );
+  const presentationRows = useMemo(() => {
+    const rendered = new Set<number>();
+    const ordered: NormRow[] = [];
+    for (const row of rows) {
+      if (rendered.has(row.estimate_id)) continue;
+      if (row.materialGroupId != null) {
+        for (const member of rows) {
+          if (member.materialGroupId === row.materialGroupId && !rendered.has(member.estimate_id)) {
+            ordered.push(member);
+            rendered.add(member.estimate_id);
+          }
+        }
+      } else {
+        ordered.push(row);
+        rendered.add(row.estimate_id);
+      }
+    }
+    return ordered;
+  }, [rows]);
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    presentationRows,
+    sortColumns,
+    (row) => row.materialGroupId != null ? `material:${row.materialGroupId}` : `category:${row.categoryId}`,
+  );
   const groupRowByFirstMember = useMemo(() => {
     const map = new Map<number, GroupNormRow>();
     for (const g of groupRows) {
       // neo dòng nhóm tại thành viên xuất hiện đầu tiên theo thứ tự bảng
-      const first = rows.find((r) => g.memberEstimateIds.includes(r.estimate_id));
+      const first = sortedRows.find((r) => g.memberEstimateIds.includes(r.estimate_id));
       if (first) map.set(first.estimate_id, g);
     }
     return map;
-  }, [groupRows, rows]);
+  }, [groupRows, sortedRows]);
   const groupNameById = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
 
   const redCount = rows.filter((r) => !groupedEstimateIds.has(r.estimate_id) && r.flag === "red").length +
@@ -305,17 +345,14 @@ export function DinhMucClient({ projectId, rows, groups, thresholds, canEdit }: 
   // các thành viên của nhóm cụm ngay dưới, lần xuất hiện sau bỏ qua.
   const rendered = new Set<number>();
   const bodyRows: React.ReactNode[] = [];
-  for (const r of rows) {
+  for (const r of sortedRows) {
     if (rendered.has(r.estimate_id)) continue;
     const group = groupRowByFirstMember.get(r.estimate_id);
     if (group) {
       bodyRows.push(renderGroupRow(group));
-      for (const memberId of group.memberEstimateIds) {
-        const member = rows.find((x) => x.estimate_id === memberId);
-        if (member) {
-          bodyRows.push(renderMemberRow(member, true));
-          rendered.add(memberId);
-        }
+      for (const member of sortedRows.filter((x) => group.memberEstimateIds.includes(x.estimate_id))) {
+        bodyRows.push(renderMemberRow(member, true));
+        rendered.add(member.estimate_id);
       }
       continue;
     }
@@ -360,17 +397,17 @@ export function DinhMucClient({ projectId, rows, groups, thresholds, canEdit }: 
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b text-left">
               {canEdit && <th className="w-8 px-2 py-2" />}
-              <th className="w-28 px-2 py-2">Mã</th>
-              <th className="px-2 py-2">Tên vật tư / công việc</th>
-              <th className="w-16 px-2 py-2">ĐVT</th>
-              <th className="w-24 px-2 py-2 text-right">ĐM SL</th>
-              <th className="w-28 px-2 py-2 text-right">ĐM Chi phí</th>
-              <th className="w-24 px-2 py-2 text-right">TT SL</th>
-              <th className="w-28 px-2 py-2 text-right">TT Chi phí</th>
-              <th className="w-24 px-2 py-2 text-right">% Đã dùng</th>
-              <th className="w-24 px-2 py-2 text-right">Còn lại SL</th>
-              <th className="w-28 px-2 py-2 text-right">Còn lại VND</th>
-              <th className="w-24 px-2 py-2">Cờ</th>
+              <SortableTableHead column="itemCode" label="Mã" sort={sort} onToggle={toggleSort} className="w-28" />
+              <SortableTableHead column="itemName" label="Tên vật tư / công việc" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="unit" label="ĐVT" sort={sort} onToggle={toggleSort} className="w-16" />
+              <SortableTableHead column="estimateQty" label="ĐM SL" sort={sort} onToggle={toggleSort} align="right" className="w-24" />
+              <SortableTableHead column="estimateTotal" label="ĐM Chi phí" sort={sort} onToggle={toggleSort} align="right" className="w-28" />
+              <SortableTableHead column="actualQty" label="TT SL" sort={sort} onToggle={toggleSort} align="right" className="w-24" />
+              <SortableTableHead column="actualAmount" label="TT Chi phí" sort={sort} onToggle={toggleSort} align="right" className="w-28" />
+              <SortableTableHead column="usedPct" label="% Đã dùng" sort={sort} onToggle={toggleSort} align="right" className="w-24" />
+              <SortableTableHead column="remainingQty" label="Còn lại SL" sort={sort} onToggle={toggleSort} align="right" className="w-24" />
+              <SortableTableHead column="remainingAmount" label="Còn lại VND" sort={sort} onToggle={toggleSort} align="right" className="w-28" />
+              <SortableTableHead column="flag" label="Cờ" sort={sort} onToggle={toggleSort} className="w-24" />
             </tr>
           </thead>
           <tbody>{bodyRows}</tbody>

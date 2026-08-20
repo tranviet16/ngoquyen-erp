@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import { formatVND } from "@/lib/utils/format";
+import { SortHeader } from "@/components/data-table/sort-header";
+import type { SortDir } from "@/lib/table/types";
 
 interface CategoryOpt { id: number; label: string }
 
@@ -26,6 +28,8 @@ interface Initial {
   t: string;
   q: string;
   page: number;
+  sortCol?: string;
+  sortDir?: SortDir;
 }
 
 interface Props {
@@ -66,7 +70,7 @@ export function ExpenseFilterClient({ initial, categories, rows, total, pageSize
   const [t, setT] = useState(initial.t);
   const [q, setQ] = useState(initial.q);
 
-  const submit = (overridePage?: number) => {
+  const submit = (overridePage?: number, sort = initial.sortCol && initial.sortDir ? { col: initial.sortCol, dir: initial.sortDir } : undefined) => {
     const sp = new URLSearchParams();
     if (g) sp.set("g", g);
     if (c) sp.set("c", c);
@@ -74,6 +78,7 @@ export function ExpenseFilterClient({ initial, categories, rows, total, pageSize
     if (t) sp.set("t", t);
     if (q) sp.set("q", q);
     if (overridePage && overridePage > 1) sp.set("page", String(overridePage));
+    if (sort) sp.set("sort", `${sort.col}:${sort.dir}`);
     router.push(`/tai-chinh/phan-loai-chi-phi${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
 
@@ -181,12 +186,14 @@ export function ExpenseFilterClient({ initial, categories, rows, total, pageSize
           <table className="w-full text-sm border-collapse">
             <thead className="bg-muted/40">
               <tr>
-                <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ngày</th>
-                <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nhóm</th>
-                <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phân loại</th>
-                <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mô tả</th>
-                <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nguồn</th>
-                <th className="border-b px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Số tiền</th>
+                {[
+                  ["date", "Ngày", "left"], ["group", "Nhóm", "left"], ["category", "Phân loại", "left"],
+                  ["description", "Mô tả", "left"], ["source", "Nguồn", "left"], ["amountVnd", "Số tiền", "right"],
+                ].map(([col, label, align]) => (
+                  <SortHeader key={col} colKey={col} header={label} sortable currentCol={initial.sortCol}
+                    currentDir={initial.sortDir} onSortChange={(column, dir) => submit(1, dir ? { col: column, dir } : undefined)}
+                    className={`border-b px-3 text-xs uppercase tracking-wider ${align === "right" ? "text-right" : "text-left"}`} />
+                ))}
                 <th className="border-b px-3 py-2 w-12"></th>
               </tr>
             </thead>

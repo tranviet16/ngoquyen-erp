@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { formatVND } from "@/lib/utils/format";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import {
   createCashAccount,
   updateCashAccount,
@@ -31,6 +33,11 @@ export function CashAccountClient({ rows }: Props) {
   const [editRow, setEditRow] = useState<CashAccountRow | null>(null);
   const [form, setForm] = useState({ name: "", openingBalanceVnd: "0", displayOrder: "0" });
   const [loading, setLoading] = useState(false);
+  const sortColumns = useMemo(() => ({
+    name: { accessor: (row: CashAccountRow) => row.name, kind: "text" as const },
+    balance: { accessor: (row: CashAccountRow) => row.openingBalanceVnd, kind: "currency" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(rows, sortColumns);
 
   function set<K extends keyof typeof form>(k: K, v: string) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -95,20 +102,20 @@ export function CashAccountClient({ rows }: Props) {
         <Button onClick={openCreate} size="sm">+ Thêm nguồn tiền</Button>
       </div>
 
-      <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
+        <table className="min-w-[600px] w-full text-sm">
           <thead className="bg-muted/40">
             <tr>
               <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground w-16">#</th>
-              <th className="border-b px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tên nguồn</th>
-              <th className="border-b px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Số dư đầu kỳ</th>
+              <SortableTableHead column="name" label="Tên nguồn" sort={sort} onToggle={toggleSort} className="border-b text-xs font-semibold uppercase tracking-wider" />
+              <SortableTableHead column="balance" label="Số dư đầu kỳ" sort={sort} onToggle={toggleSort} align="right" className="border-b text-xs font-semibold uppercase tracking-wider" />
               <th className="border-b px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground w-32">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">Chưa có nguồn tiền</td></tr>
-            ) : rows.map((r) => (
+            ) : sortedRows.map((r) => (
               <tr key={r.id} className="even:bg-muted/20 hover:bg-muted/40">
                 <td className="border-b px-3 py-2 tabular-nums">{r.displayOrder}</td>
                 <td className="border-b px-3 py-2 font-medium">{r.name}</td>

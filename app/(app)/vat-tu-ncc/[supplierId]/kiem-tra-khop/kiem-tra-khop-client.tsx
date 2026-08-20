@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +8,8 @@ import {
   type PeriodCheckResult,
 } from "@/lib/vat-tu-ncc/period-recon-check-service";
 import { formatDate, formatVND, formatNumber } from "@/lib/utils/format";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface Props {
   supplierId: number;
@@ -18,6 +20,32 @@ export function KiemTraKhopClient({ supplierId }: Props) {
   const [dateTo, setDateTo] = useState("");
   const [result, setResult] = useState<PeriodCheckResult | null>(null);
   const [loading, setLoading] = useState(false);
+  type OrphanDelivery = PeriodCheckResult["orphanDeliveries"][number];
+  type OrphanEvent = PeriodCheckResult["orphanEvents"][number];
+  type Mismatch = PeriodCheckResult["mismatches"][number];
+  const deliveryColumns = useMemo(() => ({
+    delivery: { accessor: (row: OrphanDelivery) => row.deliveryId, kind: "number" as const },
+    date: { accessor: (row: OrphanDelivery) => row.date, kind: "date" as const },
+    qty: { accessor: (row: OrphanDelivery) => row.qty, kind: "number" as const },
+    price: { accessor: (row: OrphanDelivery) => row.unitPrice, kind: "currency" as const },
+  }), []);
+  const eventColumns = useMemo(() => ({
+    transaction: { accessor: (row: OrphanEvent) => row.transactionId, kind: "number" as const },
+    date: { accessor: (row: OrphanEvent) => row.date, kind: "date" as const },
+    amount: { accessor: (row: OrphanEvent) => row.amountTt, kind: "currency" as const },
+    content: { accessor: (row: OrphanEvent) => row.content, kind: "text" as const },
+  }), []);
+  const mismatchColumns = useMemo(() => ({
+    delivery: { accessor: (row: Mismatch) => row.deliveryId, kind: "number" as const },
+    transaction: { accessor: (row: Mismatch) => row.transactionId, kind: "number" as const },
+    date: { accessor: (row: Mismatch) => row.date, kind: "date" as const },
+    deliveryAmount: { accessor: (row: Mismatch) => row.deliveryAmount, kind: "currency" as const },
+    ledgerAmount: { accessor: (row: Mismatch) => row.ledgerAmount, kind: "currency" as const },
+    diff: { accessor: (row: Mismatch) => row.diff, kind: "currency" as const },
+  }), []);
+  const deliverySort = useSortableRows(result?.orphanDeliveries ?? [], deliveryColumns);
+  const eventSort = useSortableRows(result?.orphanEvents ?? [], eventColumns);
+  const mismatchSort = useSortableRows(result?.mismatches ?? [], mismatchColumns);
 
   async function runCheck() {
     if (!dateFrom || !dateTo) {
@@ -76,15 +104,15 @@ export function KiemTraKhopClient({ supplierId }: Props) {
             Phiếu chưa có phát sinh sổ cái ({result.orphanDeliveries.length}) — chưa chốt kỳ hoặc chốt sót
           </h3>
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="bg-muted/50"><tr className="text-left">
-                <th className="px-3 py-2 font-medium">Phiếu</th>
-                <th className="px-3 py-2 font-medium">Ngày</th>
-                <th className="px-3 py-2 font-medium text-right">KL</th>
-                <th className="px-3 py-2 font-medium text-right">Đơn giá</th>
+                <SortableTableHead column="delivery" label="Phiếu" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                <SortableTableHead column="date" label="Ngày" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} className="font-medium" />
+                <SortableTableHead column="qty" label="KL" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} align="right" className="font-medium" />
+                <SortableTableHead column="price" label="Đơn giá" sort={deliverySort.sort} onToggle={deliverySort.toggleSort} align="right" className="font-medium" />
               </tr></thead>
               <tbody>
-                {result.orphanDeliveries.map((r) => (
+                {deliverySort.sortedRows.map((r) => (
                   <tr key={r.deliveryId} className="border-t">
                     <td className="px-3 py-1.5">#{r.deliveryId}</td>
                     <td className="px-3 py-1.5">{formatDate(r.date)}</td>
@@ -104,15 +132,15 @@ export function KiemTraKhopClient({ supplierId }: Props) {
             Phát sinh sổ cái không link phiếu ({result.orphanEvents.length}) — nhập tay/lịch sử, rà soát nếu bất thường
           </h3>
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="bg-muted/50"><tr className="text-left">
-                <th className="px-3 py-2 font-medium">Giao dịch</th>
-                <th className="px-3 py-2 font-medium">Ngày</th>
-                <th className="px-3 py-2 font-medium text-right">Số tiền</th>
-                <th className="px-3 py-2 font-medium">Nội dung</th>
+                <SortableTableHead column="transaction" label="Giao dịch" sort={eventSort.sort} onToggle={eventSort.toggleSort} className="font-medium" />
+                <SortableTableHead column="date" label="Ngày" sort={eventSort.sort} onToggle={eventSort.toggleSort} className="font-medium" />
+                <SortableTableHead column="amount" label="Số tiền" sort={eventSort.sort} onToggle={eventSort.toggleSort} align="right" className="font-medium" />
+                <SortableTableHead column="content" label="Nội dung" sort={eventSort.sort} onToggle={eventSort.toggleSort} className="font-medium" />
               </tr></thead>
               <tbody>
-                {result.orphanEvents.map((r) => (
+                {eventSort.sortedRows.map((r) => (
                   <tr key={r.transactionId} className="border-t">
                     <td className="px-3 py-1.5">#{r.transactionId}</td>
                     <td className="px-3 py-1.5">{formatDate(r.date)}</td>
@@ -132,17 +160,17 @@ export function KiemTraKhopClient({ supplierId }: Props) {
             Chênh lệch phiếu vs sổ cái ({result.mismatches.length}) — chốt lại kỳ để đồng bộ
           </h3>
           <div className="overflow-x-auto rounded-md border">
-            <table className="w-full text-sm">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="bg-muted/50"><tr className="text-left">
-                <th className="px-3 py-2 font-medium">Phiếu</th>
-                <th className="px-3 py-2 font-medium">Giao dịch</th>
-                <th className="px-3 py-2 font-medium">Ngày</th>
-                <th className="px-3 py-2 font-medium text-right">Tiền phiếu</th>
-                <th className="px-3 py-2 font-medium text-right">Tiền sổ cái</th>
-                <th className="px-3 py-2 font-medium text-right">Chênh</th>
+                <SortableTableHead column="delivery" label="Phiếu" sort={mismatchSort.sort} onToggle={mismatchSort.toggleSort} className="font-medium" />
+                <SortableTableHead column="transaction" label="Giao dịch" sort={mismatchSort.sort} onToggle={mismatchSort.toggleSort} className="font-medium" />
+                <SortableTableHead column="date" label="Ngày" sort={mismatchSort.sort} onToggle={mismatchSort.toggleSort} className="font-medium" />
+                <SortableTableHead column="deliveryAmount" label="Tiền phiếu" sort={mismatchSort.sort} onToggle={mismatchSort.toggleSort} align="right" className="font-medium" />
+                <SortableTableHead column="ledgerAmount" label="Tiền sổ cái" sort={mismatchSort.sort} onToggle={mismatchSort.toggleSort} align="right" className="font-medium" />
+                <SortableTableHead column="diff" label="Chênh" sort={mismatchSort.sort} onToggle={mismatchSort.toggleSort} align="right" className="font-medium" />
               </tr></thead>
               <tbody>
-                {result.mismatches.map((r) => (
+                {mismatchSort.sortedRows.map((r) => (
                   <tr key={r.deliveryId} className="border-t">
                     <td className="px-3 py-1.5">#{r.deliveryId}</td>
                     <td className="px-3 py-1.5">#{r.transactionId}</td>

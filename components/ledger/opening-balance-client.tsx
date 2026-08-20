@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import type { OpeningBalanceInput } from "@/lib/cong-no-vt/schemas";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 export interface BalanceRow {
   id: number;
@@ -44,6 +46,15 @@ export function OpeningBalanceClient({ initialData, entities, partyOptions, part
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<BalanceRow | null>(null);
   const [, startTransition] = useTransition();
+  const sortColumns = useMemo(() => ({
+    entity: { accessor: (row: BalanceRow) => row.entityName, kind: "text" as const },
+    party: { accessor: (row: BalanceRow) => row.partyName, kind: "text" as const },
+    date: { accessor: (row: BalanceRow) => row.asOfDate, kind: "date" as const },
+    balanceTt: { accessor: (row: BalanceRow) => row.balanceTt, kind: "currency" as const },
+    balanceHd: { accessor: (row: BalanceRow) => row.balanceHd, kind: "currency" as const },
+    note: { accessor: (row: BalanceRow) => row.note, kind: "text" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(initialData, sortColumns);
 
   function refresh() { startTransition(() => router.refresh()); }
 
@@ -54,15 +65,15 @@ export function OpeningBalanceClient({ initialData, entities, partyOptions, part
       </div>
 
       <div className="rounded-md border overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="min-w-[600px] w-full text-sm">
           <thead>
             <tr className="bg-muted">
-              <th className="p-2 text-left">Chủ thể</th>
-              <th className="p-2 text-left">{partyLabel}</th>
-              <th className="p-2 text-left">Ngày</th>
-              <th className="p-2 text-right">Số dư TT</th>
-              <th className="p-2 text-right">Số dư HĐ</th>
-              <th className="p-2 text-left">Ghi chú</th>
+              <SortableTableHead column="entity" label="Chủ thể" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="party" label={partyLabel} sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="date" label="Ngày" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="balanceTt" label="Số dư TT" sort={sort} onToggle={toggleSort} align="right" />
+              <SortableTableHead column="balanceHd" label="Số dư HĐ" sort={sort} onToggle={toggleSort} align="right" />
+              <SortableTableHead column="note" label="Ghi chú" sort={sort} onToggle={toggleSort} />
               <th className="p-2 text-left w-[120px]">Thao tác</th>
             </tr>
           </thead>
@@ -70,7 +81,7 @@ export function OpeningBalanceClient({ initialData, entities, partyOptions, part
             {initialData.length === 0 ? (
               <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Không có dữ liệu</td></tr>
             ) : (
-              initialData.map((row) => (
+              sortedRows.map((row) => (
                 <tr key={row.id} className="border-t hover:bg-muted/30">
                   <td className="p-2">{row.entityName}</td>
                   <td className="p-2">{row.partyName}</td>

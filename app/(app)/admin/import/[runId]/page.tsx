@@ -3,12 +3,16 @@ import { notFound } from "next/navigation";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { getRun } from "../import-actions";
 import { CommitPanel } from "./commit-panel";
+import { ServerSortableTableHead } from "@/components/server-sortable-table-head";
+import { stableSemanticSort } from "@/lib/table/semantic-compare";
+import type { SortSelection } from "@/lib/table/sort-state";
 
 interface Props {
   params: Promise<{ runId: string }>;
+  searchParams: Promise<{ sort?: string }>;
 }
 
-export default async function ImportRunDetailPage({ params }: Props) {
+export default async function ImportRunDetailPage({ params, searchParams }: Props) {
   await requireActiveAdmin();
 
   const { runId } = await params;
@@ -16,6 +20,20 @@ export default async function ImportRunDetailPage({ params }: Props) {
   if (!run) notFound();
 
   const errors = Array.isArray(run.errors) ? (run.errors as { rowIndex: number; message: string }[]) : [];
+  const { sort: rawSort } = await searchParams;
+  const [sortCol, sortDir] = rawSort?.split(":") ?? [];
+  const sort: SortSelection = (sortDir === "asc" || sortDir === "desc") && (sortCol === "rowIndex" || sortCol === "message")
+    ? { mode: sortDir, col: sortCol }
+    : { mode: "default" };
+  const displayedErrors = sort.mode === "default"
+    ? [...errors]
+    : stableSemanticSort(
+        errors,
+        (error) => error[sort.col as "rowIndex" | "message"],
+        sort.mode,
+        sort.col === "rowIndex" ? "number" : "text",
+      );
+  const sortParams = new URLSearchParams(rawSort ? { sort: rawSort } : {});
 
   function statusColor(s: string) {
     if (s === "committed") return "text-green-700";
@@ -75,12 +93,14 @@ export default async function ImportRunDetailPage({ params }: Props) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="p-2 text-right w-20">Dòng</th>
-                  <th className="p-2 text-left">Thông báo</th>
+                  <ServerSortableTableHead basePath={`/admin/import/${run.id}`} params={sortParams}
+                    column="rowIndex" label="Dòng" sort={sort} align="right" className="w-20" />
+                  <ServerSortableTableHead basePath={`/admin/import/${run.id}`} params={sortParams}
+                    column="message" label="Thông báo" sort={sort} />
                 </tr>
               </thead>
               <tbody>
-                {errors.map((e, i) => (
+                {displayedErrors.map((e, i) => (
                   <tr key={i} className="border-b">
                     <td className="p-2 text-right font-mono tabular-nums">{e.rowIndex >= 0 ? e.rowIndex + 1 : "—"}</td>
                     <td className="p-2 text-red-700">{e.message}</td>

@@ -6,6 +6,8 @@ import { Trash2 } from "lucide-react";
 import type { PaymentPlanRow } from "@/lib/sl-dt/report-service";
 import { cleanHierarchyLabel, hasHierarchyLabel } from "@/lib/sl-dt/hierarchy";
 import { deletePaymentPlansByLot, patchPaymentPlanByLot } from "./actions";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 
 interface Props {
   rows: PaymentPlanRow[];
@@ -14,6 +16,14 @@ interface Props {
 
 const amountFields = ["dot1Amount", "dot2Amount", "dot3Amount", "dot4Amount"] as const;
 const milestoneFields = ["dot1Milestone", "dot2Milestone", "dot3Milestone", "dot4Milestone"] as const;
+const paymentSortColumns = {
+  lotName: { accessor: (row: PaymentPlanRow) => row.lotName, kind: "text" as const },
+  estimateValue: { accessor: (row: PaymentPlanRow) => row.estimateValue, kind: "currency" as const },
+  dot1Amount: { accessor: (row: PaymentPlanRow) => row.dot1Amount, kind: "currency" as const },
+  dot2Amount: { accessor: (row: PaymentPlanRow) => row.dot2Amount, kind: "currency" as const },
+  dot3Amount: { accessor: (row: PaymentPlanRow) => row.dot3Amount, kind: "currency" as const },
+  dot4Amount: { accessor: (row: PaymentPlanRow) => row.dot4Amount, kind: "currency" as const },
+};
 
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value || 0);
@@ -22,6 +32,11 @@ function money(value: number) {
 export function PaymentPlanClient({ rows, milestoneOptions }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    rows,
+    paymentSortColumns,
+    (row) => `${row.phaseCode}\u0000${row.groupCode}`,
+  );
 
   function patch(lotId: number, field: string, value: unknown) {
     startTransition(async () => {
@@ -44,20 +59,21 @@ export function PaymentPlanClient({ rows, milestoneOptions }: Props) {
         <table className="w-full border-collapse text-xs">
           <thead className="sticky top-0 z-10 bg-muted/50">
             <tr>
-              <th className="min-w-[220px] border-r px-2 py-2 text-left">Lô</th>
-              <th className="min-w-[130px] border-r px-2 py-2 text-right">Dự toán</th>
+              <SortableTableHead column="lotName" label="Lô" sort={sort} onToggle={toggleSort}
+                className="min-w-[220px] border-r" />
+              <SortableTableHead column="estimateValue" label="Dự toán" sort={sort} onToggle={toggleSort}
+                align="right" className="min-w-[130px] border-r" />
               {[1, 2, 3, 4].map((n) => (
-                <th key={`dot-${n}`} className="min-w-[250px] border-r px-2 py-2 text-left">
-                  Đợt {n}
-                </th>
+                <SortableTableHead key={`dot-${n}`} column={`dot${n}Amount`} label={`Đợt ${n}`}
+                  sort={sort} onToggle={toggleSort} className="min-w-[250px] border-r" />
               ))}
               <th className="w-12 px-2 py-2" />
             </tr>
           </thead>
           <tbody>
-            {rows.flatMap((row, index) => {
+            {sortedRows.flatMap((row, index) => {
               const parts = [];
-              const previous = rows[index - 1];
+              const previous = sortedRows[index - 1];
               const phaseChanged = !previous || previous.phaseCode !== row.phaseCode;
               const groupChanged = phaseChanged || previous.groupCode !== row.groupCode;
               if (phaseChanged) {

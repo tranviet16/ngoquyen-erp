@@ -44,6 +44,7 @@ export const ENTITY_SPEC: ResourceSpec = deriveResourceSpec(ENTITY_COLUMNS, {
   sortable: {},
   filterable: {},
   defaultSort: { col: "createdAt", dir: "desc" },
+  tieBreaker: { col: "id", dir: "asc" },
   defaultPageSize: 20,
 });
 

@@ -2,6 +2,8 @@
 
 import type { TienDoXdLotRow } from "@/lib/sl-dt/report-service";
 import { cleanHierarchyLabel, hasHierarchyLabel } from "@/lib/sl-dt/hierarchy";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 
 const columns: Array<{ key: keyof TienDoXdLotRow; label: string; className?: string }> = [
   { key: "lotName", label: "Lô", className: "min-w-[220px]" },
@@ -17,6 +19,15 @@ const columns: Array<{ key: keyof TienDoXdLotRow; label: string; className?: str
 ];
 
 export function TienDoXdClient({ rows }: { rows: TienDoXdLotRow[] }) {
+  const sortableColumns = Object.fromEntries(
+    columns.map((column) => [column.key, { accessor: (row: TienDoXdLotRow) => row[column.key], kind: "text" as const }]),
+  );
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    rows,
+    sortableColumns,
+    (row) => `${row.phaseCode}\u0000${row.groupCode}`,
+  );
+
   if (rows.length === 0) {
     return (
       <div className="rounded border p-8 text-center text-sm text-muted-foreground">
@@ -31,16 +42,15 @@ export function TienDoXdClient({ rows }: { rows: TienDoXdLotRow[] }) {
         <thead className="sticky top-0 z-10 bg-muted/50">
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className={`border-r px-2 py-2 text-left font-semibold ${col.className ?? ""}`}>
-                {col.label}
-              </th>
+              <SortableTableHead key={col.key} column={col.key} label={col.label} sort={sort}
+                onToggle={toggleSort} className={`border-r font-semibold ${col.className ?? ""}`} />
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.flatMap((row, index) => {
+          {sortedRows.flatMap((row, index) => {
             const headerRows = [];
-            const previous = rows[index - 1];
+            const previous = sortedRows[index - 1];
             const phaseChanged = !previous || previous.phaseCode !== row.phaseCode;
             const groupChanged = phaseChanged || previous.groupCode !== row.groupCode;
             if (phaseChanged) {

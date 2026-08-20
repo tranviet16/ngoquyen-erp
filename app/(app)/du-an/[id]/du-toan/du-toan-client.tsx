@@ -4,6 +4,8 @@ import React, { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
 import { type EstimateInput } from "@/lib/du-an/schemas";
 import {
@@ -151,6 +153,16 @@ function sumRows(rows: EstimateRow[]): Sums {
 
 const COL_COUNT = 8;
 
+const sortColumns = {
+  itemCode: { accessor: (row: EstimateRow) => row.itemCode, kind: "text" as const },
+  itemName: { accessor: (row: EstimateRow) => row.itemName, kind: "text" as const },
+  unit: { accessor: (row: EstimateRow) => row.unit, kind: "text" as const },
+  qty: { accessor: (row: EstimateRow) => row.qty, kind: "number" as const },
+  unitPrice: { accessor: (row: EstimateRow) => row.unitPrice, kind: "currency" as const },
+  totalVnd: { accessor: (row: EstimateRow) => row.totalVnd, kind: "currency" as const },
+  note: { accessor: (row: EstimateRow) => row.note, kind: "text" as const },
+};
+
 export function DuToanClient({
   projectId,
   initialData,
@@ -171,9 +183,14 @@ export function DuToanClient({
     () => new Map<number, CategoryLite>(categories.map((c) => [c.id, c])),
     [categories],
   );
+  const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
+    initialData,
+    sortColumns,
+    (row) => String(row.categoryId),
+  );
   const tree = useMemo(
-    () => buildCategoryTree(initialData, (r) => r.categoryId, categoriesById),
-    [initialData, categoriesById],
+    () => buildCategoryTree(sortedRows, (r) => r.categoryId, categoriesById),
+    [sortedRows, categoriesById],
   );
   const grandTotal = useMemo(
     () => initialData.reduce((sum, r) => sum + Number(r.totalVnd), 0),
@@ -333,13 +350,13 @@ export function DuToanClient({
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b text-left">
-              <th className="w-28 px-2 py-2">Mã</th>
-              <th className="px-2 py-2">Tên vật tư / công việc</th>
-              <th className="w-16 px-2 py-2">ĐVT</th>
-              <th className="w-28 px-2 py-2 text-right">SL</th>
-              <th className="w-28 px-2 py-2 text-right">Đơn giá</th>
-              <th className="w-32 px-2 py-2 text-right">Thành tiền</th>
-              <th className="w-40 px-2 py-2">Ghi chú</th>
+              <SortableTableHead column="itemCode" label="Mã" sort={sort} onToggle={toggleSort} className="w-28" />
+              <SortableTableHead column="itemName" label="Tên vật tư / công việc" sort={sort} onToggle={toggleSort} />
+              <SortableTableHead column="unit" label="ĐVT" sort={sort} onToggle={toggleSort} className="w-16" />
+              <SortableTableHead column="qty" label="SL" sort={sort} onToggle={toggleSort} align="right" className="w-28" />
+              <SortableTableHead column="unitPrice" label="Đơn giá" sort={sort} onToggle={toggleSort} align="right" className="w-28" />
+              <SortableTableHead column="totalVnd" label="Thành tiền" sort={sort} onToggle={toggleSort} align="right" className="w-32" />
+              <SortableTableHead column="note" label="Ghi chú" sort={sort} onToggle={toggleSort} className="w-40" />
               <th className="w-28 px-2 py-2 text-right">Thao tác</th>
             </tr>
           </thead>

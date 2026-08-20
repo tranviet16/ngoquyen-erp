@@ -8,6 +8,8 @@ import type { FormWithRelations } from "@/lib/coordination-form/coordination-for
 import { formatDate } from "@/lib/utils/format";
 import { hoursRemaining } from "@/lib/coordination-form/sla";
 import { Plus } from "lucide-react";
+import { SortHeader } from "@/components/data-table/sort-header";
+import type { SortDir } from "@/lib/table/types";
 
 function SlaCell({ form }: { form: FormWithRelations }) {
   if (form.status !== "pending_leader") return <span className="text-muted-foreground">—</span>;
@@ -40,7 +42,7 @@ interface Props {
     pageSize: number;
   };
   departments: DeptRow[];
-  filter: { status?: FormStatus; scope: "mine" | "all"; page: number };
+  filter: { status?: FormStatus; scope: "mine" | "all"; page: number; sortCol?: string; sortDir?: SortDir };
 }
 
 const STATUS_BADGE: Record<FormStatus, string> = {
@@ -83,7 +85,16 @@ export function ListClient({ data, departments, filter }: Props) {
     const sp = new URLSearchParams();
     if (filter.scope === "mine") sp.set("scope", "mine");
     if (filter.status) sp.set("status", filter.status);
+    if (filter.sortCol && filter.sortDir) sp.set("sort", `${filter.sortCol}:${filter.sortDir}`);
     sp.set("page", String(p));
+    router.replace(`/van-hanh/phieu-phoi-hop?${sp.toString()}`);
+  }
+
+  function setSort(column: string, dir: SortDir | null) {
+    const sp = new URLSearchParams();
+    if (filter.scope === "mine") sp.set("scope", "mine");
+    if (filter.status) sp.set("status", filter.status);
+    if (dir) sp.set("sort", `${column}:${dir}`);
     router.replace(`/van-hanh/phieu-phoi-hop?${sp.toString()}`);
   }
 
@@ -127,14 +138,11 @@ export function ListClient({ data, departments, filter }: Props) {
         <table className="w-full text-sm">
           <thead className="border-b bg-muted/40">
             <tr className="text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="text-left px-3 py-2 font-semibold">Mã</th>
-              <th className="text-left px-3 py-2 font-semibold">Phòng tạo</th>
-              <th className="text-left px-3 py-2 font-semibold">Phòng thực hiện</th>
-              <th className="text-left px-3 py-2 font-semibold">Nội dung</th>
-              <th className="text-left px-3 py-2 font-semibold">Ưu tiên</th>
-              <th className="text-left px-3 py-2 font-semibold">Trạng thái</th>
-              <th className="text-left px-3 py-2 font-semibold">SLA</th>
-              <th className="text-left px-3 py-2 font-semibold">Ngày tạo</th>
+              {["code:Mã", "creatorDept:Phòng tạo", "executorDept:Phòng thực hiện", "content:Nội dung", "priority:Ưu tiên", "status:Trạng thái", "sla:SLA", "createdAt:Ngày tạo"].map((definition) => {
+                const [column, label] = definition.split(":");
+                return <SortHeader key={column} colKey={column} header={label} sortable currentCol={filter.sortCol}
+                  currentDir={filter.sortDir} onSortChange={setSort} className="px-3 text-left font-semibold" />;
+              })}
               <th className="text-right px-3 py-2 font-semibold">Hành động</th>
             </tr>
           </thead>

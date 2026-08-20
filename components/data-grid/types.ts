@@ -30,7 +30,9 @@ export interface DataGridColumn<T> {
   options?: SelectOption[];
   validator?: ZodTypeAny;
   format?: (value: unknown, row: T) => string;
-  /** Enable click-to-sort on this column header. */
+  /** Override the semantic value used for sorting computed/display columns. */
+  sortAccessor?: (row: T) => unknown;
+  /** Data columns are sortable by default; set false only for non-orderable columns. */
   sortable?: boolean;
   /** Show a filter widget in the filter bar for this column. */
   filterable?: boolean;

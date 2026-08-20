@@ -101,6 +101,7 @@ export function deriveResourceSpec<T extends Record<string, unknown>>(
 ): ResourceSpec {
   const sortable: ResourceSpec["sortable"] = {};
   const filterable: ResourceSpec["filterable"] = {};
+  const displayOrder: NonNullable<ResourceSpec["displayOrder"]> = {};
 
   for (const col of columns) {
     // Columns without a kind are skipped entirely (no sort, no filter).
@@ -112,10 +113,16 @@ export function deriveResourceSpec<T extends Record<string, unknown>>(
     const isSortable = col.sortable ?? defaultOn;
     if (isSortable !== false) {
       // FK: sort key is "relation.sortField"; plain: key is col.key.
-      const sortKey = col.fk
+      const sortKey = col.sortKey ?? (col.fk
         ? `${col.fk.relation}.${col.fk.sortField}`
-        : col.key;
+        : col.key);
       sortable[sortKey] = mapKindToSortType(col.kind);
+      const displayOptions = col.fk?.options ?? col.filterOptions;
+      if ((col.kind === "select" || col.kind === "fk") && displayOptions) {
+        displayOrder[sortKey] = [...displayOptions]
+          .sort((a, b) => a.name.localeCompare(b.name, "vi", { sensitivity: "base" }))
+          .map((option) => String(option.id));
+      }
     }
 
     // --- Filterable ---
@@ -141,6 +148,7 @@ export function deriveResourceSpec<T extends Record<string, unknown>>(
     ...base,
     sortable,
     filterable,
+    displayOrder,
     ...override,
   };
 

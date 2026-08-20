@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Pencil, Power, PowerOff } from "lucide-react";
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import {
   createDepartmentAction,
   updateDepartmentAction,
@@ -45,6 +47,22 @@ export function DepartmentClient({ departments, users }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("depts");
   const [pending, startTransition] = useTransition();
+  const departmentColumns = useMemo(() => ({
+    code: { accessor: (row: DeptRow) => row.code, kind: "text" as const },
+    name: { accessor: (row: DeptRow) => row.name, kind: "text" as const },
+    members: { accessor: (row: DeptRow) => row.memberCount, kind: "number" as const },
+    status: { accessor: (row: DeptRow) => row.isActive ? "Đang hoạt động" : "Đã ẩn", kind: "text" as const },
+  }), []);
+  const userColumns = useMemo(() => ({
+    name: { accessor: (row: UserRow) => row.name, kind: "text" as const },
+    email: { accessor: (row: UserRow) => row.email, kind: "text" as const },
+    role: { accessor: (row: UserRow) => row.role, kind: "text" as const },
+    department: { accessor: (row: UserRow) => departments.find((dept) => dept.id === row.departmentId)?.name, kind: "text" as const },
+    leader: { accessor: (row: UserRow) => row.isLeader, kind: "boolean" as const },
+    director: { accessor: (row: UserRow) => row.isDirector, kind: "boolean" as const },
+  }), [departments]);
+  const departmentSort = useSortableRows(departments, departmentColumns);
+  const userSort = useSortableRows(users, userColumns);
 
   // Department dialog state
   const [deptDialog, setDeptDialog] = useState<{
@@ -186,19 +204,19 @@ export function DepartmentClient({ departments, users }: Props) {
               + Thêm phòng ban
             </Button>
           </div>
-          <div className="overflow-hidden rounded-md border bg-card">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-md border bg-card">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="border-b bg-muted/40">
                 <tr>
-                  <th className="px-3 py-2 text-left">Mã</th>
-                  <th className="px-3 py-2 text-left">Tên phòng ban</th>
-                  <th className="px-3 py-2 text-right">Thành viên</th>
-                  <th className="px-3 py-2 text-left">Trạng thái</th>
+                  <SortableTableHead column="code" label="Mã" sort={departmentSort.sort} onToggle={departmentSort.toggleSort} />
+                  <SortableTableHead column="name" label="Tên phòng ban" sort={departmentSort.sort} onToggle={departmentSort.toggleSort} />
+                  <SortableTableHead column="members" label="Thành viên" sort={departmentSort.sort} onToggle={departmentSort.toggleSort} align="right" />
+                  <SortableTableHead column="status" label="Trạng thái" sort={departmentSort.sort} onToggle={departmentSort.toggleSort} />
                   <th className="px-3 py-2 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
-                {departments.map((dept) => (
+                {departmentSort.sortedRows.map((dept) => (
                   <tr key={dept.id} className="border-b last:border-0 hover:bg-muted/20">
                     <td className="px-3 py-2 font-mono text-xs font-semibold">{dept.code}</td>
                     <td className="px-3 py-2 font-medium">{dept.name}</td>
@@ -250,19 +268,19 @@ export function DepartmentClient({ departments, users }: Props) {
         </div>
       ) : (
         <div className="rounded-lg border overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="min-w-[600px] w-full text-sm">
             <thead className="border-b bg-muted/40">
               <tr>
-                <th className="text-left px-3 py-2">Họ tên</th>
-                <th className="text-left px-3 py-2">Email</th>
-                <th className="text-left px-3 py-2">Vai trò chức năng</th>
-                <th className="text-left px-3 py-2">Phòng ban</th>
-                <th className="text-center px-3 py-2">Lãnh đạo</th>
-                <th className="text-center px-3 py-2">Giám đốc</th>
+                <SortableTableHead column="name" label="Họ tên" sort={userSort.sort} onToggle={userSort.toggleSort} />
+                <SortableTableHead column="email" label="Email" sort={userSort.sort} onToggle={userSort.toggleSort} />
+                <SortableTableHead column="role" label="Vai trò chức năng" sort={userSort.sort} onToggle={userSort.toggleSort} />
+                <SortableTableHead column="department" label="Phòng ban" sort={userSort.sort} onToggle={userSort.toggleSort} />
+                <SortableTableHead column="leader" label="Lãnh đạo" sort={userSort.sort} onToggle={userSort.toggleSort} align="center" />
+                <SortableTableHead column="director" label="Giám đốc" sort={userSort.sort} onToggle={userSort.toggleSort} align="center" />
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {userSort.sortedRows.map((u) => (
                 <tr key={u.id} className="border-b last:border-0 hover:bg-muted/20">
                   <td className="px-3 py-2 font-medium">{u.name}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">{u.email}</td>

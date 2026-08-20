@@ -79,6 +79,10 @@ export type ResourceSpec = {
   /** Map of column → filter configuration; only keys here are accepted for filtering. */
   filterable: Record<string, FilterSpec>;
   defaultSort: SortState;
+  /** Trusted deterministic fallback appended to server orderBy. */
+  tieBreaker?: SortState;
+  /** Raw values ordered by their displayed labels for semantic server sorting. */
+  displayOrder?: Record<string, string[]>;
   defaultPageSize: number;
 };
 

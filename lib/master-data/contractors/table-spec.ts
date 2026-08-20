@@ -35,6 +35,7 @@ export const CONTRACTOR_SPEC: ResourceSpec = deriveResourceSpec(CONTRACTOR_COLUM
   sortable: {},
   filterable: {},
   defaultSort: { col: "name", dir: "asc" },
+  tieBreaker: { col: "id", dir: "asc" },
   defaultPageSize: 20,
 });
 

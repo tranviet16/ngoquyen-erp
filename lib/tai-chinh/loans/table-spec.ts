@@ -60,6 +60,8 @@ export const LOAN_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   // _pending is virtual — no kind → auto-skipped by deriveResourceSpec
   {
     key: "_pending",
+    kind: "number",
+    filterable: false,
     header: "Kỳ chưa trả",
     className: "w-[120px]",
   },
@@ -88,6 +90,7 @@ export const LOAN_SPEC: ResourceSpec = deriveResourceSpec(LOAN_COLUMNS, {
   sortable: {},
   filterable: {},
   defaultSort: { col: "startDate", dir: "desc" },
+  tieBreaker: { col: "id", dir: "asc" },
   defaultPageSize: 20,
 });
 

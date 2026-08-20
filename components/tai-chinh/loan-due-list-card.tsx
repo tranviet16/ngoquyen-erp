@@ -1,13 +1,24 @@
+"use client";
+
+import { useMemo } from "react";
 import Link from "next/link";
 import { CalendarClock, ChevronRight } from "lucide-react";
 import type { LoanDue } from "@/lib/tai-chinh/dashboard-service";
 import { formatDate, formatVND } from "@/lib/utils/format";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface LoanDueListCardProps {
   loans: LoanDue[];
 }
 
 export function LoanDueListCard({ loans }: LoanDueListCardProps) {
+  const sortColumns = useMemo(() => ({
+    lender: { accessor: (loan: LoanDue) => loan.lenderName, kind: "text" as const },
+    dueDate: { accessor: (loan: LoanDue) => loan.dueDate, kind: "date" as const },
+    total: { accessor: (loan: LoanDue) => Number(loan.principalDue) + Number(loan.interestDue), kind: "currency" as const },
+  }), []);
+  const { sort, sortedRows, toggleSort } = useSortableRows(loans, sortColumns);
   const totalDue = loans.reduce(
     (sum, loan) => sum + Number(loan.principalDue) + Number(loan.interestDue),
     0
@@ -46,16 +57,16 @@ export function LoanDueListCard({ loans }: LoanDueListCardProps) {
               <p className="text-lg font-semibold tabular-nums">{formatVND(totalDue)}</p>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="min-w-[600px] w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="px-3 py-2 text-left font-semibold">Bên cho vay</th>
-                    <th className="px-3 py-2 text-left font-semibold">Đến hạn</th>
-                    <th className="px-3 py-2 text-right font-semibold">Gốc + lãi</th>
+                    <SortableTableHead column="lender" label="Bên cho vay" sort={sort} onToggle={toggleSort} className="font-semibold" />
+                    <SortableTableHead column="dueDate" label="Đến hạn" sort={sort} onToggle={toggleSort} className="font-semibold" />
+                    <SortableTableHead column="total" label="Gốc + lãi" sort={sort} onToggle={toggleSort} align="right" className="font-semibold" />
                   </tr>
                 </thead>
                 <tbody>
-                  {loans.map((loan) => (
+                  {sortedRows.map((loan) => (
                     <tr key={loan.id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="px-3 py-2 font-medium">{loan.lenderName}</td>
                       <td className="px-3 py-2 text-muted-foreground tabular-nums">{formatDate(loan.dueDate)}</td>

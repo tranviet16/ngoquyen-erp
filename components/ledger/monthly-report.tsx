@@ -1,5 +1,8 @@
 "use client";
 
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
+
 interface MonthlyByPartyRowSerialized {
   partyId: number;
   partyName: string;
@@ -34,7 +37,20 @@ const groupCls = {
   hd: "bg-emerald-50 dark:bg-emerald-950/30",
 };
 
+const sortColumns = {
+  partyName: { accessor: (row: MonthlyByPartyRowSerialized) => row.partyName, kind: "text" as const },
+  openingTt: { accessor: (row: MonthlyByPartyRowSerialized) => row.openingTt, kind: "currency" as const },
+  layHangTt: { accessor: (row: MonthlyByPartyRowSerialized) => row.layHangTt, kind: "currency" as const },
+  thanhToanTt: { accessor: (row: MonthlyByPartyRowSerialized) => row.thanhToanTt, kind: "currency" as const },
+  closingTt: { accessor: (row: MonthlyByPartyRowSerialized) => row.closingTt, kind: "currency" as const },
+  openingHd: { accessor: (row: MonthlyByPartyRowSerialized) => row.openingHd, kind: "currency" as const },
+  layHangHd: { accessor: (row: MonthlyByPartyRowSerialized) => row.layHangHd, kind: "currency" as const },
+  thanhToanHd: { accessor: (row: MonthlyByPartyRowSerialized) => row.thanhToanHd, kind: "currency" as const },
+  closingHd: { accessor: (row: MonthlyByPartyRowSerialized) => row.closingHd, kind: "currency" as const },
+};
+
 export function MonthlyReport({ rows, entityName, year, month, partyLabel }: Props) {
+  const { sort, sortedRows, toggleSort } = useSortableRows(rows, sortColumns);
   const total = rows.reduce(
     (acc, r) => ({
       openingTt: acc.openingTt + r.openingTt,
@@ -68,23 +84,32 @@ export function MonthlyReport({ rows, entityName, year, month, partyLabel }: Pro
             <thead className="sticky top-0 z-10">
               <tr className="bg-muted">
                 <th rowSpan={2} className="border p-2 text-center align-middle w-12">STT</th>
-                <th rowSpan={2} className="border p-2 text-left align-middle">{partyLabel}</th>
+                <SortableTableHead rowSpan={2} column="partyName" label={partyLabel} sort={sort}
+                  onToggle={toggleSort} className="border align-middle" />
                 <th colSpan={4} className={`border p-2 text-center font-semibold ${groupCls.tt}`}>THỰC TẾ</th>
                 <th colSpan={4} className={`border p-2 text-center font-semibold ${groupCls.hd}`}>HỢP ĐỒNG</th>
               </tr>
               <tr className="bg-muted">
-                <th className={`border p-1.5 text-right ${groupCls.tt}`}>Phải Trả Đầu Kỳ</th>
-                <th className={`border p-1.5 text-right ${groupCls.tt}`}>PS Phải Trả</th>
-                <th className={`border p-1.5 text-right ${groupCls.tt}`}>PS Đã Trả</th>
-                <th className={`border p-1.5 text-right ${groupCls.tt} font-semibold`}>Phải Trả Cuối Kỳ</th>
-                <th className={`border p-1.5 text-right ${groupCls.hd}`}>Phải Trả Đầu Kỳ</th>
-                <th className={`border p-1.5 text-right ${groupCls.hd}`}>PS Phải Trả</th>
-                <th className={`border p-1.5 text-right ${groupCls.hd}`}>PS Đã Trả</th>
-                <th className={`border p-1.5 text-right ${groupCls.hd} font-semibold`}>Phải Trả Cuối Kỳ</th>
+                <SortableTableHead column="openingTt" label="Phải Trả Đầu Kỳ" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border ${groupCls.tt}`} />
+                <SortableTableHead column="layHangTt" label="PS Phải Trả" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border ${groupCls.tt}`} />
+                <SortableTableHead column="thanhToanTt" label="PS Đã Trả" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border ${groupCls.tt}`} />
+                <SortableTableHead column="closingTt" label="Phải Trả Cuối Kỳ" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border font-semibold ${groupCls.tt}`} />
+                <SortableTableHead column="openingHd" label="Phải Trả Đầu Kỳ" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border ${groupCls.hd}`} />
+                <SortableTableHead column="layHangHd" label="PS Phải Trả" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border ${groupCls.hd}`} />
+                <SortableTableHead column="thanhToanHd" label="PS Đã Trả" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border ${groupCls.hd}`} />
+                <SortableTableHead column="closingHd" label="Phải Trả Cuối Kỳ" sort={sort} onToggle={toggleSort}
+                  align="right" className={`border font-semibold ${groupCls.hd}`} />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, idx) => (
+              {sortedRows.map((r, idx) => (
                 <tr key={r.partyId} className="hover:bg-muted/30">
                   <td className="border p-2 text-center tabular-nums">{idx + 1}</td>
                   <td className="border p-2">{r.partyName}</td>

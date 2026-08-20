@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
+import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
+import {
+  useSortableRows,
+  type SortableColumn,
+} from "@/components/sortable-table/use-sortable-rows";
 import { MODULE_KEYS, MODULE_LEVELS } from "@/lib/acl/modules";
 import type { ModuleKey, AccessLevel } from "@/lib/acl/modules";
 import {
@@ -87,6 +92,27 @@ export function ModulePermissionGrid({
     if (pending.has(key)) return pending.get(key)!;
     return permissions.get(userId)?.get(moduleKey) ?? "default";
   }
+
+  const sortColumns = useMemo(() => {
+    const columns: Record<string, SortableColumn<UserRow>> = {
+      user: {
+        accessor: (user) => `${user.name} ${user.role} ${user.deptName ?? ""}`,
+        kind: "text",
+      },
+    };
+    for (const moduleKey of GRANTABLE_MODULE_KEYS) {
+      columns[`module:${moduleKey}`] = {
+        accessor: (user) => {
+          const key = cellKey(user.id, moduleKey);
+          const value = pending.get(key) ?? permissions.get(user.id)?.get(moduleKey) ?? "default";
+          return levelLabel(value);
+        },
+        kind: "text",
+      };
+    }
+    return columns;
+  }, [pending, permissions]);
+  const userSort = useSortableRows(users, sortColumns);
 
   function handleCellChange(
     userId: string,
@@ -188,25 +214,32 @@ export function ModulePermissionGrid({
         Các module quản trị chỉ dành cho tài khoản admin đang hoạt động nên không xuất hiện trong ma trận phân quyền này.
       </p>
       <div className="overflow-x-auto rounded-xl ring-1 ring-foreground/10">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full min-w-[600px] border-collapse text-sm">
           <thead>
             <tr className="bg-muted/50">
-              <th className="sticky left-0 z-10 min-w-[160px] bg-muted/50 px-3 py-2 text-left font-medium">
-                Người dùng
-              </th>
+              <SortableTableHead
+                column="user"
+                label="Người dùng"
+                sort={userSort.sort}
+                onToggle={userSort.toggleSort}
+                className="sticky left-0 z-10 min-w-[160px] bg-muted/50"
+              />
               {GRANTABLE_MODULE_KEYS.map((mk) => (
-                <th
+                <SortableTableHead
                   key={mk}
+                  column={`module:${mk}`}
+                  label={moduleLabels[mk]}
+                  sort={userSort.sort}
+                  onToggle={userSort.toggleSort}
+                  align="center"
                   className="min-w-[120px] px-2 py-2 text-center text-xs font-medium"
                   title={mk}
-                >
-                  {moduleLabels[mk]}
-                </th>
+                />
               ))}
             </tr>
           </thead>
           <tbody>
-            {users.map((user, rowIdx) => (
+            {userSort.sortedRows.map((user, rowIdx) => (
               <tr
                 key={user.id}
                 className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
@@ -243,7 +276,7 @@ export function ModulePermissionGrid({
                             e.target.value as AccessLevel | "default",
                           )
                         }
-                        className="w-full rounded border border-input bg-background px-1 py-0.5 text-xs"
+                        className="w-full rounded border border-input bg-background px-1 py-0.5 text-base md:text-xs"
                         disabled={isPending}
                       >
                         {options.map((opt) => (
