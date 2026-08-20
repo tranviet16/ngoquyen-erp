@@ -158,6 +158,21 @@ describe("parseTableQuery", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildPrismaArgs", () => {
+  it("builds Prisma relation-count ordering in relation._count order", () => {
+    const spec = { ...SPEC, sortable: { ...SPEC.sortable, "categories._count": "number" as const } };
+    const args = buildPrismaArgs(
+      { search: undefined, sort: { col: "categories._count", dir: "asc" }, filters: {}, page: 1, pageSize: 20 },
+      spec,
+    );
+    expect(args.orderBy).toEqual([{ categories: { _count: "asc" } }]);
+  });
+  it("appends a deterministic tie-breaker for paginated ordering", () => {
+    const args = buildPrismaArgs(baseState, {
+      ...SPEC,
+      tieBreaker: { col: "id", dir: "asc" },
+    });
+    expect(args.orderBy).toEqual([{ createdAt: "desc" }, { id: "asc" }]);
+  });
   const baseState: TableQueryState = {
     search: undefined,
     sort: undefined,
@@ -287,12 +302,12 @@ describe("buildQueryString", () => {
     expect(qs).toContain("page=3");
   });
 
-  it("default sort is stripped from output", () => {
+  it("preserves an explicit sort that matches the default order", () => {
     const qs = buildQueryString(
       { ...baseState, sort: { col: "createdAt", dir: "desc" } },
       SPEC
     );
-    expect(qs).not.toContain("sort=");
+    expect(qs).toContain("sort=createdAt%3Adesc");
   });
 
   it("non-default sort is serialized", () => {

@@ -23,6 +23,13 @@ function derive<T extends Record<string, unknown>>(
   return deriveResourceSpec(columns, BASE, override);
 }
 
+describe("deriveResourceSpec explicit sort key", () => {
+  it("uses the configured server field", () => {
+    const spec = derive([{ key: "label", header: "Label", kind: "text", sortKey: "relation.name" }]);
+    expect(spec.sortable).toEqual({ "relation.name": "string" });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Default-on behavior
 // ---------------------------------------------------------------------------

@@ -1,10 +1,7 @@
-/**
- * Tests for sort-header cycling behavior and URL serialization.
- * Verifies the asc → desc → null cycling logic and URL round-trips.
- */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildQueryString, parseTableQuery } from "../query-params";
-import type { ResourceSpec, SortDir } from "../types";
+import { nextSortState } from "../sort-state";
+import type { ResourceSpec } from "../types";
 
 const SPEC: ResourceSpec = {
   searchableColumns: ["name"],
@@ -14,118 +11,73 @@ const SPEC: ResourceSpec = {
   defaultPageSize: 20,
 };
 
-/** Mirror of sort-header.tsx nextDir logic */
-function nextDir(
-  colKey: string,
-  currentCol?: string,
-  currentDir?: SortDir
-): SortDir | null {
-  if (currentCol !== colKey) return "asc";
-  if (currentDir === "asc") return "desc";
-  return null;
-}
-
 describe("sort cycle logic", () => {
-  it("clicking a new column → asc", () => {
-    expect(nextDir("amount", undefined, undefined)).toBe("asc");
+  it("cycles default to ascending", () => {
+    expect(nextSortState("amount", { mode: "default" })).toEqual({ mode: "asc", col: "amount" });
   });
 
-  it("clicking active asc column → desc", () => {
-    expect(nextDir("amount", "amount", "asc")).toBe("desc");
+  it("cycles ascending to descending", () => {
+    expect(nextSortState("amount", { mode: "asc", col: "amount" })).toEqual({ mode: "desc", col: "amount" });
   });
 
-  it("clicking active desc column → null (clear)", () => {
-    expect(nextDir("amount", "amount", "desc")).toBeNull();
+  it("cycles descending back to default", () => {
+    expect(nextSortState("amount", { mode: "desc", col: "amount" })).toEqual({ mode: "default" });
   });
 
-  it("clicking a different column resets to asc regardless of current dir", () => {
-    expect(nextDir("name", "amount", "desc")).toBe("asc");
+  it("starts a different column at ascending", () => {
+    expect(nextSortState("name", { mode: "desc", col: "amount" })).toEqual({ mode: "asc", col: "name" });
   });
 });
 
-describe("sort URL push round-trip", () => {
-  it("asc sort → URL → parse back to same sort", () => {
+describe("sort URL round-trip", () => {
+  it.each(["asc", "desc"] as const)("round-trips %s", (dir) => {
     const qs = buildQueryString(
-      { search: undefined, sort: { col: "amount", dir: "asc" }, filters: {}, page: 1, pageSize: 20 },
-      SPEC
+      { sort: { col: "amount", dir }, filters: {}, page: 1, pageSize: 20 },
+      SPEC,
     );
-    const parsed = parseTableQuery(new URLSearchParams(qs), SPEC);
-    expect(parsed.sort).toEqual({ col: "amount", dir: "asc" });
+    expect(parseTableQuery(new URLSearchParams(qs), SPEC).sort).toEqual({ col: "amount", dir });
   });
 
-  it("desc sort → URL → parse back to desc", () => {
-    const qs = buildQueryString(
-      { search: undefined, sort: { col: "amount", dir: "desc" }, filters: {}, page: 1, pageSize: 20 },
-      SPEC
-    );
-    const parsed = parseTableQuery(new URLSearchParams(qs), SPEC);
-    expect(parsed.sort).toEqual({ col: "amount", dir: "desc" });
-  });
-
-  it("clear sort (null) → URL has no sort param → parse returns undefined sort", () => {
-    // When dir is null, caller should not include sort in state
-    const qs = buildQueryString(
-      { search: undefined, sort: undefined, filters: {}, page: 1, pageSize: 20 },
-      SPEC
-    );
+  it("omits sort params in default mode", () => {
+    const qs = buildQueryString({ sort: undefined, filters: {}, page: 1, pageSize: 20 }, SPEC);
     expect(qs).not.toContain("sort=");
-    const parsed = parseTableQuery(new URLSearchParams(qs), SPEC);
-    expect(parsed.sort).toBeUndefined();
+    expect(parseTableQuery(new URLSearchParams(qs), SPEC).sort).toBeUndefined();
   });
 
-  it("page resets to 1 when sort changes (simulated)", () => {
-    // Simulate what useTableState.setSort does: push({ sort, page: 1 })
+  it("keeps page one when sort changes", () => {
     const qs = buildQueryString(
-      { search: undefined, sort: { col: "amount", dir: "asc" }, filters: {}, page: 1, pageSize: 20 },
-      SPEC
+      { sort: { col: "amount", dir: "asc" }, filters: {}, page: 1, pageSize: 20 },
+      SPEC,
     );
-    const parsed = parseTableQuery(new URLSearchParams(qs), SPEC);
-    expect(parsed.page).toBe(1);
+    expect(parseTableQuery(new URLSearchParams(qs), SPEC).page).toBe(1);
   });
 });
 
-describe("filter URL push round-trip", () => {
-  const SPEC_WITH_FILTER: ResourceSpec = {
+describe("filter URL round-trip", () => {
+  const filterSpec: ResourceSpec = {
     ...SPEC,
     filterable: { name: { kind: "text" }, amount: { kind: "range" } },
   };
 
-  it("text filter → URL → parse back", () => {
+  it("round-trips text and range filters", () => {
     const qs = buildQueryString(
       {
-        search: undefined,
-        sort: undefined,
-        filters: { name: { kind: "text", value: "Corp" } },
+        filters: {
+          name: { kind: "text", value: "Corp" },
+          amount: { kind: "range", gte: "100", lte: "500" },
+        },
         page: 1,
         pageSize: 20,
       },
-      SPEC_WITH_FILTER
+      filterSpec,
     );
-    const parsed = parseTableQuery(new URLSearchParams(qs), SPEC_WITH_FILTER);
+    const parsed = parseTableQuery(new URLSearchParams(qs), filterSpec);
     expect(parsed.filters.name).toEqual({ kind: "text", value: "Corp" });
-  });
-
-  it("range filter → URL → parse back", () => {
-    const qs = buildQueryString(
-      {
-        search: undefined,
-        sort: undefined,
-        filters: { amount: { kind: "range", gte: "100", lte: "500" } },
-        page: 1,
-        pageSize: 20,
-      },
-      SPEC_WITH_FILTER
-    );
-    const parsed = parseTableQuery(new URLSearchParams(qs), SPEC_WITH_FILTER);
     expect(parsed.filters.amount).toEqual({ kind: "range", gte: "100", lte: "500" });
   });
 
-  it("clearing a filter removes it from URL", () => {
-    // Simulate setFilter(col, null) → delete from filters map → buildQueryString
-    const qs = buildQueryString(
-      { search: undefined, sort: undefined, filters: {}, page: 1, pageSize: 20 },
-      SPEC_WITH_FILTER
-    );
+  it("omits cleared filters", () => {
+    const qs = buildQueryString({ filters: {}, page: 1, pageSize: 20 }, filterSpec);
     expect(qs).not.toContain("filter.");
   });
 });
