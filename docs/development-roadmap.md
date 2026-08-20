@@ -6,8 +6,8 @@ This document tracks the project's development phases, milestones, and progress 
 
 ## Current Status
 
-**Date:** 2026-07-16
-**Active Phases:** Module release status ✅ Complete (2026-07-16); Product-wide iteration feedback loop ✅ Complete (2026-07-15); Plan A (ACL) ✅ Complete; Comprehensive Test Suite ✅ Complete; Công nợ Lũy Kế ✅ Complete; State Obligations ✅ Complete
+**Date:** 2026-08-20
+**Active Phases:** Product-wide three-state table sorting ✅ Complete (2026-08-20); Module release status ✅ Complete (2026-07-16); Product-wide iteration feedback loop ✅ Complete (2026-07-15); Plan A (ACL) ✅ Complete; Comprehensive Test Suite ✅ Complete; Công nợ Lũy Kế ✅ Complete; State Obligations ✅ Complete
 
 ## Module Release Status (COMPLETE)
 

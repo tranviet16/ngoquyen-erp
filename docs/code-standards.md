@@ -1,5 +1,14 @@
 # Code Standards & Conventions
 
+## Table Sorting Contract
+
+- Sortable data columns use one-column, three-state cycling: `default → ascending → descending → default`. The default state must restore the exact source/business order; equal values remain stable and nulls remain last in both directions.
+- Compare the semantic value shown to users: Vietnamese-aware text, raw numeric/currency values, timestamps for dates, booleans, and display labels for select/status/foreign-key/computed columns. Do not sort by hidden IDs, codes, or formatted strings when they differ from the displayed meaning.
+- Server-paginated or capped data must be sorted in the server query across the complete authorized result set, with an allowlisted sort key, deterministic tie-breaker, matching count/filter predicates, and page reset when sort changes. Never sort only the current page.
+- Grouped/tree reports sort leaf siblings only within their existing group. Parent/category rows, group order, collapse identity, subtotals, grand totals, and footers stay fixed. Matrix and nested tables sort rows by an explicit leaf metric; dynamic column axes and group headers never reorder or advertise sorting. Sort the complete nested source before applying any display slice.
+- Native HTML headers use a real `<button>` inside `<th>`, keyboard activation, visible focus, at least a 44px touch target, state icon/label, and accurate `aria-sort`. Preserve horizontal overflow wrappers and table minimum widths on mobile.
+- Glide Data Grid `6.0.4-alpha24` does not expose native `aria-sort` through its public header API. Provide the equivalent three-state visual label, tooltip/announcement, and keyboard interaction, but do not claim literal `aria-sort` compliance for Glide-rendered headers.
+
 ## Route Guards & Access Control
 
 ### Pattern: Module Access Guards
