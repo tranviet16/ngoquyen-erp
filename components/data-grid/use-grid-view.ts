@@ -62,3 +62,11 @@ export function useGridView<T extends RowWithId>(
     isFiltered,
   };
 }
+
+export function sameOrderedRowIds(
+  previous: readonly number[],
+  current: readonly number[],
+): boolean {
+  return previous.length === current.length
+    && previous.every((id, index) => id === current[index]);
+}

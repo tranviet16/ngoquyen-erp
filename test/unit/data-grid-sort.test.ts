@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applySort } from "@/components/data-grid/apply-filter-sort";
 import type { DataGridColumn } from "@/components/data-grid/types";
+import { sameOrderedRowIds } from "@/components/data-grid/use-grid-view";
 import { nextSortState, type SortSelection } from "@/lib/table/sort-state";
 
 type Row = {
@@ -37,6 +38,13 @@ const rows: Row[] = [
 ];
 
 describe("DataGrid sort", () => {
+  it("deduplicates equivalent selection ids when rows and columns are recreated", () => {
+    expect(sameOrderedRowIds([], [])).toBe(true);
+    expect(sameOrderedRowIds([3, 7], [3, 7])).toBe(true);
+    expect(sameOrderedRowIds([3, 7], [7, 3])).toBe(false);
+    expect(sameOrderedRowIds([3], [3, 7])).toBe(false);
+  });
+
   it("cycles default -> asc -> desc -> default", () => {
     let state: SortSelection = { mode: "default" };
     state = nextSortState("name", state);

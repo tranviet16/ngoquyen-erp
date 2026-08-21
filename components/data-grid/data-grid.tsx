@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   DataEditor,
   GridCellKind,
@@ -14,10 +14,11 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { allCells } from "@glideapps/glide-data-grid-cells";
 import "@glideapps/glide-data-grid-cells/dist/index.css";
 import { Button } from "@/components/ui/button";
+import type { FilterValue } from "@/lib/table/types";
 import { Plus, Trash2, X } from "lucide-react";
 import { useGlideTheme } from "./theme";
 import { useGridMutation } from "./use-grid-mutation";
-import { useGridView } from "./use-grid-view";
+import { sameOrderedRowIds, useGridView } from "./use-grid-view";
 import { buildCell, parseCellValue } from "./cells";
 import { FilterBar } from "./filter-bar";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "./types";
@@ -53,9 +54,18 @@ export function DataGrid<T extends RowWithId>({
   onSelectionChange,
 }: Props<T>) {
   const theme = useGlideTheme();
+  const [selection, setSelection] = useState<GridSelection | undefined>();
+  const reportedSelectionRef = useRef<readonly number[]>([]);
+  const clearSelection = useCallback(() => {
+    setSelection(undefined);
+    if (reportedSelectionRef.current.length === 0) return;
+    reportedSelectionRef.current = [];
+    onSelectionChange?.([]);
+  }, [onSelectionChange]);
   const { rows, editCell, bulkPaste, addRow, deleteRows, dirty } = useGridMutation(
     initialRows,
     handlers,
+    clearSelection,
   );
   const {
     sort,
@@ -67,7 +77,6 @@ export function DataGrid<T extends RowWithId>({
     view,
     isFiltered,
   } = useGridView(rows, columns);
-  const [selection, setSelection] = useState<GridSelection | undefined>();
   const sortSelectId = useId();
 
   const sortableColumns = useMemo(
@@ -126,9 +135,10 @@ export function DataGrid<T extends RowWithId>({
       if (!col || !row) return;
       const raw = "data" in newCell ? (newCell.data as unknown) : undefined;
       const parsed = parseCellValue(col, raw);
+      clearSelection();
       editCell(row.id, col.id, parsed);
     },
-    [columns, view, editCell],
+    [clearSelection, columns, view, editCell],
   );
 
   const onPaste = useCallback(
@@ -147,15 +157,17 @@ export function DataGrid<T extends RowWithId>({
         }
         patches.push(patch);
       }
+      clearSelection();
       void bulkPaste(patches);
       return true;
     },
-    [bulkPaste, columns, view],
+    [bulkPaste, clearSelection, columns, view],
   );
 
   const handleAdd = useCallback(() => {
+    clearSelection();
     void addRow(newRowTemplate);
-  }, [addRow, newRowTemplate]);
+  }, [addRow, clearSelection, newRowTemplate]);
 
   // Selection indices are into `view` — resolve to ids from view
   const selectedRowIds = useMemo<number[]>(() => {
@@ -170,22 +182,25 @@ export function DataGrid<T extends RowWithId>({
   }, [selection, view]);
 
   useEffect(() => {
+    if (sameOrderedRowIds(reportedSelectionRef.current, selectedRowIds)) return;
+    reportedSelectionRef.current = selectedRowIds;
     onSelectionChange?.(selectedRowIds);
   }, [selectedRowIds, onSelectionChange]);
 
   const handleDelete = useCallback(() => {
     if (selectedRowIds.length === 0) return;
+    clearSelection();
     void deleteRows(selectedRowIds);
-    setSelection(undefined);
-  }, [deleteRows, selectedRowIds]);
+  }, [clearSelection, deleteRows, selectedRowIds]);
 
   const handleHeaderClicked = useCallback(
     (colIdx: number) => {
       const col = columns[colIdx];
       if (!col || col.sortable === false) return;
+      clearSelection();
       setSort(col.id);
     },
-    [columns, setSort],
+    [clearSelection, columns, setSort],
   );
 
   const sortSelectValue =
@@ -193,6 +208,7 @@ export function DataGrid<T extends RowWithId>({
   const handleSortSelect = useCallback(
     (value: string) => {
       if (value === "default") {
+        clearSelection();
         setSortSelection({ mode: "default" });
         return;
       }
@@ -200,11 +216,25 @@ export function DataGrid<T extends RowWithId>({
       const mode = value.slice(0, separator);
       const col = value.slice(separator + 1);
       if ((mode === "asc" || mode === "desc") && col) {
+        clearSelection();
         setSortSelection({ mode, col });
       }
     },
-    [setSortSelection],
+    [clearSelection, setSortSelection],
   );
+
+  const handleFilter = useCallback(
+    (colId: string, value: FilterValue | null) => {
+      clearSelection();
+      setFilter(colId, value);
+    },
+    [clearSelection, setFilter],
+  );
+
+  const handleResetFilters = useCallback(() => {
+    clearSelection();
+    resetFilters();
+  }, [clearSelection, resetFilters]);
 
   const filterBarHeight = columns.some((c) => c.filterable) ? 28 : 0;
   const gridHeight =
@@ -262,7 +292,7 @@ export function DataGrid<T extends RowWithId>({
               <span className="text-blue-600 font-medium">
                 Đã lọc {view.length}/{rows.length} dòng
               </span>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={resetFilters}>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={handleResetFilters}>
                 <X className="h-3 w-3 mr-1" /> Xóa lọc
               </Button>
             </>
@@ -280,7 +310,7 @@ export function DataGrid<T extends RowWithId>({
         <FilterBar
           columns={columns}
           filters={filters}
-          onFilter={setFilter}
+          onFilter={handleFilter}
           colWidths={colWidths}
           rowMarkerWidth={ROW_MARKER_WIDTH}
         />

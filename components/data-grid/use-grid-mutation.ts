@@ -17,6 +17,7 @@ const DEBOUNCE_MS = 150;
 export function useGridMutation<T extends RowWithId>(
   initialRows: T[],
   handlers: DataGridHandlers<T>,
+  onRowsWillChange?: () => void,
 ) {
   const [rows, setRows] = useState<T[]>(initialRows);
   const pending = useRef<Map<string, PendingEdit<T>>>(new Map());
@@ -39,8 +40,9 @@ export function useGridMutation<T extends RowWithId>(
   }, []);
 
   const replaceRow = useCallback((rowId: number, patch: Partial<T>) => {
+    onRowsWillChange?.();
     setRows((cur) => cur.map((r) => (r.id === rowId ? { ...r, ...patch } : r)));
-  }, []);
+  }, [onRowsWillChange]);
 
   const editCell = useCallback(
     (rowId: number, col: keyof T & string, value: unknown) => {
@@ -85,6 +87,7 @@ export function useGridMutation<T extends RowWithId>(
       try {
         const result = await handlers.onBulkPaste(newRows);
         if (result) {
+          onRowsWillChange?.();
           setRows((cur) => {
             const map = new Map(cur.map((r) => [r.id, r]));
             for (const r of result) map.set(r.id, r);
@@ -99,7 +102,7 @@ export function useGridMutation<T extends RowWithId>(
         recomputeDirty();
       }
     },
-    [handlers, recomputeDirty],
+    [handlers, onRowsWillChange, recomputeDirty],
   );
 
   const addRow = useCallback(
@@ -109,7 +112,10 @@ export function useGridMutation<T extends RowWithId>(
       recomputeDirty();
       try {
         const created = await handlers.onAddRow(template);
-        if (created) setRows((cur) => [...cur, created]);
+        if (created) {
+          onRowsWillChange?.();
+          setRows((cur) => [...cur, created]);
+        }
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Lỗi thêm dòng");
       } finally {
@@ -117,13 +123,14 @@ export function useGridMutation<T extends RowWithId>(
         recomputeDirty();
       }
     },
-    [handlers, recomputeDirty],
+    [handlers, onRowsWillChange, recomputeDirty],
   );
 
   const deleteRows = useCallback(
     async (ids: number[]) => {
       if (!handlers.onDeleteRows || ids.length === 0) return;
       const snapshot = rows;
+      onRowsWillChange?.();
       setRows((cur) => cur.filter((r) => !ids.includes(r.id)));
       inflight.current += 1;
       recomputeDirty();
@@ -131,6 +138,7 @@ export function useGridMutation<T extends RowWithId>(
         await handlers.onDeleteRows(ids);
         toast.success(`Đã xóa ${ids.length} dòng`);
       } catch (e) {
+        onRowsWillChange?.();
         setRows(snapshot);
         toast.error(e instanceof Error ? e.message : "Lỗi xóa dòng");
       } finally {
@@ -138,7 +146,7 @@ export function useGridMutation<T extends RowWithId>(
         recomputeDirty();
       }
     },
-    [handlers, rows, recomputeDirty],
+    [handlers, onRowsWillChange, rows, recomputeDirty],
   );
 
   return { rows, setRows, editCell, bulkPaste, addRow, deleteRows, dirty };
