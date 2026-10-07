@@ -45,6 +45,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 
 ### Fixed
 - Prevented the shared Glide DataGrid selection callback from causing a React maximum-update-depth loop when callers recreate rows or columns; sorting and filtering now clear index-based selection before changing the visible row order.
+- Added `http://localhost:3001` and `http://127.0.0.1:3001` to the ERP 3001 container's trusted origins so loopback logins no longer fail with "Invalid origin"; tailnet origins are unchanged and the port remains bound to loopback only.
 - Active administrators now bypass the module development rollout gate across page/layout guards, actions and APIs, generic ACL checks, role-based write checks, and project visibility. Inactive administrators remain denied.
 - Restored direct tailnet ERP access on `http://100.116.178.88:3001`, added `http://admin-pc:3001` as a trusted alternative, and retained the Tailscale HTTPS endpoint as a fallback without exposing the Docker port beyond loopback; protocol-aware CSP and transport headers keep HTTP assets usable while preserving HTTPS-only upgrade/HSTS protections.
 - Prevented breadcrumbs from prefetching nonexistent grouping routes (`/admin`, `/thanh-toan`, `/van-hanh`), eliminating the post-deploy browser-console 404 while preserving accessible current-page semantics.
