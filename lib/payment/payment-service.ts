@@ -598,7 +598,7 @@ export async function closeRound(roundId: number) {
     if (transitioned.count !== 1) throw new Error("Chỉ đóng được đợt đã duyệt");
     // Đóng đợt = tiền đã chi thật → ghi sự kiện thanh_toan vào công nợ vật tư
     await syncClosedRoundToLedger(roundId, tx, closedAt);
-  });
+  }, { timeout: 60_000, maxWait: 10_000 }); // đồng bộ nhiều dòng sổ cái dưới khoá NCC
   await writeAuditLog({
     tableName: "PaymentRound",
     recordId: String(roundId),

@@ -33,6 +33,7 @@ export async function createPriceQuote(input: PriceQuoteInput) {
     },
   });
   revalidatePath(`/vat-tu-ncc/${data.supplierId}/bao-gia`);
+  revalidatePath(`/vat-tu-ncc/${data.supplierId}/ngay`);
   revalidatePath(`/vat-tu-ncc/${data.supplierId}/chot-ky`);
   return record;
 }
@@ -53,6 +54,7 @@ export async function updatePriceQuote(id: number, input: PriceQuoteInput) {
     },
   });
   revalidatePath(`/vat-tu-ncc/${data.supplierId}/bao-gia`);
+  revalidatePath(`/vat-tu-ncc/${data.supplierId}/ngay`);
   revalidatePath(`/vat-tu-ncc/${data.supplierId}/chot-ky`);
   return record;
 }
@@ -66,6 +68,7 @@ export async function softDeletePriceQuote(id: number, supplierId: number) {
     data: { deletedAt: new Date() },
   });
   revalidatePath(`/vat-tu-ncc/${supplierId}/bao-gia`);
+  revalidatePath(`/vat-tu-ncc/${supplierId}/ngay`);
   revalidatePath(`/vat-tu-ncc/${supplierId}/chot-ky`);
   return record;
 }

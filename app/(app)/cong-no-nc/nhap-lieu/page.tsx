@@ -9,6 +9,10 @@ import { prisma } from "@/lib/prisma";
 import { LedgerTransactionGrid, type TxRow } from "@/components/ledger-grid/transaction-grid";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
+import { TRANSACTION_TYPES } from "@/lib/ledger/transaction-classification";
+
+// Sổ nhân công không có thuế hoá đơn NCC; schema server cũng từ chối loại này.
+const LABOR_ALLOWED_TYPES = TRANSACTION_TYPES.filter((t) => t !== "thue_hd");
 
 export default async function NhapLieuNcPage() {
   const { userId, role } = await requireModuleAccess("cong-no-nc", { minLevel: "read", scope: "module" });
@@ -64,6 +68,7 @@ export default async function NhapLieuNcPage() {
         projects={projects}
         items={items}
         partyLabel="Đội thi công"
+        allowedTypes={LABOR_ALLOWED_TYPES}
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: contractors[0]?.id ?? 0 }}
         actions={{
           patch: patchLaborTransaction,

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { DEBT_INCREASE_TYPES, increaseSql, decreaseSql, signedSql, typeInSql } from "./transaction-classification";
 import type { LedgerType, SummaryRow, MonthlyByPartyRow, CurrentBalance, MatrixRow, MatrixCell } from "./ledger-types";
 
 function emptyCell(): MatrixCell {
@@ -51,8 +52,8 @@ export async function querySummary(
     ),
     tx AS (
       SELECT "entityId", "partyId", "projectId",
-        COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_hang_tt,
-        COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_hang_hd,
+        COALESCE(SUM("totalTt") FILTER (WHERE ${typeInSql(DEBT_INCREASE_TYPES)}), 0) AS lay_hang_tt,
+        COALESCE(SUM("totalHd") FILTER (WHERE ${typeInSql(DEBT_INCREASE_TYPES)}), 0) AS lay_hang_hd,
         COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS thanh_toan_tt,
         COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS thanh_toan_hd,
         COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'dieu_chinh'), 0) AS dieu_chinh_tt,
@@ -117,16 +118,33 @@ interface MonthlyByPartyRawRow {
   tra_hd: Prisma.Decimal;
 }
 
-export async function queryMonthlyByParty(
+/** Cửa sổ báo cáo `[from, to]` UTC 00:00, hai đầu bao gồm; null = không giới hạn. */
+export interface LedgerWindow {
+  from: Date | null;
+  to: Date | null;
+}
+
+const DAY_MS = 86_400_000;
+
+/** Cận trên loại trừ của cửa sổ: `to + 1 ngày` (null nếu không giới hạn). */
+function toExclusive(to: Date | null): Date | null {
+  return to ? new Date(to.getTime() + DAY_MS) : null;
+}
+
+/**
+ * Báo cáo theo NCC trên một cửa sổ thời gian (một định nghĩa cho mọi báo cáo):
+ *  - Đầu kỳ  = số dư ban đầu + Σ có dấu các dòng `date < from` (from null ⇒ chỉ số dư ban đầu).
+ *  - Tăng / Giảm = các dòng `date >= from AND date < to + 1 ngày` (null ⇒ không giới hạn).
+ *  - Cuối kỳ = Đầu kỳ + Tăng − Giảm.
+ */
+export async function queryWindowByParty(
   ledgerType: LedgerType,
-  year: number,
-  month: number,
-  entityId: number
+  window: LedgerWindow & { entityId: number }
 ): Promise<Omit<MonthlyByPartyRow, "partyName">[]> {
+  const { from, to, entityId } = window;
+  const upper = toExclusive(to);
   const rows = await prisma.$queryRaw<MonthlyByPartyRawRow[]>`
-    WITH first_of_month AS (SELECT make_date(${year}::int, ${month}::int, 1) AS d),
-         last_of_month  AS (SELECT (make_date(${year}::int, ${month}::int, 1) + interval '1 month' - interval '1 day')::date AS d),
-    opening AS (
+    WITH opening AS (
       SELECT party_id,
              COALESCE(SUM(tt_signed), 0) AS open_tt,
              COALESCE(SUM(hd_signed), 0) AS open_hd
@@ -140,48 +158,29 @@ export async function queryMonthlyByParty(
         UNION ALL
 
         SELECT "partyId",
-          CASE "transactionType"
-            WHEN 'lay_hang'   THEN "totalTt"
-            WHEN 'thanh_toan' THEN -"totalTt"
-            ELSE "totalTt"
-          END,
-          CASE "transactionType"
-            WHEN 'lay_hang'   THEN "totalHd"
-            WHEN 'thanh_toan' THEN -"totalHd"
-            ELSE "totalHd"
-          END
+          ${signedSql("totalTt")},
+          ${signedSql("totalHd")}
         FROM ledger_transactions
         WHERE "ledgerType" = ${ledgerType}
           AND "entityId" = ${entityId}
           AND "deletedAt" IS NULL
-          AND date < (SELECT d FROM first_of_month)
+          AND ${from}::timestamp IS NOT NULL
+          AND date < ${from}::timestamp
       ) all_prior
       GROUP BY party_id
     ),
     period AS (
       SELECT "partyId" AS party_id,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'lay_hang' THEN "totalTt"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalTt" > 0 THEN "totalTt"
-          ELSE 0 END), 0) AS lay_tt,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'lay_hang' THEN "totalHd"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalHd" > 0 THEN "totalHd"
-          ELSE 0 END), 0) AS lay_hd,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'thanh_toan' THEN "totalTt"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalTt" < 0 THEN -"totalTt"
-          ELSE 0 END), 0) AS tra_tt,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'thanh_toan' THEN "totalHd"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalHd" < 0 THEN -"totalHd"
-          ELSE 0 END), 0) AS tra_hd
+        COALESCE(SUM(${increaseSql("totalTt")}), 0) AS lay_tt,
+        COALESCE(SUM(${increaseSql("totalHd")}), 0) AS lay_hd,
+        COALESCE(SUM(${decreaseSql("totalTt")}), 0) AS tra_tt,
+        COALESCE(SUM(${decreaseSql("totalHd")}), 0) AS tra_hd
       FROM ledger_transactions
       WHERE "ledgerType" = ${ledgerType}
         AND "entityId" = ${entityId}
         AND "deletedAt" IS NULL
-        AND date >= (SELECT d FROM first_of_month)
-        AND date <= (SELECT d FROM last_of_month)
+        AND (${from}::timestamp IS NULL OR date >= ${from}::timestamp)
+        AND (${upper}::timestamp IS NULL OR date < ${upper}::timestamp)
       GROUP BY "partyId"
     )
     SELECT
@@ -224,6 +223,28 @@ export async function queryMonthlyByParty(
   });
 }
 
+/** Cửa sổ của một tháng dương lịch (UTC): `[01/month, ngày cuối tháng]`. */
+export function calendarMonthWindow(year: number, month: number): { from: Date; to: Date } {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error(`Tháng không hợp lệ: ${month}/${year}`);
+  }
+  const from = new Date(0);
+  from.setUTCFullYear(year, month - 1, 1);
+  const to = new Date(0);
+  to.setUTCFullYear(year, month, 0);
+  return { from, to };
+}
+
+/** Báo cáo tháng dương lịch = cửa sổ tháng. */
+export async function queryMonthlyByParty(
+  ledgerType: LedgerType,
+  year: number,
+  month: number,
+  entityId: number
+): Promise<Omit<MonthlyByPartyRow, "partyName">[]> {
+  return queryWindowByParty(ledgerType, { ...calendarMonthWindow(year, month), entityId });
+}
+
 interface BalanceRawRow {
   balance_tt: Prisma.Decimal;
   balance_hd: Prisma.Decimal;
@@ -252,8 +273,8 @@ export async function queryCurrentBalance(
 
   const txRows = await prisma.$queryRaw<BalanceRawRow[]>`
     SELECT
-      COALESCE(SUM(CASE WHEN "transactionType" = 'thanh_toan' THEN -"totalTt" ELSE "totalTt" END), 0) AS balance_tt,
-      COALESCE(SUM(CASE WHEN "transactionType" = 'thanh_toan' THEN -"totalHd" ELSE "totalHd" END), 0) AS balance_hd
+      COALESCE(SUM(${signedSql("totalTt")}), 0) AS balance_tt,
+      COALESCE(SUM(${signedSql("totalHd")}), 0) AS balance_hd
     FROM ledger_transactions
     WHERE "ledgerType" = ${ledgerType}
       AND "entityId" = ${entityId}
@@ -284,10 +305,16 @@ interface MatrixRawRow {
   close_hd: Prisma.Decimal;
 }
 
+/**
+ * Ma trận NCC × Chủ thể. `from/to` cùng ngữ nghĩa cửa sổ với queryWindowByParty;
+ * không truyền ⇒ toàn bộ (Đầu kỳ chỉ là số dư ban đầu).
+ */
 export async function queryDebtMatrix(
   ledgerType: LedgerType,
-  filter: { entityIds?: number[]; partyIds?: number[] }
+  filter: { entityIds?: number[]; partyIds?: number[]; from?: Date | null; to?: Date | null }
 ): Promise<MatrixRow[]> {
+  const from = filter.from ?? null;
+  const upper = toExclusive(filter.to ?? null);
   const partyIdsArr = filter.partyIds && filter.partyIds.length > 0 ? filter.partyIds : null;
   const entityIdsArr = filter.entityIds && filter.entityIds.length > 0 ? filter.entityIds : null;
 
@@ -304,28 +331,35 @@ export async function queryDebtMatrix(
     ),
     tx AS (
       SELECT "entityId", "partyId",
-        COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_tt,
-        COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'lay_hang'), 0) AS lay_hd,
-        COALESCE(SUM("totalTt") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS tra_tt,
-        COALESCE(SUM("totalHd") FILTER (WHERE "transactionType" = 'thanh_toan'), 0) AS tra_hd
-      FROM ledger_transactions
-      WHERE "ledgerType" = ${ledgerType}
-        AND "deletedAt" IS NULL
-        AND (${partyIdsArr}::int[] IS NULL OR "partyId" = ANY(${partyIdsArr}::int[]))
-        AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
+        COALESCE(SUM(${signedSql("totalTt")}) FILTER (WHERE ${from}::timestamp IS NOT NULL AND date < ${from}::timestamp), 0) AS open_tx_tt,
+        COALESCE(SUM(${signedSql("totalHd")}) FILTER (WHERE ${from}::timestamp IS NOT NULL AND date < ${from}::timestamp), 0) AS open_tx_hd,
+        COALESCE(SUM(${increaseSql("totalTt")}) FILTER (WHERE in_window), 0) AS lay_tt,
+        COALESCE(SUM(${increaseSql("totalHd")}) FILTER (WHERE in_window), 0) AS lay_hd,
+        COALESCE(SUM(${decreaseSql("totalTt")}) FILTER (WHERE in_window), 0) AS tra_tt,
+        COALESCE(SUM(${decreaseSql("totalHd")}) FILTER (WHERE in_window), 0) AS tra_hd
+      FROM (
+        SELECT *,
+          ((${from}::timestamp IS NULL OR date >= ${from}::timestamp)
+            AND (${upper}::timestamp IS NULL OR date < ${upper}::timestamp)) AS in_window
+        FROM ledger_transactions
+        WHERE "ledgerType" = ${ledgerType}
+          AND "deletedAt" IS NULL
+          AND (${partyIdsArr}::int[] IS NULL OR "partyId" = ANY(${partyIdsArr}::int[]))
+          AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
+      ) t
       GROUP BY "entityId", "partyId"
     )
     SELECT
       COALESCE(ob."entityId", tx."entityId") AS entity_id,
       COALESCE(ob."partyId", tx."partyId") AS party_id,
-      COALESCE(ob.open_tt, 0) AS open_tt,
-      COALESCE(ob.open_hd, 0) AS open_hd,
+      COALESCE(ob.open_tt, 0) + COALESCE(tx.open_tx_tt, 0) AS open_tt,
+      COALESCE(ob.open_hd, 0) + COALESCE(tx.open_tx_hd, 0) AS open_hd,
       COALESCE(tx.lay_tt, 0) AS lay_tt,
       COALESCE(tx.lay_hd, 0) AS lay_hd,
       COALESCE(tx.tra_tt, 0) AS tra_tt,
       COALESCE(tx.tra_hd, 0) AS tra_hd,
-      COALESCE(ob.open_tt, 0) + COALESCE(tx.lay_tt, 0) - COALESCE(tx.tra_tt, 0) AS close_tt,
-      COALESCE(ob.open_hd, 0) + COALESCE(tx.lay_hd, 0) - COALESCE(tx.tra_hd, 0) AS close_hd
+      COALESCE(ob.open_tt, 0) + COALESCE(tx.open_tx_tt, 0) + COALESCE(tx.lay_tt, 0) - COALESCE(tx.tra_tt, 0) AS close_tt,
+      COALESCE(ob.open_hd, 0) + COALESCE(tx.open_tx_hd, 0) + COALESCE(tx.lay_hd, 0) - COALESCE(tx.tra_hd, 0) AS close_hd
     FROM ob FULL OUTER JOIN tx
       ON ob."entityId" = tx."entityId" AND ob."partyId" = tx."partyId"
     ORDER BY party_id, entity_id

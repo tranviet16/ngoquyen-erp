@@ -19,9 +19,11 @@ interface MonthlyByPartyRowSerialized {
 interface Props {
   rows: MonthlyByPartyRowSerialized[];
   entityName: string;
-  year: number;
-  month: number;
+  year?: number;
+  month?: number;
   partyLabel: string;
+  /** Nhãn kỳ thay cho "Tháng m/yyyy" (báo cáo theo mốc bất kỳ); nhân công không truyền. */
+  periodLabel?: string;
 }
 
 function fmt(n: number): string {
@@ -49,7 +51,7 @@ const sortColumns = {
   closingHd: { accessor: (row: MonthlyByPartyRowSerialized) => row.closingHd, kind: "currency" as const },
 };
 
-export function MonthlyReport({ rows, entityName, year, month, partyLabel }: Props) {
+export function MonthlyReport({ rows, entityName, year, month, partyLabel, periodLabel }: Props) {
   const { sort, sortedRows, toggleSort } = useSortableRows(rows, sortColumns);
   const total = rows.reduce(
     (acc, r) => ({
@@ -73,7 +75,7 @@ export function MonthlyReport({ rows, entityName, year, month, partyLabel }: Pro
   return (
     <div className="space-y-2">
       <div className="text-sm font-medium px-1">
-        Tháng {month}/{year} — Chủ thể: <span className="font-semibold">{entityName}</span>
+        {periodLabel ?? `Tháng ${month}/${year}`} — Chủ thể: <span className="font-semibold">{entityName}</span>
       </div>
 
       {rows.length === 0 ? (

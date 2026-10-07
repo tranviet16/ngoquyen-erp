@@ -74,15 +74,13 @@ export async function softDeleteLaborTransactions(ids: number[]) {
   revalidateAll();
 }
 
-export async function patchLaborTransaction(
+async function patchLaborTransactionInternal(
+  client: LedgerWriteClient,
   id: number,
   patch: Record<string, unknown>,
-  client: LedgerWriteClient = prisma,
-  authorized = false,
 ) {
   const current = await client.ledgerTransaction.findUnique({ where: { id } });
   if (!current || current.ledgerType !== "labor" || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
-  if (!authorized) await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
 
   const merged: TransactionInput = {
     date: (patch.date as string | undefined) ?? current.date.toISOString(),
@@ -106,7 +104,16 @@ export async function patchLaborTransaction(
 
   const validated = transactionSchema.parse(merged);
   await assertContractorExists(validated.partyId);
-  const tx = await service.update(id, validated, client);
+  return service.update(id, validated, client);
+}
+
+/**
+ * Server action: guard ACL rồi patch. Không nhận client/authorized từ phía gọi —
+ * đường bỏ qua kiểm quyền chỉ tồn tại ở hàm nội bộ (không export) cho bulk upsert.
+ */
+export async function patchLaborTransaction(id: number, patch: Record<string, unknown>) {
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
+  const tx = await patchLaborTransactionInternal(prisma, id, patch);
   revalidateAll();
   return tx;
 }
@@ -151,7 +158,7 @@ export async function bulkUpsertLaborTransactions(
     for (const row of rows) {
     const { id, ...rest } = row;
     if (id != null && id > 0) {
-        writes.push(await patchLaborTransaction(id, rest, client, true));
+        writes.push(await patchLaborTransactionInternal(client, id, rest));
     } else {
       const validated = transactionSchema.parse(rest);
       await assertContractorExists(validated.partyId);
@@ -196,15 +203,13 @@ export async function deleteLaborOpeningBalances(ids: number[]) {
   revalidateAll();
 }
 
-export async function patchLaborOpeningBalance(
+async function patchLaborOpeningBalanceInternal(
+  client: LedgerWriteClient,
   id: number,
   patch: Record<string, unknown>,
-  client: LedgerWriteClient = prisma,
-  authorized = false,
 ) {
   const current = await client.ledgerOpeningBalance.findUnique({ where: { id } });
   if (!current || current.ledgerType !== "labor") throw new Error(`Số dư #${id} không tồn tại`);
-  if (!authorized) await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
 
   const merged: OpeningBalanceInput = {
     entityId: (patch.entityId as number | undefined) ?? current.entityId,
@@ -218,7 +223,13 @@ export async function patchLaborOpeningBalance(
 
   const validated = openingBalanceSchema.parse(merged);
   await assertContractorExists(validated.partyId);
-  const ob = await service.setOpeningBalance(validated, client);
+  return service.setOpeningBalance(validated, client);
+}
+
+/** Server action: guard ACL rồi patch số dư ban đầu (không nhận client/authorized từ phía gọi). */
+export async function patchLaborOpeningBalance(id: number, patch: Record<string, unknown>) {
+  await requireReleasedModuleRequest("cong-no-nc", { minLevel: "edit", scope: "module" });
+  const ob = await patchLaborOpeningBalanceInternal(prisma, id, patch);
   revalidateAll();
   return ob;
 }
@@ -239,7 +250,7 @@ export async function bulkUpsertLaborOpeningBalances(
     for (const row of rows) {
     const { id, ...rest } = row;
     if (id != null && id > 0) {
-        writes.push(await patchLaborOpeningBalance(id, rest, client, true));
+        writes.push(await patchLaborOpeningBalanceInternal(client, id, rest));
     } else {
       const validated = openingBalanceSchema.parse(rest);
       await assertContractorExists(validated.partyId);

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { vndFormatter } from "@/lib/format";
 import { formatDate } from "@/lib/utils/format";
 import type { TransactionInput } from "@/lib/cong-no-vt/schemas";
+import { TRANSACTION_TYPE_LABELS, type TransactionType } from "@/lib/ledger/transaction-classification";
 import { TransactionFormDialog } from "./transaction-form-dialog";
 
 const DataGrid = dynamic(
@@ -69,11 +70,7 @@ interface Props {
   title: string;
 }
 
-const TX_TYPE_LABELS: Record<string, string> = {
-  lay_hang: "Lấy hàng",
-  thanh_toan: "Thanh toán",
-  dieu_chinh: "Điều chỉnh",
-};
+const TX_TYPE_LABELS: Record<string, string> = TRANSACTION_TYPE_LABELS;
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Chờ",
@@ -139,7 +136,7 @@ export function TransactionGrid({
     if (!current) throw new Error(`GD #${id} không tồn tại`);
     const input: TransactionInput = {
       date: current.date,
-      transactionType: current.transactionType as "lay_hang" | "thanh_toan" | "dieu_chinh",
+      transactionType: current.transactionType as TransactionType,
       entityId: current.entityId,
       partyId: current.partyId,
       projectId: current.projectId,

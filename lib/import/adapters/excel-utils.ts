@@ -5,16 +5,36 @@
  * unless the touch is part of a deliberate refactor.
  */
 
+import { toBusinessDateUtc } from "@/lib/ledger/business-date";
+
+/**
+ * Parse ô ngày Excel thành ngày nghiệp vụ lưu tại UTC 00:00 (quy ước sổ cái,
+ * xem lib/ledger/business-date.ts). Không dùng `new Date(y, m, d)` vì đó là nửa
+ * đêm giờ máy chủ (17:00 UTC hôm trước ở Asia/Bangkok) → lệch ngày khi so sánh UTC.
+ */
 export function parseExcelDate(val: unknown): Date | null {
   if (val == null || val === "") return null;
-  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
-  if (typeof val === "number") return new Date(Math.round((val - 25569) * 86400 * 1000));
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : toBusinessDateUtc(val);
+  if (typeof val === "number") {
+    // Số serial Excel là giờ treo tường (không múi giờ): lấy phần nguyên theo UTC, bỏ phần giờ.
+    const serial = new Date(Math.round((val - 25569) * 86400 * 1000));
+    if (isNaN(serial.getTime())) return null;
+    return new Date(Date.UTC(serial.getUTCFullYear(), serial.getUTCMonth(), serial.getUTCDate()));
+  }
   const s = String(val).trim();
   // Vietnamese DD/MM/YYYY or DD-MM-YYYY
   const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  if (m) {
+    const y = Number(m[3]);
+    const mo = Number(m[2]);
+    const da = Number(m[1]);
+    const d = new Date(Date.UTC(y, mo - 1, da));
+    // Từ chối ngày không tồn tại (31/02) thay vì để Date cuộn sang tháng sau.
+    if (d.getUTCFullYear() !== y || d.getUTCMonth() !== mo - 1 || d.getUTCDate() !== da) return null;
+    return d;
+  }
   const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
+  return isNaN(d.getTime()) ? null : toBusinessDateUtc(d);
 }
 
 export function num(val: unknown): number {

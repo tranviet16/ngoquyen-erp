@@ -4,10 +4,12 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import {
   previewPeriodClose,
   commitPeriodClose,
   type PeriodClosePreview,
+  type PeriodRangeInput,
 } from "@/lib/vat-tu-ncc/period-close-service";
 import { formatVND } from "@/lib/utils/format";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
@@ -16,21 +18,30 @@ import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 interface Props {
   supplierId: number;
   canEdit: boolean;
+  /** Xem trước kỳ gợi ý, tính ở server khi mở trang. */
+  initialPreview: PeriodClosePreview;
 }
+
+const initialPrices = (data: PeriodClosePreview) => {
+  const init: Record<number, string> = {};
+  for (const d of data.deliveries) {
+    const price = d.currentUnitPrice ?? d.suggestedUnitPrice;
+    init[d.id] = price == null ? "" : String(price);
+  }
+  return init;
+};
 
 const REASON_LABEL: Record<string, string> = {
   missing_project: "thiếu công trình",
   missing_entity: "công trình chưa gán Chủ Thể",
 };
 
-export function ChotKyClient({ supplierId, canEdit }: Props) {
+export function ChotKyClient({ supplierId, canEdit, initialPreview }: Props) {
   const router = useRouter();
-  const now = new Date();
-  const [month, setMonth] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
-  );
-  const [preview, setPreview] = useState<PeriodClosePreview | null>(null);
-  const [prices, setPrices] = useState<Record<number, string>>({});
+  const [from, setFrom] = useState(initialPreview.periodFrom);
+  const [to, setTo] = useState(initialPreview.periodTo);
+  const [preview, setPreview] = useState<PeriodClosePreview | null>(initialPreview);
+  const [prices, setPrices] = useState<Record<number, string>>(() => initialPrices(initialPreview));
   const [loading, setLoading] = useState(false);
   const [committing, startCommit] = useTransition();
   type Delivery = PeriodClosePreview["deliveries"][number];
@@ -46,23 +57,18 @@ export function ChotKyClient({ supplierId, canEdit }: Props) {
   }), [prices]);
   const deliverySort = useSortableRows(preview?.deliveries ?? [], sortColumns);
 
-  const parseMonth = () => {
-    const [y, m] = month.split("-").map(Number);
-    return { year: y, month: m };
-  };
-
-  async function loadPreview() {
+  async function loadPreview(range: PeriodRangeInput) {
+    if (!range.from || !range.to) {
+      toast.error("Nhập đủ Từ ngày và Đến ngày.");
+      return;
+    }
     setLoading(true);
     try {
-      const { year, month: m } = parseMonth();
-      const data = await previewPeriodClose(supplierId, year, m);
+      const data = await previewPeriodClose(supplierId, range);
       setPreview(data);
-      const init: Record<number, string> = {};
-      for (const d of data.deliveries) {
-        const price = d.currentUnitPrice ?? d.suggestedUnitPrice;
-        init[d.id] = price == null ? "" : String(price);
-      }
-      setPrices(init);
+      setFrom(data.periodFrom);
+      setTo(data.periodTo);
+      setPrices(initialPrices(data));
     } catch (err) {
       toast.error("Không tải được kỳ: " + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -96,15 +102,15 @@ export function ChotKyClient({ supplierId, canEdit }: Props) {
     if (!preview) return;
     startCommit(async () => {
       try {
-        const { year, month: m } = parseMonth();
+        const range = { from: preview.periodFrom, to: preview.periodTo };
         const payload = preview.deliveries
           .filter((d) => prices[d.id] !== "" && Number.isFinite(Number(prices[d.id])))
           .map((d) => ({ deliveryId: d.id, unitPrice: Number(prices[d.id]) }));
-        const result = await commitPeriodClose(supplierId, year, m, payload);
+        const result = await commitPeriodClose(supplierId, range, payload);
         toast.success(
           `Đã chốt kỳ: ${result.closedCount} phiếu, phát sinh ${formatVND(Number(result.totalAmountTt))}`,
         );
-        await loadPreview();
+        await loadPreview(range);
         router.refresh();
       } catch (err) {
         toast.error("Chốt kỳ thất bại: " + (err instanceof Error ? err.message : String(err)));
@@ -112,40 +118,84 @@ export function ChotKyClient({ supplierId, canEdit }: Props) {
     });
   }
 
-  const blocked = !preview || preview.signedBlocked || preview.violations.length > 0 || missingPriceCount > 0;
+  // Ngày đang nhập khác kỳ đang xem → phải bấm "Xem kỳ" trước khi chốt.
+  const rangeDirty = !!preview && (from !== preview.periodFrom || to !== preview.periodTo);
+  const blocked =
+    !preview ||
+    rangeDirty ||
+    preview.boundsError != null ||
+    preview.signedBlocked ||
+    preview.violations.length > 0 ||
+    missingPriceCount > 0;
+
+  function applyNextStandardPeriod() {
+    if (!preview) return;
+    // Kỳ 27→26 tiếp theo = kỳ gợi ý: bắt đầu ngay sau marker gần nhất, kết thúc ngày 26 kế tiếp.
+    const range = preview.suggestedRange;
+    setFrom(range.from);
+    setTo(range.to);
+    void loadPreview(range);
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Chốt kỳ vật tư</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Kỳ cố định 27 tháng trước → 26 tháng đích. Gắn đơn giá cho phiếu trong kỳ rồi chốt để
-            sinh phát sinh vào công nợ vật tư.
+            Chọn biên kỳ (mặc định 27 → 26), gắn đơn giá cho phiếu trong kỳ rồi chốt để sinh phát
+            sinh vào công nợ vật tư. Kỳ mới phải bắt đầu ngay sau kỳ gần nhất.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs"
-            aria-label="Tháng đích"
-          />
-          <Button variant="outline" onClick={loadPreview} disabled={loading}>
+        <div className="flex items-end gap-2 flex-wrap">
+          <label className="text-sm space-y-1">
+            <span className="block text-muted-foreground">Từ ngày</span>
+            <DateInput value={from} onChange={setFrom} aria-label="Từ ngày" />
+          </label>
+          <label className="text-sm space-y-1">
+            <span className="block text-muted-foreground">Đến ngày</span>
+            <DateInput value={to} onChange={setTo} aria-label="Đến ngày" />
+          </label>
+          <Button variant="outline" onClick={() => loadPreview({ from, to })} disabled={loading}>
             {loading ? "Đang tải…" : "Xem kỳ"}
+          </Button>
+          <Button variant="ghost" onClick={applyNextStandardPeriod} disabled={loading || !preview}>
+            Kỳ 27→26 tiếp theo
           </Button>
         </div>
       </div>
 
       {preview && (
         <>
+          <div className="text-sm text-muted-foreground space-y-0.5">
+            <p>
+              Marker gần nhất:{" "}
+              {preview.latestMarker ? (
+                <strong className="text-foreground">
+                  {preview.latestMarker.label} ({preview.latestMarker.signed ? "đã ký" : "chưa ký"})
+                </strong>
+              ) : (
+                "chưa có kỳ nào"
+              )}
+              {preview.openingAsOf && <> · Mốc số dư ban đầu: {preview.openingAsOf.split("-").reverse().join("/")}</>}
+            </p>
+          </div>
+
           <div className="text-sm">
             Kỳ <strong>{preview.periodLabel}</strong> — {preview.deliveries.length} phiếu.
             {preview.signedBlocked && (
               <span className="text-destructive font-medium"> Kỳ đã được NCC ký — chỉ xem, không chốt lại được.</span>
             )}
+            {rangeDirty && (
+              <span className="text-amber-600"> Biên kỳ đã đổi — bấm &quot;Xem kỳ&quot; để tải lại trước khi chốt.</span>
+            )}
           </div>
+
+          {preview.boundsError && !preview.signedBlocked && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
+              {preview.boundsError}
+            </div>
+          )}
 
           {preview.violations.length > 0 && (
             <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm">

@@ -2,12 +2,12 @@
  * balance-service.ts — Thin, ledgerType-parameterized facade for the SOP balance formula.
  *
  * SOP formula (Công nợ):
- *   outstanding = opening.balanceTt + Σ lay_hang(≤asOf) − Σ thanh_toan(≤asOf)
+ *   outstanding = opening.balanceTt + Σ (lay_hang + thue_hd)(≤asOf) − Σ thanh_toan(≤asOf)
  *
  * Design decisions:
  * - dieu_chinh rows are IGNORED: verified 0 rows in prod DB; SOP does not define
- *   this type in the balance formula. SQL WHERE clause explicitly excludes it via
- *   FILTER predicates that only match 'lay_hang' and 'thanh_toan'.
+ *   this type in the balance formula. SQL FILTER predicates only match the
+ *   debt-increasing types (see transaction-classification.ts) and 'thanh_toan'.
  * - Opening balance IS included (matches queryCurrentBalance/queryMonthlyByParty).
  * - Auth responsibility: callers (server actions / page loaders) must validate
  *   access before calling these functions. No auth check is performed inside.
@@ -22,6 +22,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import type { LedgerType } from "./ledger-types";
+import { DEBT_INCREASE_TYPES, typeInSql } from "./transaction-classification";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ interface BulkRawRow {
  * a single SQL round-trip.
  *
  * Formula per pair:
- *   outstanding = opening.balanceTt + Σ lay_hang(≤asOf) − Σ thanh_toan(≤asOf)
+ *   outstanding = opening.balanceTt + Σ (lay_hang + thue_hd)(≤asOf) − Σ thanh_toan(≤asOf)
  *   paid        = Σ thanh_toan(≤asOf)
  *
  * Constraints:
@@ -141,7 +142,7 @@ export async function getBalancesBulk(args: {
     tx AS (
       SELECT "entityId", "partyId", "projectId",
         COALESCE(SUM("totalTt") FILTER (
-          WHERE "transactionType" = 'lay_hang' AND "date" <= ${asOfDate}
+          WHERE ${typeInSql(DEBT_INCREASE_TYPES)} AND "date" <= ${asOfDate}
         ), 0) AS lay_hang,
         COALESCE(SUM("totalTt") FILTER (
           WHERE "transactionType" = 'thanh_toan' AND "date" <= ${asOfDate}

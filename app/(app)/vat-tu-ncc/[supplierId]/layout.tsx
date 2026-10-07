@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
+import { requireModuleAccess } from "@/lib/acl/guards";
+import { canAccessEntitlement } from "@/lib/acl/effective";
+import { isModuleReleased } from "@/lib/acl/module-availability";
 
 const TABS = [
   { href: "/ngay", label: "Vật tư ngày" },
@@ -10,6 +13,10 @@ const TABS = [
   { href: "/chot-ky", label: "Chốt kỳ" },
   { href: "/doi-chieu", label: "Đối chiếu công nợ" },
 ];
+
+// Tab ghi chuyển khoản / thuế hoá đơn qua sổ cái cong-no-vt: chỉ hiện khi module đó đã phát hành
+// và người dùng có quyền đọc cong-no-vt (cùng điều kiện mà requireReleasedModuleRequest áp cho server action).
+const PAYMENT_TAB = { href: "/thanh-toan", label: "Thanh toán" };
 
 const ADMIN_TABS = [{ href: "/kiem-tra-khop", label: "Kiểm tra khớp" }];
 
@@ -26,8 +33,18 @@ export default async function SupplierLayout({ params, children }: Props) {
   const supplier = await prisma.supplier.findUnique({ where: { id, deletedAt: null } });
   if (!supplier) notFound();
 
-  const isAdmin = await requireActiveAdmin().then(() => true).catch(() => false);
-  const tabs = isAdmin ? [...TABS, ...ADMIN_TABS] : TABS;
+  const { userId, role } = await requireModuleAccess("vat-tu-ncc", { minLevel: "read", scope: "module" });
+  const [isAdmin, canReadCongNoVt, congNoVtReleased] = await Promise.all([
+    requireActiveAdmin().then(() => true).catch(() => false),
+    canAccessEntitlement(userId, "cong-no-vt", { minLevel: "read", scope: "module" }),
+    role === "admin" ? Promise.resolve(true) : isModuleReleased("cong-no-vt"),
+  ]);
+  const showPaymentTab = canReadCongNoVt && congNoVtReleased;
+  // Chèn "Thanh toán" ngay sau "Báo giá"
+  const baseTabs = showPaymentTab
+    ? [...TABS.slice(0, 3), PAYMENT_TAB, ...TABS.slice(3)]
+    : TABS;
+  const tabs = isAdmin ? [...baseTabs, ...ADMIN_TABS] : baseTabs;
 
   const basePath = `/vat-tu-ncc/${id}`;
 

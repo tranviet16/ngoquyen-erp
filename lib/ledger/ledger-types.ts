@@ -1,7 +1,9 @@
 import { Prisma } from "@prisma/client";
+import type { TransactionType } from "./transaction-classification";
+
+export type { TransactionType };
 
 export type LedgerType = "material" | "labor";
-export type TransactionType = "lay_hang" | "thanh_toan" | "dieu_chinh";
 
 export interface LedgerTransactionInput {
   date: string; // ISO date string
@@ -30,6 +32,7 @@ export interface LedgerTransactionFilter {
   dateFrom?: string;
   dateTo?: string;
   transactionType?: TransactionType;
+  transactionTypes?: readonly TransactionType[];
   page?: number;
   pageSize?: number;
 }

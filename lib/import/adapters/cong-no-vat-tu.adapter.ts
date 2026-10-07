@@ -21,12 +21,13 @@ import type {
 } from "./adapter-types";
 import { parseExcelDate } from "./excel-utils";
 import { findSheet, parseTxSheet, parseOpenSheet } from "./cong-no-vat-tu.parse";
+import { TRANSACTION_TYPES } from "@/lib/ledger/transaction-classification";
 
 const TxSchema = z.object({
   kind: z.literal("tx"),
   date: z.union([z.string(), z.number(), z.date()]),
   supplierName: z.string().min(1),
-  transactionType: z.enum(["lay_hang", "thanh_toan", "dieu_chinh"]),
+  transactionType: z.enum(TRANSACTION_TYPES),
   amountTt: z.number(),
   amountHd: z.number().optional().default(0),
 });
@@ -54,7 +55,7 @@ export const CongNoVatTuAdapter: ImportAdapter = {
     const openSheetName = findSheet(wb, "số dư ban đầu", "so du ban dau");
 
     const rows: ParsedRow[] = [];
-    if (txSheetName) rows.push(...parseTxSheet(wb.Sheets[txSheetName]!, 0, supplierNames, entityNames));
+    if (txSheetName) rows.push(...parseTxSheet(wb.Sheets[txSheetName]!, 0, supplierNames, entityNames, { allowTax: true }));
     if (openSheetName) rows.push(...parseOpenSheet(wb.Sheets[openSheetName]!, 100000, supplierNames, entityNames));
 
     const conflicts: ConflictItem[] = [];

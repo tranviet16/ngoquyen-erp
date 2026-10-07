@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
@@ -8,19 +8,27 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { deliverySchema, type DeliveryInput } from "@/lib/vat-tu-ncc/schemas";
+import { resolveQuote, type QuoteLike } from "@/lib/vat-tu-ncc/quote-resolver";
+import { formatDate, formatNumber } from "@/lib/utils/format";
 
 type ItemOption = { id: number; code: string; name: string; unit: string };
 type ProjectOption = { id: number; code: string; name: string };
 
+/** Mức báo giá đã tải sẵn của NCC (đơn giá dạng số, ngày hiệu lực dạng Date). */
+type QuoteOption = QuoteLike;
+
 interface Props {
   supplierId: number;
+  /** create: tự điền đơn giá theo báo giá; edit: chỉ gợi ý, không ghi đè giá đang có. */
+  mode: "create" | "edit";
+  quotes: QuoteOption[];
   items: ItemOption[];
   projects: ProjectOption[];
   defaultValues?: Partial<DeliveryInput>;
   onSubmit: (d: DeliveryInput) => Promise<void>;
 }
 
-export function DeliveryForm({ supplierId, items, projects, defaultValues, onSubmit }: Props) {
+export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaultValues, onSubmit }: Props) {
   const form = useForm<DeliveryInput>({
     resolver: zodResolver(deliverySchema),
     defaultValues: {
@@ -38,6 +46,26 @@ export function DeliveryForm({ supplierId, items, projects, defaultValues, onSub
     const item = items.find((i) => i.id === Number(watchItemId));
     if (item) form.setValue("unit", item.unit);
   }, [watchItemId, items, form]);
+
+  const watchDate = useWatch({ control: form.control, name: "date" });
+  const watchUnitPrice = useWatch({ control: form.control, name: "unitPrice" });
+  const unitPriceDirty = !!form.formState.dirtyFields.unitPrice;
+
+  const suggestedQuote = useMemo(() => {
+    const day = new Date(watchDate);
+    if (Number.isNaN(day.getTime())) return null;
+    return resolveQuote(quotes, Number(watchItemId), day);
+  }, [quotes, watchItemId, watchDate]);
+
+  // Chỉ ở form tạo: khi vật tư/ngày đổi và người dùng chưa tự gõ đơn giá thì điền theo báo giá hiệu lực.
+  // Không có báo giá hiệu lực → để trống (không lấy giá phiếu cũ).
+  useEffect(() => {
+    if (mode !== "create" || unitPriceDirty) return;
+    form.setValue("unitPrice", suggestedQuote?.unitPrice, { shouldDirty: false });
+  }, [mode, unitPriceDirty, suggestedQuote, form]);
+
+  const showHint =
+    suggestedQuote != null && (mode === "edit" || unitPriceDirty) && watchUnitPrice !== suggestedQuote.unitPrice;
 
   return (
     <Form {...form}>
@@ -84,6 +112,30 @@ export function DeliveryForm({ supplierId, items, projects, defaultValues, onSub
             <FormItem><FormLabel>Đơn vị</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
           )} />
         </div>
+
+        <FormField control={form.control} name="unitPrice" render={({ field }) => (
+          <FormItem><FormLabel>Đơn giá (tùy chọn)</FormLabel><FormControl>
+            <Input
+              type="number" min={0} step="any"
+              name={field.name} ref={field.ref} onBlur={field.onBlur}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+            />
+          </FormControl>
+            {showHint && suggestedQuote && (
+              <p className="text-xs text-muted-foreground">
+                Gợi ý: {formatNumber(suggestedQuote.unitPrice)} (báo giá từ {formatDate(suggestedQuote.effectiveFrom)}){" "}
+                <button
+                  type="button"
+                  className="font-medium text-primary underline"
+                  onClick={() => form.setValue("unitPrice", suggestedQuote.unitPrice, { shouldDirty: true })}
+                >
+                  Dùng
+                </button>
+              </p>
+            )}
+            <FormMessage /></FormItem>
+        )} />
 
         <div className="grid grid-cols-3 gap-3">
           <FormField control={form.control} name="cbVatTu" render={({ field }) => (

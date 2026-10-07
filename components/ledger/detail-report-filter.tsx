@@ -5,12 +5,22 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ControlledMultiSelect } from "@/components/ledger/controlled-multi-select";
 import type { Option } from "@/components/ledger/controlled-multi-select";
+import {
+  ReportPeriodSelector,
+  resolvePeriodValue,
+  type ReportPeriodValue,
+} from "@/components/ledger/report-period-selector";
 
 interface Props {
   entities: Option[];
   initialProjects: Option[];
   ledgerType: "material" | "labor";
   partyLabel: string;
+  /**
+   * Cộng thêm (công nợ vật tư): có giá trị thì bộ chọn mốc thời gian thay hai select Năm/Tháng
+   * và URL ghi `period=...`; không truyền thì giữ hành vi `year`/`month` cũ (công nợ nhân công).
+   */
+  initialPeriod?: ReportPeriodValue;
   defaultValues: {
     year?: number;
     month?: number;
@@ -29,6 +39,7 @@ export function DetailReportFilter({
   initialProjects,
   ledgerType,
   partyLabel,
+  initialPeriod,
   defaultValues,
 }: Props) {
   const router = useRouter();
@@ -39,6 +50,8 @@ export function DetailReportFilter({
   const [month, setMonth] = useState<string>(
     defaultValues.month != null ? String(defaultValues.month) : ""
   );
+  const [period, setPeriod] = useState<ReportPeriodValue>(initialPeriod ?? { period: "all" });
+  const periodInvalid = initialPeriod !== undefined && "error" in resolvePeriodValue(period);
   const [selectedEntityIds, setSelectedEntityIds] = useState<number[]>(defaultValues.entityIds);
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(defaultValues.projectIds);
   const [projectOptions, setProjectOptions] = useState<Option[]>(initialProjects);
@@ -80,9 +93,12 @@ export function DetailReportFilter({
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   function handleApply() {
-    const params = new URLSearchParams();
-    if (year) params.set("year", year);
-    if (month) params.set("month", month);
+    if (periodInvalid) return;
+    const params = new URLSearchParams(initialPeriod ? period : undefined);
+    if (!initialPeriod) {
+      if (year) params.set("year", year);
+      if (month) params.set("month", month);
+    }
     if (selectedEntityIds.length > 0) params.set("entityIds", selectedEntityIds.join(","));
     if (selectedProjectIds.length > 0) params.set("projectIds", selectedProjectIds.join(","));
     params.set("showZero", showZero ? "1" : "0");
@@ -92,16 +108,21 @@ export function DetailReportFilter({
   function handleReset() {
     setYear("");
     setMonth("");
+    setPeriod({ period: "all" });
     setSelectedEntityIds([]);
     setSelectedProjectIds([]);
     setShowZero(false);
-    router.push("?showZero=0", { scroll: false });
+    router.push(initialPeriod ? "?period=all&showZero=0" : "?showZero=0", { scroll: false });
   }
 
   return (
     <div className="rounded-md border bg-muted/20 p-4 space-y-4">
       {/* Row 1: Year + Month + Entities + Projects */}
       <div className="flex flex-wrap items-end gap-3">
+        {initialPeriod ? (
+          <ReportPeriodSelector value={period} onChange={setPeriod} />
+        ) : (
+          <>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Năm</label>
           <select
@@ -129,6 +150,8 @@ export function DetailReportFilter({
             ))}
           </select>
         </div>
+          </>
+        )}
 
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-muted-foreground">Chủ thể</label>
@@ -164,12 +187,15 @@ export function DetailReportFilter({
         </label>
 
         <div className="flex gap-2">
-          <Button size="sm" onClick={handleApply}>Áp dụng</Button>
+          <Button size="sm" onClick={handleApply} disabled={periodInvalid}>Áp dụng</Button>
           <Button size="sm" variant="ghost" onClick={handleReset}>Xóa bộ lọc</Button>
         </div>
 
         <p className="text-xs text-muted-foreground italic">
-          Lọc {partyLabel}: tìm kiếm qua trang nhập liệu. Năm/tháng = mốc lũy kế tính đến hết kỳ.
+          Lọc {partyLabel}: tìm kiếm qua trang nhập liệu.{" "}
+          {initialPeriod
+            ? "Mốc thời gian: đầu kỳ cộng dồn mọi phát sinh trước ngày bắt đầu."
+            : "Năm/tháng = mốc lũy kế tính đến hết kỳ."}
         </p>
       </div>
     </div>

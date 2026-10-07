@@ -3,6 +3,14 @@
 import { Fragment, useMemo } from "react";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
+import {
+  CONG_NO_SHEET_COLUMNS,
+  addCongNoSheetCell,
+  emptyCongNoSheetCell,
+  isZeroMatrixCell,
+  toCongNoSheetCell,
+  type CongNoSheetCell,
+} from "@/lib/ledger/debt-matrix-columns";
 
 interface EntityInfo {
   id: number;
@@ -31,6 +39,8 @@ interface Props {
   rows: DebtMatrixRow[];
   entities: EntityInfo[];
   partyLabel: string;
+  /** Ẩn NCC không có số liệu nào (cả 8 chỉ số = 0) trong cửa sổ. */
+  hideZero?: boolean;
 }
 
 const fmt = (n: number) =>
@@ -39,124 +49,120 @@ const fmt = (n: number) =>
 const cellCls = (n: number) =>
   `border p-1 text-right text-xs tabular-nums ${n < 0 ? "text-destructive" : ""}`;
 
-const GROUPS: Array<{ label: string; tt: keyof DebtMatrixCell; hd: keyof DebtMatrixCell }> = [
-  { label: "Đầu kỳ", tt: "openTt", hd: "openHd" },
-  { label: "Lấy hàng", tt: "layTt", hd: "layHd" },
-  { label: "Trả tiền", tt: "traTt", hd: "traHd" },
-  { label: "Cuối kỳ", tt: "closeTt", hd: "closeHd" },
-];
+const LH_HINT = "LH = Đầu kỳ + Phát sinh tăng (gồm số dư đầu kỳ); Nợ = LH − Trả";
 
-function emptyCell(): DebtMatrixCell {
-  return { openTt: 0, openHd: 0, layTt: 0, layHd: 0, traTt: 0, traHd: 0, closeTt: 0, closeHd: 0 };
-}
+const TOTAL_GROUP = "TỔNG CÔNG TY";
 
-function addInto(t: DebtMatrixCell, s: DebtMatrixCell) {
-  t.openTt += s.openTt; t.openHd += s.openHd;
-  t.layTt += s.layTt;  t.layHd += s.layHd;
-  t.traTt += s.traTt;  t.traHd += s.traHd;
-  t.closeTt += s.closeTt; t.closeHd += s.closeHd;
-}
+const ZERO_CELL: DebtMatrixCell = {
+  openTt: 0, openHd: 0, layTt: 0, layHd: 0, traTt: 0, traHd: 0, closeTt: 0, closeHd: 0,
+};
 
-export function DebtMatrix({ rows, entities, partyLabel }: Props) {
+export function DebtMatrix({ rows, entities, partyLabel, hideZero = false }: Props) {
+  const visibleRows = useMemo(
+    () => (hideZero ? rows.filter((r) => !isZeroMatrixCell(r.totals)) : rows),
+    [rows, hideZero]
+  );
+
   const sortColumns = useMemo(() => {
-    const columns: Record<string, { accessor: (row: DebtMatrixRow) => unknown; kind: "currency" }> = {};
+    const columns: Record<string, { accessor: (row: DebtMatrixRow) => unknown; kind: "currency" | "text" }> = {
+      partyName: { accessor: (row) => row.partyName, kind: "text" },
+    };
     for (const entity of entities) {
-      for (const group of GROUPS) {
-        columns[`${entity.id}:${group.tt}`] = {
-          accessor: (row) => row.cells[String(entity.id)]?.[group.tt],
-          kind: "currency",
-        };
-        columns[`${entity.id}:${group.hd}`] = {
-          accessor: (row) => row.cells[String(entity.id)]?.[group.hd],
+      for (const col of CONG_NO_SHEET_COLUMNS) {
+        columns[`${entity.id}:${col.key}`] = {
+          accessor: (row) => {
+            const cell = row.cells[String(entity.id)];
+            return cell ? toCongNoSheetCell(cell)[col.key] : 0;
+          },
           kind: "currency",
         };
       }
     }
-    for (const group of GROUPS) {
-      columns[`total:${group.tt}`] = { accessor: (row) => row.totals[group.tt], kind: "currency" };
-      columns[`total:${group.hd}`] = { accessor: (row) => row.totals[group.hd], kind: "currency" };
+    for (const col of CONG_NO_SHEET_COLUMNS) {
+      columns[`total:${col.key}`] = {
+        accessor: (row) => toCongNoSheetCell(row.totals)[col.key],
+        kind: "currency",
+      };
     }
     return columns;
   }, [entities]);
-  const { sort, sortedRows, toggleSort } = useSortableRows(rows, sortColumns);
+  const { sort, sortedRows, toggleSort } = useSortableRows(visibleRows, sortColumns);
 
-  if (rows.length === 0) {
+  if (visibleRows.length === 0) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Không có dữ liệu</p>;
   }
 
-  // Column totals per entity + grand totals
-  const colTotals: Record<string, DebtMatrixCell> = {};
-  for (const e of entities) colTotals[String(e.id)] = emptyCell();
-  const grand: DebtMatrixCell = emptyCell();
-  for (const row of rows) {
+  // Tổng từng cột Chủ thể + tổng công ty (dựa trên các dòng đang hiển thị).
+  const colTotals: Record<string, CongNoSheetCell> = {};
+  for (const e of entities) colTotals[String(e.id)] = emptyCongNoSheetCell();
+  const grand = emptyCongNoSheetCell();
+  for (const row of visibleRows) {
     for (const e of entities) {
       const cell = row.cells[String(e.id)];
-      if (cell) addInto(colTotals[String(e.id)], cell);
+      if (cell) addCongNoSheetCell(colTotals[String(e.id)], toCongNoSheetCell(cell));
     }
-    addInto(grand, row.totals);
+    addCongNoSheetCell(grand, toCongNoSheetCell(row.totals));
   }
+
+  const headCls = "border text-[11px] min-w-[84px] sticky top-[37px] bg-muted/90 z-20";
+
+  const renderCells = (keyPrefix: string, cell: CongNoSheetCell, bold = false) =>
+    CONG_NO_SHEET_COLUMNS.map((col) => (
+      <td key={`${keyPrefix}-${col.key}`} className={`${cellCls(cell[col.key])} ${bold ? "font-semibold" : ""}`}>
+        {fmt(cell[col.key])}
+      </td>
+    ));
 
   return (
     <div className="border rounded-md max-h-[80vh] overflow-auto">
       <table className="text-sm border-collapse">
         <thead>
-          {/* Tier 1: party label + entity names + Tổng */}
+          {/* Tầng 1: NCC + tên từng Chủ thể + TỔNG CÔNG TY */}
           <tr>
-            <th
-              className="border p-2 text-left min-w-[180px] sticky left-0 top-0 bg-muted z-30"
-              rowSpan={3}
-            >
-              {partyLabel}
-            </th>
+            <SortableTableHead
+              column="partyName"
+              label={partyLabel}
+              sort={sort}
+              onToggle={toggleSort}
+              rowSpan={2}
+              className="border text-left min-w-[200px] sticky left-0 top-0 bg-muted z-30"
+            />
             {entities.map((e) => (
-              <th key={e.id} className="border p-2 text-center sticky top-0 bg-muted z-20" colSpan={8}>
+              <th key={e.id} className="border p-2 text-center sticky top-0 bg-muted z-20" colSpan={CONG_NO_SHEET_COLUMNS.length}>
                 {e.name}
               </th>
             ))}
-            <th className="border p-2 text-center sticky top-0 bg-muted z-20" colSpan={8}>Tổng</th>
+            <th className="border p-2 text-center sticky top-0 bg-muted z-20" colSpan={CONG_NO_SHEET_COLUMNS.length}>
+              {TOTAL_GROUP}
+            </th>
           </tr>
-          {/* Tier 2: 4 group labels per entity */}
+          {/* Tầng 2: 6 cột mỗi nhóm, sắp xếp 3 trạng thái */}
           <tr>
             {entities.map((e) =>
-              GROUPS.map((g) => (
-                <th
-                  key={`${e.id}-${g.label}`}
-                  className="border p-1 text-center text-xs sticky top-[37px] bg-muted/95 z-20"
-                  colSpan={2}
-                >
-                  {g.label}
-                </th>
-              )),
+              CONG_NO_SHEET_COLUMNS.map((col) => (
+                <SortableTableHead
+                  key={`${e.id}-${col.key}`}
+                  column={`${e.id}:${col.key}`}
+                  label={col.label}
+                  sort={sort}
+                  onToggle={toggleSort}
+                  align="center"
+                  title={col.key.startsWith("lh") ? LH_HINT : undefined}
+                  className={headCls}
+                />
+              ))
             )}
-            {GROUPS.map((g) => (
-              <th
-                key={`tot-${g.label}`}
-                className="border p-1 text-center text-xs sticky top-[37px] bg-muted/95 z-20"
-                colSpan={2}
-              >
-                {g.label}
-              </th>
-            ))}
-          </tr>
-          {/* Tier 3: TT / HĐ */}
-          <tr>
-            {entities.map((e) =>
-              GROUPS.map((g) => (
-                <Fragment key={`${e.id}-${g.label}-sub`}>
-                  <SortableTableHead column={`${e.id}:${g.tt}`} label="TT" sort={sort} onToggle={toggleSort}
-                    align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
-                  <SortableTableHead column={`${e.id}:${g.hd}`} label="HĐ" sort={sort} onToggle={toggleSort}
-                    align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
-                </Fragment>
-              )),
-            )}
-            {GROUPS.map((g) => (
-              <Fragment key={`tot-${g.label}-sub`}>
-                <SortableTableHead column={`total:${g.tt}`} label="TT" sort={sort} onToggle={toggleSort}
-                  align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
-                <SortableTableHead column={`total:${g.hd}`} label="HĐ" sort={sort} onToggle={toggleSort}
-                  align="center" className="border text-[11px] min-w-[80px] sticky top-[63px] bg-muted/90 z-20" />
-              </Fragment>
+            {CONG_NO_SHEET_COLUMNS.map((col) => (
+              <SortableTableHead
+                key={`total-${col.key}`}
+                column={`total:${col.key}`}
+                label={col.label}
+                sort={sort}
+                onToggle={toggleSort}
+                align="center"
+                title={col.key.startsWith("lh") ? LH_HINT : undefined}
+                className={headCls}
+              />
             ))}
           </tr>
         </thead>
@@ -166,42 +172,22 @@ export function DebtMatrix({ rows, entities, partyLabel }: Props) {
               <td className="border p-2 font-medium sticky left-0 bg-background z-10">
                 {row.partyName || `${partyLabel} #${row.partyId}`}
               </td>
-              {entities.map((e) => {
-                const c = row.cells[String(e.id)] ?? emptyCell();
-                return GROUPS.map((g) => (
-                  <Fragment key={`${row.partyId}-${e.id}-${g.label}`}>
-                    <td className={cellCls(c[g.tt])}>{fmt(c[g.tt])}</td>
-                    <td className={cellCls(c[g.hd])}>{fmt(c[g.hd])}</td>
-                  </Fragment>
-                ));
-              })}
-              {GROUPS.map((g) => (
-                <Fragment key={`${row.partyId}-tot-${g.label}`}>
-                  <td className={`${cellCls(row.totals[g.tt])} font-semibold`}>{fmt(row.totals[g.tt])}</td>
-                  <td className={`${cellCls(row.totals[g.hd])} font-semibold`}>{fmt(row.totals[g.hd])}</td>
+              {entities.map((e) => (
+                <Fragment key={`${row.partyId}-${e.id}`}>
+                  {renderCells(`${row.partyId}-${e.id}`, toCongNoSheetCell(row.cells[String(e.id)] ?? ZERO_CELL))}
                 </Fragment>
               ))}
+              {renderCells(`${row.partyId}-total`, toCongNoSheetCell(row.totals), true)}
             </tr>
           ))}
         </tbody>
         <tfoot>
           <tr className="border-t-[3px] border-b-[3px] border-indigo-500 dark:border-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-950 dark:text-indigo-50 font-bold [&>td]:py-2.5">
             <td className="border p-2 sticky left-0 bg-indigo-50 dark:bg-indigo-950 z-10">Tổng</td>
-            {entities.map((e) => {
-              const c = colTotals[String(e.id)];
-              return GROUPS.map((g) => (
-                <Fragment key={`foot-${e.id}-${g.label}`}>
-                  <td className={cellCls(c[g.tt])}>{fmt(c[g.tt])}</td>
-                  <td className={cellCls(c[g.hd])}>{fmt(c[g.hd])}</td>
-                </Fragment>
-              ));
-            })}
-            {GROUPS.map((g) => (
-              <Fragment key={`foot-tot-${g.label}`}>
-                <td className={cellCls(grand[g.tt])}>{fmt(grand[g.tt])}</td>
-                <td className={cellCls(grand[g.hd])}>{fmt(grand[g.hd])}</td>
-              </Fragment>
+            {entities.map((e) => (
+              <Fragment key={`foot-${e.id}`}>{renderCells(`foot-${e.id}`, colTotals[String(e.id)])}</Fragment>
             ))}
+            {renderCells("foot-total", grand)}
           </tr>
         </tfoot>
       </table>

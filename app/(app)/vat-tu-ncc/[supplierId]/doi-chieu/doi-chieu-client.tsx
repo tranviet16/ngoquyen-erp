@@ -23,6 +23,8 @@ export interface ReconListRow {
   totalIn: number;
   totalPaid: number;
   closing: number;
+  /** Thuế hoá đơn + điều chỉnh: closing − opening − totalIn + totalPaid. */
+  otherAmount: number;
   signedBySupplier: boolean;
   signedDate: string | null;
   note: string | null;
@@ -45,6 +47,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
     opening: { accessor: (row: ReconListRow) => row.opening, kind: "currency" as const },
     totalIn: { accessor: (row: ReconListRow) => row.totalIn, kind: "currency" as const },
     totalPaid: { accessor: (row: ReconListRow) => row.totalPaid, kind: "currency" as const },
+    otherAmount: { accessor: (row: ReconListRow) => row.otherAmount, kind: "currency" as const },
     closing: { accessor: (row: ReconListRow) => row.closing, kind: "currency" as const },
     status: { accessor: (row: ReconListRow) => row.signedBySupplier
       ? `Đã ký ${row.signedDate ? formatDate(row.signedDate) : ""}`
@@ -109,6 +112,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
               <SortableTableHead column="opening" label="A. Dư mang sang" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
               <SortableTableHead column="totalIn" label="B. Cộng P/S" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
               <SortableTableHead column="totalPaid" label="C. Chuyển khoản" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
+              <SortableTableHead column="otherAmount" label="Thuế/ĐC" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
               <SortableTableHead column="closing" label="Tổng nợ" sort={reconSort.sort} onToggle={reconSort.toggleSort} align="right" className="font-medium" />
               <SortableTableHead column="status" label="Trạng thái" sort={reconSort.sort} onToggle={reconSort.toggleSort} className="font-medium" />
               <SortableTableHead column="note" label="Ghi chú" sort={reconSort.sort} onToggle={reconSort.toggleSort} className="font-medium" />
@@ -117,7 +121,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
           </thead>
           <tbody>
             {initialData.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">
+              <tr><td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
                 Chưa có kỳ đối chiếu. Chốt kỳ ở tab &quot;Chốt kỳ&quot; hoặc bấm &quot;Tạo kỳ đối chiếu&quot;.
               </td></tr>
             )}
@@ -131,6 +135,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
                 <td className="px-3 py-2 text-right whitespace-nowrap">{formatVND(r.opening)}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">{formatVND(r.totalIn)}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">{formatVND(r.totalPaid)}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{formatVND(r.otherAmount)}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap font-medium">{formatVND(r.closing)}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   {r.signedBySupplier ? (

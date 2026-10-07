@@ -7,7 +7,8 @@
  *     C=100.000.000 → Tổng nợ 255.005.120
  *   Kỳ 6/2026 (Excel 26/5→26/6): A=255.005.120, B=30.460.000
  *     (8.000@1.850 + 2×5.400@1.450), C=0 → Tổng nợ 285.465.120
- * Kỳ ERP chuẩn hóa 27→26 bao trùm đúng các ngày phiếu trên.
+ * Biên kỳ ERP: kỳ 5 = 28/4→26/5 (sau mốc số dư ban đầu 27/4), kỳ 6 = 27/5→26/6
+ * (nhãn Excel "26/5→26/6" chồng 1 ngày, chuẩn hoá thành 27/5).
  */
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 
@@ -101,22 +102,23 @@ async function seedTwoPeriods(ids: Awaited<ReturnType<typeof seedMasterData>>) {
   await seedDelivery(supplier.id, project.id, item.id, "2026-06-25", 5400);
 }
 
+const P5 = { from: "2026-04-28", to: "2026-05-26" };
+const P6 = { from: "2026-05-27", to: "2026-06-26" };
+
 async function closePeriod5(supplierId: number) {
-  const preview = await previewPeriodClose(supplierId, 2026, 5);
+  const preview = await previewPeriodClose(supplierId, P5);
   return commitPeriodClose(
     supplierId,
-    2026,
-    5,
+    P5,
     preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1850 })),
   );
 }
 
 async function closePeriod6(supplierId: number) {
-  const preview = await previewPeriodClose(supplierId, 2026, 6);
+  const preview = await previewPeriodClose(supplierId, P6);
   return commitPeriodClose(
     supplierId,
-    2026,
-    6,
+    P6,
     preview.deliveries.map((d) => ({
       deliveryId: d.id,
       unitPrice: d.qty === 8000 ? 1850 : 1450,
@@ -189,7 +191,7 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     expect(ledgerBalance).toBe(EXCEL.closingPeriod6);
 
     // Lưới an toàn: 0 mồ côi, 0 chênh trên cả 2 kỳ
-    const check = await checkPeriodConsistency(ids.supplier.id, "2026-04-27", "2026-06-26");
+    const check = await checkPeriodConsistency(ids.supplier.id, "2026-04-28", "2026-06-26");
     expect(check.orphanDeliveries).toHaveLength(0);
     expect(check.orphanEvents).toHaveLength(0);
     expect(check.mismatches).toHaveLength(0);
@@ -208,8 +210,8 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     expect(events.every((e) => Number(e.totalTt) === 14_800_000)).toBe(true);
 
     // Đổi giá 1 phiếu rồi chốt lại → event cập nhật, không nhân đôi
-    const preview = await previewPeriodClose(ids.supplier.id, 2026, 5);
-    await commitPeriodClose(ids.supplier.id, 2026, 5, [
+    const preview = await previewPeriodClose(ids.supplier.id, P5);
+    await commitPeriodClose(ids.supplier.id, P5, [
       { deliveryId: preview.deliveries[0].id, unitPrice: 1900 },
     ]);
     const updated = await prisma.ledgerTransaction.findMany({
@@ -230,14 +232,14 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
       data: { supplierId: ids.supplier.id, projectId: null, date: new Date("2026-05-11"), itemId: ids.item.id, qty: 50, unit: "viên" },
     });
 
-    const preview = await previewPeriodClose(ids.supplier.id, 2026, 5);
+    const preview = await previewPeriodClose(ids.supplier.id, P5);
     expect(preview.violations).toHaveLength(2);
     expect(preview.violations.map((v) => v.reason).sort()).toEqual([
       "missing_entity",
       "missing_project",
     ]);
     await expect(
-      commitPeriodClose(ids.supplier.id, 2026, 5, preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1000 }))),
+      commitPeriodClose(ids.supplier.id, P5, preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1000 }))),
     ).rejects.toThrow(/chưa đủ điều kiện/);
     // Không ghi partial
     expect(await prisma.ledgerTransaction.count({ where: { partyId: ids.supplier.id } })).toBe(0);
@@ -251,7 +253,7 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     await closePeriod6(ids.supplier.id);
 
     const list = await listReconciliationsDerived(ids.supplier.id);
-    const p5 = list.find((r) => r.periodFrom === "2026-04-27")!;
+    const p5 = list.find((r) => r.periodFrom === "2026-04-28")!;
     const p6 = list.find((r) => r.periodFrom === "2026-05-27")!;
 
     await signReconciliation(p5.id);

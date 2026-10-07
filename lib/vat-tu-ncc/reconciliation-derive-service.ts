@@ -5,7 +5,9 @@
  *   A (dư mang sang) = số dư tất cả (Chủ Thể, công trình) của NCC tại periodFrom − 1
  *   B (cộng phát sinh) = Σ lay_hang trong kỳ (dòng chi tiết từ phiếu chốt kỳ)
  *   C (chuyển khoản)  = Σ thanh_toan trong kỳ
- *   Tổng nợ = A + B − C (+ điều chỉnh trong kỳ)
+ *   D (thuế hoá đơn)  = Σ thue_hd trong kỳ (theo ngày ghi sổ; tách dòng riêng)
+ *   Tổng nợ = A + B − C + D (± điều chỉnh trong kỳ)
+ * `totalIn` chỉ gồm B (hàng); thuế lưu ở taxRows/totalTax trong snapshot JSON.
  * Ký → đông cứng snapshot (4 cột số + JSONB); closing kỳ k tự nhiên = opening kỳ k+1
  * vì cả hai cùng đọc một sổ cái tại hai mốc thời điểm.
  */
@@ -15,7 +17,11 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
+import { toBusinessDateUtc } from "@/lib/ledger/business-date";
 import { periodLabel } from "./period";
+import { supplierBalanceAsOf } from "./supplier-balance";
+import { addDays } from "./period-bounds";
+import { assertPeriodBounds, lockSuppliers } from "./period-lock";
 
 export interface ReconDetailRow {
   id: number;
@@ -38,6 +44,16 @@ export interface ReconPaymentRow {
   projectLabel: string;
 }
 
+export interface ReconTaxRow {
+  id: number;
+  date: string;
+  amount: number;
+  invoiceNo: string | null;
+  invoiceDate: string | null;
+  content: string | null;
+  projectLabel: string;
+}
+
 export interface ReconSubtotal {
   key: string;
   label: string;
@@ -50,8 +66,11 @@ export interface ReconComputed {
   totalIn: number;
   totalPaid: number;
   totalAdjust: number;
+  /** Σ thuế hoá đơn trong kỳ (không nằm trong totalIn). */
+  totalTax: number;
   closing: number;
   layHangRows: ReconDetailRow[];
+  taxRows: ReconTaxRow[];
   thanhToanRows: ReconPaymentRow[];
   adjustRows: ReconPaymentRow[];
   byProject: ReconSubtotal[];
@@ -82,25 +101,6 @@ const num = (v: Prisma.Decimal | number | string | null | undefined) => (v == nu
 // Structural Pick thay vì Prisma.TransactionClient vì client đã $extends.
 type DbClient = Pick<typeof prisma, "$queryRaw" | "ledgerTransaction" | "supplierReconciliation" | "item" | "project">;
 
-/** Số dư NCC (mọi Chủ Thể, mọi công trình) tại thời điểm asOf — cùng công thức balance-service. */
-async function supplierBalanceAsOf(supplierId: number, asOf: Date, db: DbClient = prisma): Promise<number> {
-  const rows = await db.$queryRaw<{ balance_tt: Prisma.Decimal }[]>`
-    SELECT
-      COALESCE((
-        SELECT SUM("balanceTt") FROM ledger_opening_balances
-        WHERE "ledgerType" = 'material' AND "partyId" = ${supplierId}
-      ), 0)
-      +
-      COALESCE((
-        SELECT SUM(CASE WHEN "transactionType" = 'thanh_toan' THEN -"totalTt" ELSE "totalTt" END)
-        FROM ledger_transactions
-        WHERE "ledgerType" = 'material' AND "partyId" = ${supplierId}
-          AND "deletedAt" IS NULL AND date <= ${asOf}
-      ), 0) AS balance_tt
-  `;
-  return num(rows[0]?.balance_tt);
-}
-
 async function computeReconciliation(
   supplierId: number,
   from: Date,
@@ -115,7 +115,7 @@ async function computeReconciliation(
         ledgerType: "material",
         partyId: supplierId,
         deletedAt: null,
-        date: { gte: from, lte: to },
+        date: { gte: from, lt: addDays(to, 1) },
       },
       orderBy: [{ date: "asc" }, { id: "asc" }],
     }),
@@ -137,6 +137,8 @@ async function computeReconciliation(
   const layHangRows: ReconDetailRow[] = [];
   const thanhToanRows: ReconPaymentRow[] = [];
   const adjustRows: ReconPaymentRow[] = [];
+  const taxRows: ReconTaxRow[] = [];
+  let totalTax = 0;
   let totalIn = 0;
   let totalPaid = 0;
   let totalAdjust = 0;
@@ -157,6 +159,17 @@ async function computeReconciliation(
         projectId: t.projectId,
         projectLabel,
         content: t.content,
+      });
+    } else if (t.transactionType === "thue_hd") {
+      totalTax += amount;
+      taxRows.push({
+        id: t.id,
+        date: isoDate(t.date),
+        amount,
+        invoiceNo: t.invoiceNo,
+        invoiceDate: t.invoiceDate ? isoDate(t.invoiceDate) : null,
+        content: t.content,
+        projectLabel,
       });
     } else if (t.transactionType === "thanh_toan") {
       totalPaid += amount;
@@ -184,8 +197,10 @@ async function computeReconciliation(
     totalIn,
     totalPaid,
     totalAdjust,
-    closing: opening + totalIn - totalPaid + totalAdjust,
+    totalTax,
+    closing: opening + totalIn + totalTax - totalPaid + totalAdjust,
     layHangRows,
+    taxRows,
     thanhToanRows,
     adjustRows,
     byProject: subtotal(layHangRows, (r) => [String(r.projectId ?? ""), r.projectLabel || "Không gán công trình"]),
@@ -226,6 +241,9 @@ export async function getReconciliationView(id: number): Promise<ReconView> {
 
   return {
     ...(computed as ReconComputed),
+    // Snapshot ký trước khi có thuế hoá đơn không chứa hai trường này.
+    taxRows: (computed as Partial<ReconComputed>).taxRows ?? [],
+    totalTax: (computed as Partial<ReconComputed>).totalTax ?? 0,
     id: recon.id,
     supplierId: recon.supplierId,
     supplierName: supplier?.name ?? `NCC #${recon.supplierId}`,
@@ -250,7 +268,7 @@ async function headerNames(supplierId: number, from: Date, to: Date, db: DbClien
     LEFT JOIN entities e ON e.id = t."entityId"
     LEFT JOIN projects p ON p.id = t."projectId"
     WHERE t."ledgerType" = 'material' AND t."partyId" = ${supplierId}
-      AND t."deletedAt" IS NULL AND t.date BETWEEN ${from} AND ${to}
+      AND t."deletedAt" IS NULL AND t.date >= ${from} AND t.date < ${addDays(to, 1)}
   `;
   return {
     entityNames: [...new Set(rows.map((r) => r.entity_name).filter((n): n is string => !!n))].sort(),
@@ -276,6 +294,7 @@ export async function listReconciliationsDerived(supplierId: number) {
           totalIn: num(r.totalIn),
           totalPaid: num(r.totalPaid),
           closing: num(r.closingBalance),
+          otherAmount: num(r.closingBalance) - num(r.openingBalance) - num(r.totalIn) + num(r.totalPaid),
           signedBySupplier: true,
           signedDate: r.signedDate ? isoDate(r.signedDate) : null,
           note: r.note,
@@ -290,6 +309,7 @@ export async function listReconciliationsDerived(supplierId: number) {
         totalIn: c.totalIn,
         totalPaid: c.totalPaid,
         closing: c.closing,
+        otherAmount: c.closing - c.opening - c.totalIn + c.totalPaid,
         signedBySupplier: false,
         signedDate: null,
         note: r.note,
@@ -304,18 +324,49 @@ export async function signReconciliation(id: number) {
   const recon = await loadRecon(id);
 
   await prisma.$transaction(async (tx) => {
-    // Cùng khóa với commitPeriodClose — không cho ký khi đang chốt kỳ dở dang,
-    // và re-check cờ ký trong transaction để chặn 2 lần ký đồng thời.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vat-tu-close:${recon.supplierId}:${isoDate(recon.periodFrom)}`}))`;
+    // Khoá NCC (cùng khoá với chốt kỳ, phiếu ngày, sổ cái vật tư, đợt thanh toán): mọi ghi
+    // đồng thời hoặc xong trước và nằm trong snapshot, hoặc chờ rồi bị khoá kỳ từ chối.
+    // Re-check cờ ký trong transaction để chặn 2 lần ký đồng thời.
+    await lockSuppliers(tx, [recon.supplierId]);
     const current = await tx.supplierReconciliation.findFirst({
       where: { id, deletedAt: null },
-      select: { signedBySupplier: true },
+      select: { signedBySupplier: true, periodFrom: true, periodTo: true },
     });
     if (!current) throw new Error(`Kỳ đối chiếu #${id} không tồn tại`);
     if (current.signedBySupplier) throw new Error("Kỳ này đã được ký.");
+    const from = toBusinessDateUtc(current.periodFrom);
+    const to = toBusinessDateUtc(current.periodTo);
+    const label = periodLabel(from, to);
 
-    const computed = await computeReconciliation(recon.supplierId, recon.periodFrom, recon.periodTo, tx);
-    const names = await headerNames(recon.supplierId, recon.periodFrom, recon.periodTo, tx);
+    await assertPeriodBounds(recon.supplierId, { from, to }, tx, id);
+
+    // Ký sẽ khoá vĩnh viễn ngày trong kỳ — phiếu chưa có phát sinh trong sổ cái lúc này
+    // sẽ không bao giờ vào sổ được nữa, nên bắt buộc chốt đủ (kể cả phiếu thiếu công trình).
+    const missingWhere = {
+      supplierId: recon.supplierId,
+      deletedAt: null,
+      date: { gte: from, lt: addDays(to, 1) },
+      ledgerTransactions: { none: { deletedAt: null } },
+    };
+    const [missingCount, missingSample] = await Promise.all([
+      tx.supplierDeliveryDaily.count({ where: missingWhere }),
+      tx.supplierDeliveryDaily.findMany({
+        where: missingWhere,
+        orderBy: [{ date: "asc" }, { id: "asc" }],
+        take: 10,
+        select: { id: true, date: true },
+      }),
+    ]);
+    if (missingCount > 0) {
+      const detail = missingSample.map((d) => `#${d.id} (${isoDate(d.date)})`).join(", ");
+      throw new Error(
+        `Không thể ký kỳ ${label}: ${missingCount} phiếu trong kỳ chưa được chốt vào sổ cái — ${detail}. ` +
+          `Chốt lại kỳ trước khi ký.`,
+      );
+    }
+
+    const computed = await computeReconciliation(recon.supplierId, from, to, tx);
+    const names = await headerNames(recon.supplierId, from, to, tx);
     const snapshot = { ...computed, ...names };
 
     await tx.supplierReconciliation.update({
@@ -331,7 +382,7 @@ export async function signReconciliation(id: number) {
         updatedAt: new Date(),
       },
     });
-  });
+  }, { timeout: 60_000, maxWait: 10_000 }); // đọc snapshot toàn kỳ dưới khoá NCC — vượt mặc định 5s
   revalidatePath(`/vat-tu-ncc/${recon.supplierId}/doi-chieu`);
 }
 
@@ -346,7 +397,12 @@ export async function unsignReconciliation(id: number) {
   if (!recon.signedBySupplier) throw new Error("Kỳ này chưa ký.");
 
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vat-tu-close:${recon.supplierId}:${isoDate(recon.periodFrom)}`}))`;
+    await lockSuppliers(tx, [recon.supplierId]);
+    const current = await tx.supplierReconciliation.findFirst({
+      where: { id, deletedAt: null },
+      select: { signedBySupplier: true },
+    });
+    if (!current?.signedBySupplier) throw new Error("Kỳ này chưa ký.");
     const laterSigned = await tx.supplierReconciliation.findFirst({
       where: {
         supplierId: recon.supplierId,

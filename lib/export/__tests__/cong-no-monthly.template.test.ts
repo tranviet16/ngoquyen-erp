@@ -7,13 +7,18 @@ const mockDb = vi.hoisted(() => ({
   contractor: { findMany: vi.fn() },
   entity: { findUnique: vi.fn() },
 }));
-const mockAgg = vi.hoisted(() => ({ queryMonthlyByParty: vi.fn() }));
+const mockAgg = vi.hoisted(() => ({ queryWindowByParty: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 vi.mock("@/lib/ledger/ledger-aggregations", () => mockAgg);
 
 import { buildCongNoMonthlyExcel } from "@/lib/export/templates/cong-no-monthly";
 
 const D = (n: number) => new Prisma.Decimal(n);
+const MAY = {
+  from: new Date("2026-05-01T00:00:00.000Z"),
+  to: new Date("2026-05-31T00:00:00.000Z"),
+  label: "Tháng 5/2026",
+};
 
 beforeEach(() => vi.resetAllMocks());
 
@@ -25,7 +30,7 @@ function readSheet(buf: Buffer) {
 
 describe("buildCongNoMonthlyExcel", () => {
   it("builds a sheet with title, headers, a data row and a TỔNG row", async () => {
-    mockAgg.queryMonthlyByParty.mockResolvedValue([
+    mockAgg.queryWindowByParty.mockResolvedValue([
       {
         partyId: 1,
         openingTt: D(100),
@@ -41,19 +46,20 @@ describe("buildCongNoMonthlyExcel", () => {
     mockDb.supplier.findMany.mockResolvedValue([{ id: 1, name: "NCC A" }]);
     mockDb.entity.findUnique.mockResolvedValue({ name: "Chủ thể X" });
 
-    const buf = await buildCongNoMonthlyExcel("material", 2026, 5, 7);
+    const buf = await buildCongNoMonthlyExcel("material", MAY, 7);
     const { names, aoa } = readSheet(buf);
 
     expect(names).toEqual(["Báo cáo tháng"]);
     expect(String(aoa[0][0])).toContain("Tháng 5/2026");
     expect(aoa[1]).toContain("Danh Mục");
     expect(aoa[2]).toContain("NCC A");
+    expect(mockAgg.queryWindowByParty).toHaveBeenCalledWith("material", { from: MAY.from, to: MAY.to, entityId: 7 });
     const totalRow = aoa.find((r) => r.includes("TỔNG"))!;
     expect(totalRow).toContain(100); // summed openingTt
   });
 
   it("falls back to a '#id' label when the party is missing", async () => {
-    mockAgg.queryMonthlyByParty.mockResolvedValue([
+    mockAgg.queryWindowByParty.mockResolvedValue([
       {
         partyId: 9,
         openingTt: D(0),
@@ -69,7 +75,7 @@ describe("buildCongNoMonthlyExcel", () => {
     mockDb.contractor.findMany.mockResolvedValue([]);
     mockDb.entity.findUnique.mockResolvedValue(null);
 
-    const buf = await buildCongNoMonthlyExcel("labor", 2026, 5, 7);
+    const buf = await buildCongNoMonthlyExcel("labor", MAY, 7);
     const { aoa } = readSheet(buf);
     expect(aoa[2]).toContain("Đội #9");
   });

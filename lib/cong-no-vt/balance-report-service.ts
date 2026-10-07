@@ -5,14 +5,19 @@
  * reports Đầu kỳ / Phát sinh / Đã trả / Cuối kỳ for both TT (thực tế) and HĐ (hóa đơn).
  * Single $queryRaw, FULL OUTER JOIN opening_balances ⋈ transactions.
  *
- * `dieu_chinh` rows ARE included — positive amount → phát sinh, negative → đã trả — using
+ * `thue_hd` is merged into Phát sinh (same bucket as lay_hang). `dieu_chinh` rows ARE included — positive amount → phát sinh, negative → đã trả — using
  * the same sign-split as queryMonthlyByParty's `period` CTE, so the cumulative numbers match
- * báo cáo tháng. year/month act as a cutoff ("tính đến hết tháng X"), not an in-month window.
+ * báo cáo tháng.
+ *
+ * Window semantics (same as queryWindowByParty): Đầu kỳ = số dư ban đầu + Σ có dấu `date < from`
+ * (no `from` ⇒ chỉ số dư ban đầu); Phát sinh / Đã trả over `date >= from AND date < to + 1 ngày`.
+ * Legacy year/month act as a cutoff ("tính đến hết tháng X") = `to` at the month's last day.
  */
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
+import { increaseSql, decreaseSql, signedSql } from "@/lib/ledger/transaction-classification";
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -61,6 +66,9 @@ export interface DetailReportFilters {
   ledgerType: LedgerType;
   year?: number;
   month?: number;
+  /** Cửa sổ `[from, to]` UTC 00:00 (hai đầu bao gồm); `to` ưu tiên hơn year/month. */
+  from?: Date;
+  to?: Date;
   entityIds?: number[];
   projectIds?: number[];
   showZero: boolean;
@@ -101,23 +109,23 @@ export async function queryDetailReport(
   filters: DetailReportFilters
 ): Promise<DetailReportResult> {
   const { ledgerType, year, month, entityIds, projectIds, showZero } = filters;
+  const from = filters.from ?? null;
 
-  // ── Cutoff bound ───────────────────────────────────────────────────────────
-  // periodEndExclusive: exclusive upper bound (< comparison) — first day of next month.
-  // Includes all transactions on the last day regardless of time component.
+  // ── Window bounds ──────────────────────────────────────────────────────────
+  // periodEndExclusive: exclusive upper bound (< comparison) — the day after `to`
+  // (or the 1st of the next month for legacy year/month), all in UTC like ledger dates.
   let periodEndExclusive: Date | null = null;
   let periodEnd: Date | null = null; // for the returned metadata field only
 
-  if (year != null && month != null) {
-    periodEndExclusive = new Date(year, month, 1); // 1st of NEXT month (local), 00:00:00
-    periodEnd = new Date(periodEndExclusive.getTime() - 1);
+  if (filters.to != null) {
+    periodEndExclusive = new Date(filters.to.getTime() + 86_400_000);
+  } else if (year != null && month != null) {
+    periodEndExclusive = new Date(Date.UTC(year, month, 1)); // 1st of NEXT month, UTC 00:00
   }
+  if (periodEndExclusive) periodEnd = new Date(periodEndExclusive.getTime() - 1);
 
   const entityIdsArr = entityIds && entityIds.length > 0 ? entityIds : null;
   const projectIdsArr = projectIds && projectIds.length > 0 ? projectIds : null;
-
-  // No cutoff → max date sentinel (no upper bound).
-  const effectiveCutoff = periodEndExclusive ?? new Date(8640000000000000);
 
   // ── Single GROUP BY query — FULL OUTER JOIN ob ⋈ tx ────────────────────────
   const rawRows = await prisma.$queryRaw<RawRow[]>`
@@ -132,26 +140,16 @@ export async function queryDetailReport(
     ),
     tx AS (
       SELECT "entityId", "partyId", "projectId",
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'lay_hang' THEN "totalTt"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalTt" > 0 THEN "totalTt"
-          ELSE 0 END), 0) AS phat_sinh_tt,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'lay_hang' THEN "totalHd"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalHd" > 0 THEN "totalHd"
-          ELSE 0 END), 0) AS phat_sinh_hd,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'thanh_toan' THEN "totalTt"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalTt" < 0 THEN -"totalTt"
-          ELSE 0 END), 0) AS da_tra_tt,
-        COALESCE(SUM(CASE
-          WHEN "transactionType" = 'thanh_toan' THEN "totalHd"
-          WHEN "transactionType" = 'dieu_chinh' AND "totalHd" < 0 THEN -"totalHd"
-          ELSE 0 END), 0) AS da_tra_hd
+        COALESCE(SUM(${signedSql("totalTt")}) FILTER (WHERE ${from}::timestamp IS NOT NULL AND "date" < ${from}::timestamp), 0) AS open_tx_tt,
+        COALESCE(SUM(${signedSql("totalHd")}) FILTER (WHERE ${from}::timestamp IS NOT NULL AND "date" < ${from}::timestamp), 0) AS open_tx_hd,
+        COALESCE(SUM(${increaseSql("totalTt")}) FILTER (WHERE ${from}::timestamp IS NULL OR "date" >= ${from}::timestamp), 0) AS phat_sinh_tt,
+        COALESCE(SUM(${increaseSql("totalHd")}) FILTER (WHERE ${from}::timestamp IS NULL OR "date" >= ${from}::timestamp), 0) AS phat_sinh_hd,
+        COALESCE(SUM(${decreaseSql("totalTt")}) FILTER (WHERE ${from}::timestamp IS NULL OR "date" >= ${from}::timestamp), 0) AS da_tra_tt,
+        COALESCE(SUM(${decreaseSql("totalHd")}) FILTER (WHERE ${from}::timestamp IS NULL OR "date" >= ${from}::timestamp), 0) AS da_tra_hd
       FROM ledger_transactions
       WHERE "ledgerType" = ${ledgerType}
         AND "deletedAt" IS NULL
-        AND "date" < ${effectiveCutoff}
+        AND (${periodEndExclusive}::timestamp IS NULL OR "date" < ${periodEndExclusive}::timestamp)
         AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
         AND (${projectIdsArr}::int[] IS NULL OR "projectId" = ANY(${projectIdsArr}::int[]))
       GROUP BY "entityId", "partyId", "projectId"
@@ -160,8 +158,8 @@ export async function queryDetailReport(
       COALESCE(ob."entityId", tx."entityId")   AS entity_id,
       COALESCE(ob."partyId",  tx."partyId")    AS party_id,
       COALESCE(ob."projectId", tx."projectId") AS project_id,
-      COALESCE(ob.opening_tt, 0)               AS opening_tt,
-      COALESCE(ob.opening_hd, 0)               AS opening_hd,
+      COALESCE(ob.opening_tt, 0) + COALESCE(tx.open_tx_tt, 0) AS opening_tt,
+      COALESCE(ob.opening_hd, 0) + COALESCE(tx.open_tx_hd, 0) AS opening_hd,
       COALESCE(tx.phat_sinh_tt, 0)             AS phat_sinh_tt,
       COALESCE(tx.phat_sinh_hd, 0)             AS phat_sinh_hd,
       COALESCE(tx.da_tra_tt, 0)                AS da_tra_tt,

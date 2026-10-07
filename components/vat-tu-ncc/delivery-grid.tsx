@@ -40,6 +40,8 @@ type DeliveryRow = {
   note: string | null;
 };
 
+type QuoteOption = { id: number; itemId: number; unitPrice: number; effectiveFrom: Date };
+
 type ItemOption = { id: number; code: string; name: string; unit: string };
 type ProjectOption = { id: number; code: string; name: string };
 
@@ -62,12 +64,13 @@ interface Props {
   initialData: DeliveryRow[];
   items: ItemOption[];
   projects: ProjectOption[];
+  quotes: QuoteOption[];
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
 }
 
-export function DeliveryGrid({ supplierId, initialData, items, projects, canCreate, canEdit, canDelete }: Props) {
+export function DeliveryGrid({ supplierId, initialData, items, projects, quotes, canCreate, canEdit, canDelete }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<DeliveryRow | null>(null);
@@ -174,6 +177,7 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
     itemId: editTarget.itemId,
     qty: Number(editTarget.qty),
     unit: editTarget.unit,
+    unitPrice: editTarget.unitPrice == null ? undefined : Number(editTarget.unitPrice),
     cbVatTu: editTarget.cbVatTu ?? undefined,
     chiHuyCt: editTarget.chiHuyCt ?? undefined,
     keToan: editTarget.keToan ?? undefined,
@@ -205,12 +209,12 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, canCrea
       />
 
       <CrudDialog title="Thêm phiếu nhập vật tư" open={createOpen} onOpenChange={setCreateOpen}>
-        <DeliveryForm supplierId={supplierId} items={items} projects={projects} onSubmit={handleCreate} />
+        <DeliveryForm mode="create" supplierId={supplierId} quotes={quotes} items={items} projects={projects} onSubmit={handleCreate} />
       </CrudDialog>
 
       <CrudDialog title="Sửa phiếu nhập vật tư" open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         {editTarget && (
-          <DeliveryForm supplierId={supplierId} items={items} projects={projects}
+          <DeliveryForm mode="edit" supplierId={supplierId} quotes={quotes} items={items} projects={projects}
             defaultValues={defaultValues} onSubmit={handleEdit} />
         )}
       </CrudDialog>

@@ -21,6 +21,7 @@ export default async function CongNoVtPage() {
         { href: "/cong-no-vt/so-du-ban-dau", label: "Số dư ban đầu" },
         { href: "/cong-no-vt/bao-cao-thang", label: "Báo cáo tháng" },
         { href: "/cong-no-vt/chi-tiet", label: "Công nợ lũy kế" },
+        { href: "/cong-no-vt/tong-hop", label: "Tổng hợp NCC × Chủ thể" },
       ]}
       summary={summary}
       parties={parties}

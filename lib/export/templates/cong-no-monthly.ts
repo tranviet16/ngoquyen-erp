@@ -1,10 +1,12 @@
 /**
- * Export template: Báo cáo tháng Công nợ Vật tư / Nhân công
- * Pivot: party (NCC / Đội) × 1 month, 10 columns + dòng tổng (matches SOP).
+ * Export template: Báo cáo Công nợ Vật tư / Nhân công theo cửa sổ thời gian
+ * Pivot: party (NCC / Đội) × 1 cửa sổ `[from, to]`, 10 columns + dòng tổng (matches SOP).
+ * Nhãn kỳ do server tính từ cửa sổ đã kiểm tra (resolveReportPeriod), không nhận từ client.
  */
 
 import { createWorkbook, addSheet, workbookToBuffer, type SheetColumn } from "../excel-exporter";
-import { queryMonthlyByParty } from "@/lib/ledger/ledger-aggregations";
+import { queryWindowByParty } from "@/lib/ledger/ledger-aggregations";
+import type { ResolvedReportPeriod } from "@/lib/ledger/report-period";
 import { prisma } from "@/lib/prisma";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
 
@@ -23,11 +25,10 @@ const COLUMNS: SheetColumn[] = [
 
 export async function buildCongNoMonthlyExcel(
   ledgerType: LedgerType,
-  year: number,
-  month: number,
+  period: Pick<ResolvedReportPeriod, "from" | "to" | "label">,
   entityId: number
 ): Promise<Buffer> {
-  const rawRows = await queryMonthlyByParty(ledgerType, year, month, entityId);
+  const rawRows = await queryWindowByParty(ledgerType, { from: period.from, to: period.to, entityId });
 
   const partyIds = rawRows.map((r) => r.partyId);
   const [parties, entity] = await Promise.all([
@@ -80,7 +81,7 @@ export async function buildCongNoMonthlyExcel(
   const wb = createWorkbook();
   const label = ledgerType === "material" ? "Vật tư" : "Nhân công";
   addSheet(wb, "Báo cáo tháng", COLUMNS, [...dataRows, totalRow], {
-    title: `Báo cáo tháng Công nợ ${label} — Tháng ${month}/${year} — Chủ thể: ${entity?.name ?? `#${entityId}`}`,
+    title: `Báo cáo Công nợ ${label} — ${period.label} — Chủ thể: ${entity?.name ?? `#${entityId}`}`,
   });
 
   return workbookToBuffer(wb);

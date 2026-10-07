@@ -6,15 +6,20 @@
 import * as XLSX from "xlsx";
 import type { ParsedRow } from "./adapter-types";
 import { parseExcelDate, parseVndNumber } from "./excel-utils";
+import type { TransactionType } from "@/lib/ledger/transaction-classification";
 
 type ParseLedgerOptions = {
   partyHeaders?: string[];
   itemHeaders?: string[];
+  /** Cho phép nhận loại thuế hoá đơn (chỉ sổ vật tư). Mặc định false: sổ nhân công không có thue_hd. */
+  allowTax?: boolean;
 };
 
-function normalizeTxType(val: unknown): "lay_hang" | "thanh_toan" | "dieu_chinh" {
+/** "Trả" được kiểm trước "thuế" để nhãn như "Thuế đã trả" vẫn là thanh toán. */
+export function normalizeTxType(val: unknown, allowTax = false): TransactionType {
   const s = String(val ?? "").toLowerCase().trim();
   if (s.includes("trả") || s.includes("tra") || s.includes("payment")) return "thanh_toan";
+  if (allowTax && (s.includes("thuế") || s.includes("thue") || s.includes("tax"))) return "thue_hd";
   if (s.includes("điều") || s.includes("dieu") || s.includes("adjust")) return "dieu_chinh";
   return "lay_hang";
 }
@@ -72,7 +77,7 @@ export function parseTxSheet(
         kind: "tx",
         date: r[cDate],
         supplierName,
-        transactionType: normalizeTxType(r[cType]),
+        transactionType: normalizeTxType(r[cType], options.allowTax),
         amountTt: parseVndNumber(r[cTotalTt]),
         amountHd: parseVndNumber(r[cTotalHd]),
         invoiceNo: cInvoice >= 0 ? String(r[cInvoice] ?? "").trim() || undefined : undefined,

@@ -7,9 +7,13 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { assertPeriodOpen } from "@/lib/vat-tu-ncc/period-lock";
+import { toBusinessDateUtc } from "@/lib/ledger/business-date";
+import { assertPeriodOpen, lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
 
-type SyncClient = Pick<typeof prisma, "ledgerTransaction" | "paymentRoundItem" | "paymentRound">;
+type SyncClient = Pick<
+  typeof prisma,
+  "ledgerTransaction" | "paymentRoundItem" | "paymentRound" | "supplierReconciliation" | "$executeRaw"
+>;
 
 export async function syncClosedRoundToLedger(roundId: number, client: SyncClient, closedAt: Date) {
   const round = await client.paymentRound.findUnique({
@@ -23,15 +27,20 @@ export async function syncClosedRoundToLedger(roundId: number, client: SyncClien
     select: { id: true, entityId: true, supplierId: true, projectId: true, soDuyet: true },
   });
 
+  // Ngày sổ cái = ngày nghiệp vụ Asia/Bangkok tại UTC 00:00 (không lưu giờ đóng đợt).
+  const businessDate = toBusinessDateUtc(closedAt);
   const zero = new Prisma.Decimal(0);
+  // Khoá mọi NCC của đợt (id tăng dần, chống deadlock) trước khi kiểm khoá kỳ và ghi —
+  // ký kỳ đồng thời phải chờ đợt đóng xong hoặc ngược lại. `client` là transaction của closeRound.
+  await lockSuppliers(client, items.map((item) => item.supplierId));
   for (const item of items) {
     // Ngày ghi sổ = ngày đóng đợt; nếu kỳ NCC đã ký bao trùm ngày này thì không
     // đóng được — khoản chi phải ghi dieu_chinh/kỳ sau theo chính sách khóa kỳ.
-    await assertPeriodOpen(item.supplierId, closedAt);
+    await assertPeriodOpen(item.supplierId, businessDate, client);
     const amountTt = item.soDuyet as Prisma.Decimal;
     const data = {
       ledgerType: "material" as const,
-      date: closedAt,
+      date: businessDate,
       transactionType: "thanh_toan" as const,
       entityId: item.entityId,
       partyId: item.supplierId,

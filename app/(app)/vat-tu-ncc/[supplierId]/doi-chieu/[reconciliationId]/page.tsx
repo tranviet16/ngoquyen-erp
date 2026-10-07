@@ -188,6 +188,27 @@ export default async function ReconDetailPage({ params, searchParams }: Props) {
               <td colSpan={7}>C. Chuyển khoản trong kỳ</td>
               <td className="text-right whitespace-nowrap">{formatVND(view.totalPaid)}</td>
             </tr>
+            {view.taxRows.length > 0 && (
+              <>
+                {view.taxRows.map((r) => (
+                  <tr key={r.id}>
+                    <td></td>
+                    <td className="whitespace-nowrap">{formatDate(r.date)}</td>
+                    <td colSpan={4}>
+                      {r.content ?? "Thuế hoá đơn"}
+                      {r.invoiceNo ? ` — HĐ ${r.invoiceNo}` : ""}
+                      {r.invoiceDate ? ` ngày ${formatDate(r.invoiceDate)}` : ""}
+                      {r.projectLabel ? ` (${r.projectLabel})` : ""}
+                    </td>
+                    <td colSpan={2} className="text-right whitespace-nowrap">{formatVND(r.amount)}</td>
+                  </tr>
+                ))}
+                <tr className="bg-muted/50 font-semibold">
+                  <td colSpan={7}>D. Thuế hoá đơn trong kỳ</td>
+                  <td className="text-right whitespace-nowrap">{formatVND(view.totalTax)}</td>
+                </tr>
+              </>
+            )}
             {view.adjustRows.length > 0 && (
               <>
                 {view.adjustRows.map((r) => (
@@ -205,7 +226,7 @@ export default async function ReconDetailPage({ params, searchParams }: Props) {
               </>
             )}
             <tr className="bg-muted font-bold">
-              <td colSpan={7}>Tổng nợ (A + B − C{view.adjustRows.length > 0 ? " + Điều chỉnh" : ""})</td>
+              <td colSpan={7}>Tổng nợ (A + B − C{view.taxRows.length > 0 ? " + D" : ""}{view.adjustRows.length > 0 ? " ± Điều chỉnh" : ""})</td>
               <td className="text-right whitespace-nowrap">{formatVND(totalDebt)}</td>
             </tr>
           </tbody>

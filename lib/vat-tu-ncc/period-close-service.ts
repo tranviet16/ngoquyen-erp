@@ -1,10 +1,11 @@
 "use server";
 
 /**
- * Chốt kỳ vật tư NCC (kỳ cố định 27 tháng trước → 26 tháng đích):
+ * Chốt kỳ vật tư NCC với biên kỳ `[from, to]` tuỳ chọn (mặc định gợi ý 27→26):
  * kế toán gắn đơn giá hàng loạt cho phiếu ngày trong kỳ, hệ thống sinh/đồng bộ
  * sự kiện lay_hang vào sổ cái công nợ vật tư — idempotent theo deliveryId.
  * Chủ Thể (entity) của event suy từ Project.entityId của từng phiếu.
+ * Biên kỳ theo lib/vat-tu-ncc/period-bounds.ts; commit chạy dưới khoá advisory theo NCC.
  */
 
 import { revalidatePath } from "next/cache";
@@ -12,8 +13,30 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { LedgerService } from "@/lib/ledger/ledger-service";
-import { periodRange, periodLabel } from "./period";
+import { parseIsoDateUtc } from "@/lib/ledger/business-date";
+import { periodLabel } from "./period";
 import { resolveQuotePrice } from "./quote-resolver";
+import { addDays, latestMarkerOf, validatePeriodBounds, type PeriodRangeDates } from "./period-bounds";
+import {
+  assertPeriodBounds,
+  loadPeriodBoundsContext,
+  lockSuppliers,
+  suggestRangeForSupplier,
+} from "./period-lock";
+
+/** Biên kỳ ISO `YYYY-MM-DD` (bao gồm cả hai đầu). */
+export interface PeriodRangeInput {
+  from: string;
+  to: string;
+}
+
+export interface PeriodMarkerView {
+  id: number;
+  from: string;
+  to: string;
+  label: string;
+  signed: boolean;
+}
 
 export interface PeriodCloseDeliveryRow {
   id: number;
@@ -43,26 +66,35 @@ export interface PeriodClosePreview {
   deliveries: PeriodCloseDeliveryRow[];
   violations: PeriodCloseViolation[];
   signedBlocked: boolean;
+  /** Kỳ gợi ý tiếp theo (liền kề marker gần nhất / sau mốc số dư ban đầu). */
+  suggestedRange: PeriodRangeInput;
+  latestMarker: PeriodMarkerView | null;
+  /** Mốc số dư ban đầu (ISO) — phiếu tới ngày này đã nằm trong số dư ban đầu. */
+  openingAsOf: string | null;
+  /** Lỗi biên kỳ của kỳ đang xem; khác null thì không chốt được. */
+  boundsError: string | null;
 }
 
 const isoDate = (d: Date) => d.toISOString().split("T")[0];
 
-async function findSignedOverlap(supplierId: number, from: Date, to: Date) {
-  return prisma.supplierReconciliation.findFirst({
-    where: {
-      supplierId,
-      signedBySupplier: true,
-      deletedAt: null,
-      periodFrom: { lte: to },
-      periodTo: { gte: from },
-    },
-    select: { id: true, periodFrom: true, periodTo: true },
-  });
+/** Kiểm tra biên kỳ từ client (ISO `YYYY-MM-DD`); ném lỗi thân thiện khi sai. */
+function parseRange(range: unknown): PeriodRangeDates {
+  if (typeof range !== "object" || range === null) throw new Error("Thiếu biên kỳ (từ ngày, đến ngày).");
+  const { from, to } = range as Record<string, unknown>;
+  if (typeof from !== "string" || typeof to !== "string") throw new Error("Biên kỳ phải là ngày YYYY-MM-DD.");
+  return { from: parseIsoDateUtc(from), to: parseIsoDateUtc(to) };
+}
+
+function assertSupplierId(supplierId: unknown): asserts supplierId is number {
+  if (typeof supplierId !== "number" || !Number.isInteger(supplierId) || supplierId <= 0) {
+    throw new Error("Mã NCC không hợp lệ");
+  }
 }
 
 async function loadPeriodData(supplierId: number, from: Date, to: Date) {
   const deliveries = await prisma.supplierDeliveryDaily.findMany({
-    where: { supplierId, deletedAt: null, date: { gte: from, lte: to } },
+    // Cận trên exclusive `< to + 1 ngày` theo quy ước ngày nghiệp vụ.
+    where: { supplierId, deletedAt: null, date: { gte: from, lt: addDays(to, 1) } },
     orderBy: [{ date: "asc" }, { id: "asc" }],
   });
 
@@ -101,18 +133,28 @@ function collectViolations(
   return violations;
 }
 
+/**
+ * Xem trước chốt kỳ. Không truyền `range` → dùng kỳ gợi ý. Luôn trả kỳ gợi ý, marker gần
+ * nhất và lỗi biên kỳ (nếu có) để UI khoá nút chốt.
+ */
 export async function previewPeriodClose(
   supplierId: number,
-  year: number,
-  month: number,
+  range?: PeriodRangeInput,
 ): Promise<PeriodClosePreview> {
   await requireReleasedModuleRequest("vat-tu-ncc");
-  const { from, to } = periodRange(year, month);
+  assertSupplierId(supplierId);
 
-  const [{ deliveries, projectMap, itemMap }, signed] = await Promise.all([
-    loadPeriodData(supplierId, from, to),
-    findSignedOverlap(supplierId, from, to),
-  ]);
+  const ctx = await loadPeriodBoundsContext(supplierId);
+  const latest = latestMarkerOf(ctx.markers);
+  const suggested = await suggestRangeForSupplier(supplierId, ctx);
+
+  const { from, to } = range === undefined ? suggested : parseRange(range);
+  const boundsError = validatePeriodBounds({ from, to }, ctx);
+  const signedBlocked = ctx.markers.some(
+    (m) => m.signed && m.from.getTime() <= to.getTime() && m.to.getTime() >= from.getTime(),
+  );
+
+  const { deliveries, projectMap, itemMap } = await loadPeriodData(supplierId, from, to);
 
   // Gợi ý giá — ưu tiên: (1) báo giá hiệu lực tại đúng ngày từng phiếu,
   // (2) fallback đơn giá lần nhập gần nhất trước kỳ theo từng vật tư.
@@ -168,42 +210,48 @@ export async function previewPeriodClose(
       };
     }),
     violations: collectViolations(deliveries, projectMap),
-    signedBlocked: !!signed,
+    signedBlocked,
+    suggestedRange: { from: isoDate(suggested.from), to: isoDate(suggested.to) },
+    latestMarker: latest
+      ? {
+          id: latest.id,
+          from: isoDate(latest.from),
+          to: isoDate(latest.to),
+          label: periodLabel(latest.from, latest.to),
+          signed: latest.signed,
+        }
+      : null,
+    openingAsOf: ctx.openingAsOf ? isoDate(ctx.openingAsOf) : null,
+    boundsError,
   };
 }
 
 export async function commitPeriodClose(
   supplierId: number,
-  year: number,
-  month: number,
+  range: PeriodRangeInput,
   prices: Array<{ deliveryId: number; unitPrice: number }>,
 ): Promise<{ closedCount: number; totalAmountTt: string }> {
   await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-  const { from, to } = periodRange(year, month);
+  assertSupplierId(supplierId);
+  const { from, to } = parseRange(range);
   const label = periodLabel(from, to);
-  const priceMap = new Map(prices.map((p) => [p.deliveryId, p.unitPrice]));
-  for (const [deliveryId, price] of priceMap) {
-    if (!(price >= 0)) throw new Error(`Đơn giá không hợp lệ cho phiếu #${deliveryId}`);
+  if (!Array.isArray(prices)) throw new Error("Danh sách đơn giá không hợp lệ");
+  const priceMap = new Map<number, number>();
+  for (const p of prices) {
+    if (!p || !Number.isInteger(p.deliveryId) || typeof p.unitPrice !== "number" || !(p.unitPrice >= 0) || !Number.isFinite(p.unitPrice)) {
+      throw new Error(`Đơn giá không hợp lệ cho phiếu #${p?.deliveryId}`);
+    }
+    priceMap.set(p.deliveryId, p.unitPrice);
   }
   const materialLedger = new LedgerService("material");
 
   const result = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`vat-tu-close:${supplierId}:${isoDate(from)}`}))`;
-
-    const signed = await tx.supplierReconciliation.findFirst({
-      where: {
-        supplierId,
-        signedBySupplier: true,
-        deletedAt: null,
-        periodFrom: { lte: to },
-        periodTo: { gte: from },
-      },
-      select: { id: true },
-    });
-    if (signed) throw new Error(`Kỳ ${label} đã được NCC ký xác nhận — không thể chốt lại.`);
+    // Khoá NCC (cùng khoá với mọi đường ghi khác) rồi kiểm biên kỳ trên dữ liệu trong tx.
+    await lockSuppliers(tx, [supplierId]);
+    await assertPeriodBounds(supplierId, { from, to }, tx);
 
     const deliveries = await tx.supplierDeliveryDaily.findMany({
-      where: { supplierId, deletedAt: null, date: { gte: from, lte: to } },
+      where: { supplierId, deletedAt: null, date: { gte: from, lt: addDays(to, 1) } },
       orderBy: [{ date: "asc" }, { id: "asc" }],
     });
     if (!deliveries.length) throw new Error(`Kỳ ${label} không có phiếu nào để chốt.`);
@@ -274,7 +322,7 @@ export async function commitPeriodClose(
     }
 
     return { closedCount: deliveries.length, totalAmountTt: totalAmountTt.toString() };
-  });
+  }, { timeout: 60_000, maxWait: 10_000 }); // ~10 round trip/phiếu (ghi + audit) — vượt mặc định 5s
 
   revalidatePath(`/vat-tu-ncc/${supplierId}/chot-ky`);
   revalidatePath(`/vat-tu-ncc/${supplierId}/ngay`);

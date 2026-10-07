@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import type { TransactionInput } from "@/lib/cong-no-vt/schemas";
+import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS } from "@/lib/ledger/transaction-classification";
 import type { LookupOption, TransactionRow } from "./transaction-grid";
 
 interface Props {
@@ -23,11 +24,10 @@ interface Props {
   onSubmit: (data: TransactionInput) => Promise<void>;
 }
 
-const TX_TYPES: { value: string; label: string }[] = [
-  { value: "lay_hang", label: "Lấy hàng" },
-  { value: "thanh_toan", label: "Thanh toán" },
-  { value: "dieu_chinh", label: "Điều chỉnh" },
-];
+const TX_TYPES: { value: string; label: string }[] = TRANSACTION_TYPES.map((t) => ({
+  value: t,
+  label: TRANSACTION_TYPE_LABELS[t],
+}));
 
 export function TransactionFormDialog({
   open, onOpenChange, title, partyLabel, entities, partyOptions, projects, items, defaultValues, onSubmit,

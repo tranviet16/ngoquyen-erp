@@ -6,6 +6,8 @@ vi.mock("@/lib/prisma", () => ({ prisma: mockDb }));
 import {
   querySummary,
   queryMonthlyByParty,
+  queryWindowByParty,
+  calendarMonthWindow,
   queryCurrentBalance,
   queryDebtMatrix,
 } from "@/lib/ledger/ledger-aggregations";
@@ -95,5 +97,114 @@ describe("queryDebtMatrix", () => {
     expect(Object.keys(matrix[0].cells).sort()).toEqual(["1", "2"]);
     expect(matrix[0].totals.openTt).toBe(30);
     expect(matrix[0].totals.closeTt).toBe(29);
+  });
+});
+
+describe("thue_hd classification in SQL", () => {
+  /** Gộp toàn bộ chuỗi SQL của lần gọi $queryRaw gần nhất (kể cả fragment lồng). */
+  const sqlOf = () => {
+    const [strings, ...values] = mockDb.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    const flatten = (v: unknown): string =>
+      v && typeof v === "object" && "strings" in (v as object)
+        ? (v as { strings: string[]; values: unknown[] }).strings
+            .map((s, i) => s + (i < (v as { values: unknown[] }).values.length ? flatten((v as { values: unknown[] }).values[i]) : ""))
+            .join("")
+        : "?";
+    return strings.map((s, i) => s + (i < values.length ? flatten(values[i]) : "")).join("");
+  };
+
+  it("querySummary counts thue_hd inside the lay hang bucket", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await querySummary("material", {});
+    expect(sqlOf()).toContain("'thue_hd'");
+  });
+
+  it("queryMonthlyByParty and queryDebtMatrix use the shared increase/decrease CASE", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await queryMonthlyByParty("material", 2026, 5, 1);
+    expect(sqlOf()).toContain("'thue_hd'");
+    mockDb.$queryRaw.mockClear();
+    await queryDebtMatrix("material", {});
+    expect(sqlOf()).toContain("'thue_hd'");
+    expect(sqlOf()).toContain("'dieu_chinh'");
+  });
+});
+
+describe("window semantics", () => {
+  /** Mọi tham số bind của lần gọi $queryRaw đầu tiên (kể cả trong fragment lồng). */
+  const paramsOf = (): unknown[] => {
+    const [, ...values] = mockDb.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    const out: unknown[] = [];
+    const walk = (v: unknown) => {
+      if (v && typeof v === "object" && "strings" in (v as object)) {
+        for (const inner of (v as { values: unknown[] }).values) walk(inner);
+      } else out.push(v);
+    };
+    values.forEach(walk);
+    return out;
+  };
+  const sqlText = () => {
+    const [strings] = mockDb.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    return strings.join("?");
+  };
+  const D = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
+
+  it("calendarMonthWindow trả ngày đầu và ngày cuối tháng UTC, kể cả tháng 2 nhuận", () => {
+    const w = calendarMonthWindow(2028, 2);
+    expect([w.from.toISOString(), w.to.toISOString()]).toEqual([
+      "2028-02-01T00:00:00.000Z",
+      "2028-02-29T00:00:00.000Z",
+    ]);
+    expect(() => calendarMonthWindow(2026, 13)).toThrow();
+  });
+
+  it("queryWindowByParty dùng cận trên loại trừ = to + 1 ngày và cận dưới from", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await queryWindowByParty("material", { from: D("2026-05-27"), to: D("2026-06-26"), entityId: 1 });
+    const times = paramsOf().filter((p): p is Date => p instanceof Date).map((p) => p.toISOString());
+    expect(times).toContain("2026-05-27T00:00:00.000Z"); // from
+    expect(times).toContain("2026-06-27T00:00:00.000Z"); // to + 1 ngày, loại trừ
+    expect(times).not.toContain("2026-06-26T00:00:00.000Z");
+    const sql = sqlText();
+    expect(sql).toContain("date < ");
+    expect(sql).not.toContain("date <=");
+  });
+
+  it("from/to null ⇒ truyền null (không giới hạn), số dư đầu kỳ chỉ còn số dư ban đầu", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await queryWindowByParty("material", { from: null, to: null, entityId: 1 });
+    expect(paramsOf().some((p) => p instanceof Date)).toBe(false);
+    expect(sqlText()).toContain("IS NOT NULL");
+  });
+
+  it("queryMonthlyByParty là cửa sổ tháng (cuối tháng + 1 ngày = ngày 1 tháng sau)", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await queryMonthlyByParty("material", 2026, 5, 1);
+    const times = paramsOf().filter((p): p is Date => p instanceof Date).map((p) => p.toISOString());
+    expect(times).toContain("2026-05-01T00:00:00.000Z");
+    expect(times).toContain("2026-06-01T00:00:00.000Z");
+  });
+
+  it("queryWindowByParty tính cuối kỳ = đầu kỳ + tăng − giảm", async () => {
+    mockDb.$queryRaw.mockResolvedValue([
+      { party_id: 3, open_tt: 310605120, open_hd: 0, lay_tt: 44400000, lay_hd: 0, tra_tt: 100500000, tra_hd: 0 },
+    ]);
+    const [row] = await queryWindowByParty("material", { from: D("2026-04-27"), to: D("2026-05-26"), entityId: 1 });
+    expect(row.closingTt.toNumber()).toBe(254505120);
+  });
+
+  it("queryDebtMatrix truyền from và to + 1 ngày, đầu kỳ cộng Σ có dấu trước from", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await queryDebtMatrix("material", { from: D("2026-05-27"), to: D("2026-06-26") });
+    const times = paramsOf().filter((p): p is Date => p instanceof Date).map((p) => p.toISOString());
+    expect(times).toContain("2026-05-27T00:00:00.000Z");
+    expect(times).toContain("2026-06-27T00:00:00.000Z");
+    expect(sqlText()).toContain("open_tx_tt");
+  });
+
+  it("queryDebtMatrix không truyền cửa sổ ⇒ không có tham số ngày", async () => {
+    mockDb.$queryRaw.mockResolvedValue([]);
+    await queryDebtMatrix("material", {});
+    expect(paramsOf().some((p) => p instanceof Date)).toBe(false);
   });
 });
