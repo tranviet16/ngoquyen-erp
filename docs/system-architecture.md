@@ -145,40 +145,90 @@ GET /api/tai-chinh/state-obligation/report       Period aggregation
 
 ---
 
-## Vật Tư NCC — Đối chiếu công nợ (Ledger Single-Source-of-Truth, 2026-07-29)
+## Vật Tư NCC — Công nợ, Báo giá, Thanh toán, Chốt Kỳ (2026-10-06)
 
-**Decision: `ledger_transactions` (`ledgerType="material"`) is the single source of truth.** `SupplierReconciliation` no longer stores hand-entered totals; it is a derived snapshot until signed.
+**Quy định cơ bản:**
+- **Nguồn sự thật công nợ:** `ledger_transactions` (ledgerType="material") + `ledger_opening_balances` — `SupplierReconciliation` là snapshot dẫn xuất, chỉ đông cứng khi ký.
+- **Quy ước ngày sổ cái:** `date` = ngày nghiệp vụ (business day) tại múi giờ Asia/Bangkok, lưu tại UTC 00:00 (TIMESTAMP(3) không múi giờ). Truy vấn cửa sổ: `date >= from AND date < to + 1 ngày`.
+- **Migration dữ liệu:** `20261006110000_normalize_ledger_dates_to_business_day` chuẩn hoá mọi `date` từ các nguồn cũ (đợt thanh toán ghi giờ đóng đợt, Excel import ghi nửa đêm → ngày nghiệp vụ Asia/Bangkok UTC 00:00). Có sao lưu DB trước chạy.
 
-### Write paths into the ledger
+### Phân loại giao dịch sổ cái
 
-1. **`lay_hang` (delivery):** Daily slips (`SupplierDeliveryDaily`) collect qty without price. At period close, the accountant assigns `unitPrice`/`totalAmount` per slip and `commitPeriodClose` (`lib/vat-tu-ncc/period-close-service.ts`) upserts one `LedgerTransaction` per slip, keyed by `deliveryId` (partial-unique index `ledger_tx_delivery_id_unique`) — re-running close is idempotent. `entityId` on the event is resolved from `SupplierDeliveryDaily.projectId → Project.entityId`; slips without a project are rejected, not silently defaulted.
-2. **`thanh_toan` (payment):** `PaymentRound.closeRound()` (approved→closed, `lib/payment/payment-service.ts`) transactionally invokes `syncClosedRoundToLedger` (`lib/payment/payment-ledger-sync.ts`), which writes one event per `PaymentRoundItem` where `category="vat_tu"` and `soDuyet > 0`, keyed by `paymentRoundItemId` (partial-unique index `ledger_tx_payment_item_unique`). Scope is intentionally `vat_tu` only — `nhan_cong`/`dich_vu`/`khac` are out of scope for this iteration.
-3. **`dieu_chinh` (adjustment):** Manual, only path allowed to write into an already-signed period (see lock below).
+`lib/ledger/transaction-classification.ts`: hằng + fragment SQL (không hàm TypeScript):
+- **`lay_hang`** (lấy hàng): tăng nợ — phiếu giao nhận ngày
+- **`thue_hd`** (thuế hoá đơn): tăng nợ ở cột TT — ghi qua tab Thanh toán (bắt buộc số hoá đơn, khác ngày HĐ)
+- **`thanh_toan`** (thanh toán): giảm nợ — chuyển khoản
+- **`dieu_chinh`** (điều chỉnh): dương → phát sinh, âm → trả; không bị khoá kỳ (lối thoát chuẩn)
 
-### Fixed close period
+SQL fragment `typeInSql(types[])`, `increaseSql(col)`, `decreaseSql(col)` dùng cho mọi truy vấn — thay `lay_hang`/`thue_hd`/`thanh_toan`/`dieu_chinh` từ fragment, không hardcode.
 
-`lib/vat-tu-ncc/period.ts` → `periodRange(year, month)` returns a fixed **27th of prior month → 26th of target month** window (UTC midnight), applied uniformly to every supplier — no per-supplier configuration.
+**Lỗ hổng đóng:** `patchMaterialTransaction(id, patch, client, authorized)` bỏ tham số `authorized`; dòng có `paymentRoundItemId` hoặc `deliveryId` (tự sinh) không sửa/xóa được qua action tay (guard server `AUTO_GENERATED_GUARD.assertManualEditable`).
 
-### Derived reconciliation & signing
+### Cửa sổ báo cáo — Bộ chọn mốc dùng chung
 
-`lib/vat-tu-ncc/reconciliation-derive-service.ts` computes, per unsigned period: **A** (opening = prior period's closing carry-over), **B** (Σ `lay_hang` in range), **C** (Σ `thanh_toan` in range) — all live queries against `ledger_transactions`, nothing stored. `signReconciliation`:
-- runs inside a `$transaction` guarded by the same advisory lock key as `commitPeriodClose` (`vat-tu-close:{supplierId}:{periodFrom}`), re-checking the signed flag inside the transaction to avoid a TOCTOU race with a concurrent close;
-- freezes `openingBalance/totalIn/totalPaid/closingBalance` (denormalized, display-only after signing) plus a full `signedSnapshotJson` (line items + subtotals) as the reprint source of truth.
+`lib/ledger/report-period.ts`: đổi preset (Toàn bộ / Năm / Quý / Tháng / Tuần ISO / Kỳ chuẩn / Tuỳ chọn) thành cửa sổ `[from, to]` UTC 00:00 (cả hai đầu bao gồm, truy vấn: `date >= from AND date < to + 1 ngày`).
 
-`unsignReconciliation` is admin-only and rejects if a later period for the same supplier is already signed (preserves the carry-over chain integrity).
+**Preset:**
+- **`all`**: mọi giao dịch
+- **`year`**: năm dương lịch (vd. 2026)
+- **`quarter`**: quý Q1–Q4
+- **`month`**: tháng (mặc định tháng hiện tại)
+- **`week`**: tuần ISO theo chuẩn (Thứ 2 – CN); tuần 53 chỉ ở năm có 53 tuần
+- **`ncc`**: "Kỳ chuẩn 27→26" — 27 tháng trước → 26 tháng chọn, áp dụng unifrom tất cả NCC
+- **`custom`**: từ ngày → đến ngày (ISO format YYYY-MM-DD)
 
-### Period lock
+Dùng cho `/cong-no-vt/{bao-cao-thang, chi-tiet, tong-hop}` và `lib/export/templates/cong-no-monthly.ts`.
 
-`assertPeriodOpen(supplierId, date)` (`lib/vat-tu-ncc/period-lock.ts`) rejects any write dated inside a signed period's `[periodFrom, periodTo]`. Enforced at every write path that can touch `ledgerType="material"` data: `delivery-service.ts` (create/update/soft-delete slip), `ledger-service.ts` (`upsertFromDelivery` and manual create/update/soft-delete), `payment-ledger-sync.ts` (payment close), and the admin ledger patch endpoint (`material-ledger-service.ts`) — signed periods are immutable even to admins; corrections go through `dieu_chinh` in the following period.
+### Truy vấn cửa sổ — Bất biến toán học
 
-### Data model additions
+`queryDebtMatrix(partyIds, window)` (hoặc `queryMaterialDetailReport` cho chi tiết) + tests chứng minh:
+1. **LH = Đầu kỳ + Phát sinh**: Cuối kỳ(đến T) = Lũy kế(T)
+2. **Tuần ISO tham gia tháng**: Tổng các tuần ISO trong tháng = Tháng (không lệch ngày biên)
+3. **`dieu_chinh` bị loại khỏi `balance-service`** khi tính số dư dẫn xuất từ phiếu / thanh toán (chỉ dùng cho điều chỉnh ngoại lệ)
 
-- `Project.entityId: Int? FK → Entity` — supplies the Chủ Thể for slips/events derived from a project.
-- `SupplierDeliveryDaily.unitPrice/totalAmount: Decimal?` — null until period close.
-- `LedgerTransaction.deliveryId: Int? FK` (unique), `.paymentRoundItemId: Int? FK` (unique), `.qty`/`.unitPriceSnapshot: Decimal?` — link + snapshot for events auto-generated from slips.
-- `SupplierReconciliation`: 4 total columns now nullable (populated only on sign); `signedSnapshotJson: Json?` added.
+### Biên kỳ chốt — Tuỳ chọn, liền kề marker gần nhất, khoá advisory
 
-**Migrations:** `20260729160000_add_project_entity_and_delivery_pricing`, `20260729161000_link_ledger_to_payment_item`, `20260729162000_reconciliation_derived_snapshot`.
+`lib/vat-tu-ncc/period-bounds.ts` + `period-lock.ts`:
+
+**Validate:** `validatePeriodBounds(range, context, selfId?)` (pure module):
+1. `from ≤ to`
+2. Không chồng kỳ đã ký
+3. `from > mốc số dư ban đầu + 1` (phiếu tới mốc đó nằm trong opening balance)
+4. Không chồng kỳ chưa ký; **liền kề marker gần nhất** — kỳ mới bắt đầu ngay sau marker muộn nhất, hoặc trùng khít marker chưa ký (tái chốt idempotent)
+
+**Lock & assertPeriodOpen:**
+- `lockSuppliers(tx, [supplierId1, supplierId2, ...])`: lấy advisory lock `pg_advisory_xact_lock(hashtext('vat-tu-ncc:' || id))` **trong transaction**, sắp xếp id tăng dần tránh deadlock
+- Mọi đường ghi (phiếu ngày, sổ cái vật tư, số dư ban đầu, chốt kỳ, ký/gỡ ký, đồng bộ đợt thanh toán) dùng cùng khoá trên NCC → không check-then-write race với ký kỳ
+- `assertPeriodOpen(supplierId, date, client)`: ném lỗi nếu `date` rơi vào kỳ ký → từ chối ghi, chênh lệch → `dieu_chinh` kỳ sau
+
+**Gợi ý kỳ tiếp theo:** `suggestNextPeriod()` dùng max(mốc opening + 1, ngày sau marker gần nhất, phiếu sớm nhất chưa có event) → cận từ, 26 cận đến.
+
+### Ký xác nhận & Snapshot
+
+`signReconciliation(supplierId, reconId)` (inside `$transaction` + khoá NCC):
+- **Bảng dẫn xuất trước ký**: A (opening = cuối kỳ trước), B (Σ lay_hang + thue_hd), C (Σ thanh_toan) — live query
+- **Sau ký**: `openingBalance/totalIn/totalPaid/closingBalance` đông cứng (display-only), cộng full `signedSnapshotJson` (line items + subtotals = source of truth tái in)
+- **`totalIn` = B** (không gộp thue_hd riêng), **thuế trong JSON** (phiếu mục lục)
+- **Gỡ ký**: admin-only, từ chối nếu kỳ sau đã ký (break chain), xoá marker nếu gỡ ký kỳ cuối cùng
+- **Kỳ đã ký bất biến**; số dư ban đầu của NCC bị khoá sau ký đầu tiên
+
+### Dữ liệu & Migrations
+
+**Bổ sung model:**
+- `Project.entityId: Int? FK → Entity` — Chủ thể cho phiếu dùng dự án
+- `SupplierDeliveryDaily.unitPrice/totalAmount: Decimal?` — null → gán khi chốt
+- `LedgerTransaction.deliveryId/paymentRoundItemId: Int? FK` (partial-unique) — liên kết & snapshot
+- `SupplierReconciliation`: 4 cột nullable (opened/in/out/closed) + `signedSnapshotJson: Json?`
+
+**Migrations:**
+- `20260729160000_add_project_entity_and_delivery_pricing`
+- `20260729161000_link_ledger_to_payment_item`
+- `20260729162000_reconciliation_derived_snapshot`
+- `20261006110000_normalize_ledger_dates_to_business_day` (phase 1)
+
+### Backlog (chưa trong phạm vi)
+
+- Importer (`cong-no-vat-tu.adapter.ts:189-200`) ghi SQL thô không qua khoá kỳ — công cụ admin tải lịch sử, từ chối nếu kỳ từ date trong ghi bị ký (user xử lý manual).
 
 ---
 

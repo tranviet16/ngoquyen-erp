@@ -325,6 +325,7 @@ npm run test:load
 **Key Test Guidelines:**
 - Unit tests must NOT hit the database (use mocks from `test/helpers/`)
 - Integration tests use `truncateAll()` from `test/helpers/test-db.ts` to clean test DB after each suite
+- On Docker Desktop (Windows), run the throwaway test Postgres with `fsync` off; otherwise `TRUNCATE` of ~70 tables can exceed the 10 s hook timeout and cascade into lock waits/deadlocks across files. Example (credentials from `.env.test`): `docker run -d --name ngoquyen-erp-test-pg -e POSTGRES_USER=... -e POSTGRES_PASSWORD=... -e POSTGRES_DB=ngoquyyen_erp_test -p 5433:5432 --tmpfs /var/lib/postgresql/data:rw postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off`, then `npx prisma migrate deploy` with `DATABASE_URL` from `.env.test`. Never use these flags for a dev or production database.
 - ACL tests verify both explicit grants and AppRole fallback paths
 - New ACL helper tests in `lib/acl/__tests__/` must maintain 100% pass rate (40+ resolver + 32+ fixture cases)
 - Security tests validate authorization matrix + auth bypass + IDOR + SSE isolation

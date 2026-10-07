@@ -25,70 +25,104 @@ Cán bộ vật tư quản lý việc giao nhận vật tư từ nhà cung cấp
 
 ---
 
-## 3. Giao Nhận Vật Tư — Nhập Theo Ngày
+## 3. Giao Nhận Vật Tư — Nhập Theo Ngày (Phiếu ngày)
 
 ### 3.1 Thêm phiếu giao nhận
 
 1. Menu → **Vật Tư NCC**
 2. Chọn **nhà cung cấp** từ danh sách
-3. Click tab **Ngày**
+3. Click tab **Vật tư ngày** (Ngày)
 4. Click **Thêm giao nhận**
 5. Điền thông tin:
 
 | Trường | Mô tả |
 |--------|-------|
-| Ngày | Ngày nhận hàng thực tế |
+| Ngày | Ngày nhận hàng (ngày nghiệp vụ Asia/Bangkok) |
 | Hạng mục | Chọn vật tư (Xi măng, Cát, Gạch...) |
 | Số lượng | Khối lượng nhận |
-| Đơn giá | Giá thỏa thuận với NCC |
-| Dự án | Dự án sử dụng vật liệu này |
+| Đơn giá | *(để trống lúc nhập — sẽ gán khi chốt kỳ)* |
+| Dự án | Dự án sử dụng vật liệu (bắt buộc để phân bổ Chủ thể) |
 | Ghi chú | Số phiếu cân, xe biển số... |
 
 6. Click **Lưu**
 
 ![Thêm giao nhận vật tư](../screenshots/vat-tu-them-giao-nhan.png)
 
-> **Lưu ý:** Phải chọn dự án — bắt buộc để hệ thống phân bổ chi phí đúng công trình.
+> **Lưu ý:** 
+> - Phải chọn dự án — bắt buộc để hệ thống xác định Chủ thể (entity) cho phiếu
+> - Đơn giá sẽ được gán tự động từ báo giá hiệu lực khi tạo phiếu, hoặc bạn ghi đè bằng tay
+> - Phiếu rơi vào kỳ đã ký → từ chối (chênh lệch sửa bằng điều chỉnh kỳ sau)
 
-### 3.2 Sửa phiếu giao nhận
+### 3.2 Báo giá — Gợi ý giá khi nhập phiếu
 
-1. Tìm phiếu trong tab **Ngày**
-2. Click icon bút chì
-3. Sửa số lượng/đơn giá
-4. **Lưu**
+Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu lực theo thời gian.
 
-> Chỉ sửa được phiếu trong ngày hoặc liên hệ admin nếu cần sửa phiếu cũ.
+1. Chọn NCC → tab **Báo giá**
+2. Chọn vật tư (hoặc tạo dòng báo giá mới)
+3. Ghi giá hiệu lực từ ngày:
+   - **Từ ngày**: ngày bắt đầu giá này có hiệu lực
+   - **Giá**: đơn giá (VND/ĐVT)
+   - Click **Thêm dòng báo giá** hoặc **Sửa** dòng cũ
+4. Khi sửa giá cũ → hệ thống hiển thị **Tăng/Giảm** badge + chênh lệch so với dòng trước
+5. Khi nhập phiếu ngày → form **tự điền đơn giá** theo báo giá hiệu lực tại ngày phiếu
+   - Nếu không có báo giá hiệu lực → để trống (bắt buộc ghi đè bằng tay)
+   - Khi sửa phiếu cũ → đơn giá không bị ghi đè (giữ giá cũ)
 
-### 3.3 Xóa phiếu
+### 3.3 Sửa & Xóa phiếu giao nhận
 
-1. Tìm phiếu → Click icon thùng rác → Xác nhận
-
----
-
-## 4. Xem Tổng Hợp Tháng
-
-1. Chọn nhà cung cấp
-2. Click tab **Tháng**
-3. Chọn tháng cần xem
-4. Bảng hiển thị: tổng khối lượng, tổng thành tiền theo từng hạng mục
-
-![Tổng hợp tháng vật tư](../screenshots/vat-tu-thang.png)
-
-**Ý nghĩa các cột:**
-- **Hạng mục:** Tên vật tư
-- **Tổng SL:** Tổng số lượng trong tháng
-- **Đơn giá TB:** Đơn giá trung bình
-- **Thành tiền:** Tổng tiền = SL × Đơn giá
+1. Tìm phiếu trong tab **Vật tư ngày**
+2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu**
+   - Phiếu trong kỳ đã ký → từ chối
+   - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)
+3. Xóa: Click icon thùng rác → xác nhận
+   - Chỉ xóa được phiếu chưa chốt kỳ / chưa thanh toán
 
 ---
 
-## 5. Đối Chiếu Công Nợ Với NCC
+## 4. Chốt Kỳ — Gán Giá, Lấy Phiếu Vào Sổ Cái
 
-1. Chọn nhà cung cấp
-2. Click tab **Đối Chiếu**
-3. Chọn khoảng thời gian (từ ngày - đến ngày)
-4. Xem bảng đối chiếu: tổng giao hàng, tổng đã thanh toán, còn nợ
-5. Click **Xuất Excel** để có file gửi NCC ký xác nhận
+Tab **Chốt kỳ** (`/vat-tu-ncc/[NCC]/chot-ky`) đóng dấu một kỳ công nợ và ghi sổ cái.
+
+1. Chọn NCC → tab **Chốt kỳ**
+2. **Chọn kỳ**:
+   - **Tháng**: chọn tháng/năm → mặc định gợi ý từ phiếu sớm nhất chưa chốt
+   - Hoặc **Từ ngày / Đến ngày**: tuỳ chọn biên kỳ
+   - **Quy tắc**: kỳ mới phải bắt đầu ngay **ngày hôm sau kỳ gần nhất** (ký hoặc chưa ký)
+3. Xem **danh sách phiếu** trong kỳ:
+   - Kiểm tra phiếu cần gán giá
+   - Gán **đơn giá** (nếu để trống)
+     - Form gợi ý từ báo giá hiệu lực
+     - Có thể sửa → kiểm tra "Tăng/Giảm" badge
+4. Click **Chốt kỳ**
+   - Kiểm tra: mọi phiếu phải có sự kiện sổ cái
+   - Nếu phiếu chưa có event (vd. bị lỗi chốt lại) → từ chối, yêu cầu ký trước
+5. Kỳ chốt xong:
+   - Phiếu không thể sửa/xóa nữa
+   - Tab **Đối chiếu công nợ** hiển thị bảng kỳ chốt
+
+---
+
+## 5. Đối Chiếu Công Nợ — Ký Xác Nhận, Khoá Kỳ
+
+Tab **Đối chiếu công nợ** (`/vat-tu-ncc/[NCC]/doi-chieu`) hiển thị bảng đối chiếu chính thức và cho phép ký xác nhận.
+
+1. Chọn NCC → tab **Đối chiếu công nợ**
+2. **Lọc kỳ** (tuỳ chọn):
+   - Mặc định: tất cả kỳ chưa ký
+   - Hoặc: từ ngày → đến ngày
+3. **Xem bảng đối chiếu per kỳ**:
+   - **Đầu kỳ (A)**: số dư tại ngày 27 (hoặc ngày trước) = cuối kỳ trước
+   - **Phát sinh (B)**: tổng phiếu ngày ghi sổ trong kỳ (Lấy hàng + Thuế hoá đơn)
+   - **Đã trả (C)**: tổng thanh toán (Chuyển khoản + Thuế hoá đơn nếu có ghi qua thanh toán)
+   - **Nợ cuối (= A + B − C)**: còn nợ tại ngày cuối kỳ
+4. Click **In** → xem PDF để gửi NCC ký
+   - **Excel label** (nếu xuất Excel): biên "26/5→26/6" → nhập hệ thống là **"27/5→26/6"** (chuẩn hoá 27)
+5. Click **Ký** → kỳ **bị khoá**
+   - Phiếu ngày mới rơi vào kỳ này → hệ thống từ chối: "Kỳ đã ký — không sửa"
+   - Chênh lệch (nếu có) → ghi bằng **Điều chỉnh (dieu_chinh)** kỳ sau
+   - Số dư ban đầu của NCC → bị khoá (không sửa được)
+6. **Gỡ ký** (admin): chỉ khi cần huỷ ký nếu phát hiện sai số
+   - Sau khi gỡ ký, kỳ này sẽ bị xoá nếu có kỳ ký sau nó (để tránh break chain)
 
 ---
 
