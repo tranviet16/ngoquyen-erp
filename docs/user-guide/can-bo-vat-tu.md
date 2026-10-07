@@ -58,7 +58,7 @@ Cán bộ vật tư quản lý việc giao nhận vật tư từ nhà cung cấp
 Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu lực theo thời gian.
 
 1. Chọn NCC → tab **Báo giá**
-2. Chọn vật tư (hoặc tạo dòng báo giá mới)
+2. Chọn vật tư (hoặc tạo dòng báo giá mới) — danh sách gồm vật liệu và ca máy (vd. "Ca (máy xúc)")
 3. Ghi giá hiệu lực từ ngày:
    - **Từ ngày**: ngày bắt đầu giá này có hiệu lực
    - **Giá**: đơn giá (VND/ĐVT)

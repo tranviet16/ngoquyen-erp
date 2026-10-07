@@ -22,7 +22,8 @@ export default async function BaoGiaPage({ params }: Props) {
   const [quotes, items, canCreate, canEdit] = await Promise.all([
     listPriceQuotes(id),
     prisma.item.findMany({
-      where: { deletedAt: null, type: "material" },
+      // NCC vật tư báo giá cả vật liệu lẫn ca máy (vd. "Ca (máy xúc)").
+      where: { deletedAt: null, type: { in: ["material", "machine"] } },
       orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, unit: true },
     }),
