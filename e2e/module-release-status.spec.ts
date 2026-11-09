@@ -15,16 +15,17 @@ test("admin can pause a module without exposing it to users lacking access", asy
     await asAdmin.getByRole("button", { name: "Xác nhận và lưu" }).click();
     await expect(asAdmin.getByRole("dialog")).not.toBeVisible();
 
+    // An active admin bypasses the rollout gate and keeps working in a paused module.
     await asAdmin.goto("/du-an");
-    await expect(asAdmin).toHaveURL(/\/dang-phat-trien\?m=du-an/);
-    await expect(asAdmin.getByRole("heading", { name: "Module đang phát triển" })).toBeVisible();
-    await expect(asAdmin.getByText("Màn hình phía sau chỉ là giao diện minh họa")).toBeVisible();
+    await expect(asAdmin).toHaveURL(/\/du-an$/);
+    await expect(asAdmin.getByRole("heading", { name: "Quản lý Dự án Xây dựng" })).toBeVisible();
 
     await asProjectUser.goto("/du-an");
     await expect(asProjectUser).toHaveURL(/\/dang-phat-trien\?m=du-an/);
     await expect(
       asProjectUser.getByRole("heading", { name: "Module đang phát triển" }),
     ).toBeVisible();
+    await expect(asProjectUser.getByText("Màn hình phía sau chỉ là giao diện minh họa")).toBeVisible();
 
     await asViewer.goto("/du-an");
     await expect(asViewer).toHaveURL(/\/forbidden\?m=du-an/);
