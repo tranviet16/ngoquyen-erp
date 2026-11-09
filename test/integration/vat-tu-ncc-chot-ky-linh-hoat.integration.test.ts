@@ -50,7 +50,7 @@ async function seed() {
       ledgerType: "material",
       entityId: entity.id,
       partyId: supplier.id,
-      projectId: null,
+      projectId: project.id,
       balanceTt: 189_805_120,
       balanceHd: 0,
       asOfDate: new Date("2026-03-31"),
@@ -73,10 +73,11 @@ async function seed() {
 }
 
 /** Giá theo Excel: kỳ 1 sáu phiếu đầu @1.900, còn lại @1.850; phiếu 5.400 viên @1.450. */
-async function close(supplierId: number, range: { from: string; to: string }) {
-  const preview = await previewPeriodClose(supplierId, range);
+async function close(supplierId: number, projectId: number, range: { from: string; to: string }) {
+  const preview = await previewPeriodClose(supplierId, projectId, range);
   return commitPeriodClose(
     supplierId,
+    projectId,
     range,
     preview.deliveries.map((d, i) => ({
       deliveryId: d.id,
@@ -85,20 +86,20 @@ async function close(supplierId: number, range: { from: string; to: string }) {
   );
 }
 
-async function reconFor(supplierId: number, from: string) {
-  const list = await listReconciliationsDerived(supplierId);
+async function reconFor(supplierId: number, projectId: number, from: string) {
+  const list = await listReconciliationsDerived(supplierId, projectId);
   const row = list.find((r) => r.periodFrom === from);
   if (!row) throw new Error(`Không thấy kỳ từ ${from}`);
   return row;
 }
 
-async function payK2(entityId: number, supplierId: number) {
+async function payK2(entityId: number, supplierId: number, projectId: number) {
   await createMaterialTransaction({
     date: "2026-05-20",
     transactionType: "thanh_toan",
     entityId,
     partyId: supplierId,
-    projectId: null,
+    projectId,
     amountTt: "100000000",
     amountHd: "0",
     vatPctTt: "0",
@@ -121,46 +122,51 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     const { entity, supplier, project, item } = await seed();
 
     // Chưa có marker: gợi ý từ phiếu sớm nhất sau mốc số dư (01/4) tới ngày 26 kế tiếp.
-    const first = await previewPeriodClose(supplier.id);
+    const first = await previewPeriodClose(supplier.id, project.id);
     expect(first.suggestedRange).toEqual({ from: "2026-04-01", to: "2026-04-26" });
     expect(first.latestMarker).toBeNull();
     expect(first.openingAsOf).toBe("2026-03-31");
 
     // Biên trước mốc số dư ban đầu bị từ chối.
-    const early = await previewPeriodClose(supplier.id, { from: "2026-03-27", to: "2026-04-26" });
+    const early = await previewPeriodClose(supplier.id, project.id, { from: "2026-03-27", to: "2026-04-26" });
     expect(early.boundsError).toMatch(/01\/04\/2026/);
 
-    const k1 = await close(supplier.id, K1);
+    const k1 = await close(supplier.id, project.id, K1);
     expect(k1.closedCount).toBe(8);
     expect(Number(k1.totalAmountTt)).toBe(120_800_000);
-    expect((await reconFor(supplier.id, K1.from)).closing).toBe(310_605_120);
+    expect((await reconFor(supplier.id, project.id, K1.from)).closing).toBe(310_605_120);
 
     // Kỳ 1 CHƯA ký vẫn chốt được kỳ 2 liền kề.
-    const afterK1 = await previewPeriodClose(supplier.id);
+    const afterK1 = await previewPeriodClose(supplier.id, project.id);
     expect(afterK1.suggestedRange).toEqual(K2);
     expect(afterK1.latestMarker).toMatchObject({ from: K1.from, to: K1.to, signed: false });
-    await close(supplier.id, K2);
-    await payK2(entity.id, supplier.id);
-    expect((await reconFor(supplier.id, K2.from)).closing).toBe(255_005_120);
+    await close(supplier.id, project.id, K2);
+    await payK2(entity.id, supplier.id, project.id);
+    expect((await reconFor(supplier.id, project.id, K2.from)).closing).toBe(255_005_120);
 
     // Chốt lại đúng biên kỳ 1 chưa ký vẫn được (idempotent).
-    await expect(close(supplier.id, K1)).resolves.toMatchObject({ closedCount: 8 });
+    await expect(close(supplier.id, project.id, K1)).resolves.toMatchObject({ closedCount: 8 });
 
-    await signReconciliation((await reconFor(supplier.id, K1.from)).id);
-    await signReconciliation((await reconFor(supplier.id, K2.from)).id);
+    await signReconciliation((await reconFor(supplier.id, project.id, K1.from)).id);
+    await signReconciliation((await reconFor(supplier.id, project.id, K2.from)).id);
 
     // Nhãn Excel chồng 1 ngày bị từ chối ở cả chốt kỳ lẫn tạo kỳ đối chiếu tay.
-    await expect(commitPeriodClose(supplier.id, K3_EXCEL_LABEL, [])).rejects.toThrow(/chồng lấn kỳ đã ký/);
+    await expect(commitPeriodClose(supplier.id, project.id, K3_EXCEL_LABEL, [])).rejects.toThrow(/chồng lấn kỳ đã ký/);
     await expect(
-      createReconciliation({ supplierId: supplier.id, periodFrom: K3_EXCEL_LABEL.from, periodTo: K3_EXCEL_LABEL.to }),
+      createReconciliation({
+        supplierId: supplier.id,
+        projectId: project.id,
+        periodFrom: K3_EXCEL_LABEL.from,
+        periodTo: K3_EXCEL_LABEL.to,
+      }),
     ).rejects.toThrow(/chồng lấn kỳ đã ký/);
     // Bỏ trống một ngày cũng bị từ chối.
-    await expect(commitPeriodClose(supplier.id, { from: "2026-05-28", to: "2026-06-26" }, [])).rejects.toThrow(
-      /phải bắt đầu 27\/05\/2026/,
-    );
+    await expect(
+      commitPeriodClose(supplier.id, project.id, { from: "2026-05-28", to: "2026-06-26" }, []),
+    ).rejects.toThrow(/phải bắt đầu 27\/05\/2026/);
 
-    await close(supplier.id, K3);
-    const k3 = await reconFor(supplier.id, K3.from);
+    await close(supplier.id, project.id, K3);
+    const k3 = await reconFor(supplier.id, project.id, K3.from);
     expect(k3.opening).toBe(255_005_120);
     expect(k3.totalIn).toBe(30_460_000);
     expect(k3.closing).toBe(285_465_120);
@@ -175,17 +181,17 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
       unit: "viên",
     });
     await expect(signReconciliation(k3.id)).rejects.toThrow(/chưa được chốt vào sổ cái — #\d+ \(2026-06-20\)/);
-    await close(supplier.id, K3);
+    await close(supplier.id, project.id, K3);
     await signReconciliation(k3.id);
     const event = await prisma.ledgerTransaction.findFirst({ where: { deliveryId: late.id, deletedAt: null } });
     expect(event).not.toBeNull();
   });
 
   it("hai lần chốt song song với biên khác nhau: chỉ một thành công", async () => {
-    const { supplier } = await seed();
+    const { supplier, project } = await seed();
     const results = await Promise.allSettled([
-      close(supplier.id, K1),
-      close(supplier.id, { from: "2026-04-01", to: "2026-04-26" }),
+      close(supplier.id, project.id, K1),
+      close(supplier.id, project.id, { from: "2026-04-01", to: "2026-04-26" }),
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const rejected = results.find((r): r is PromiseRejectedResult => r.status === "rejected")!;
@@ -195,9 +201,9 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
 
   it("ghi thue_hd song song với ký kỳ: hoặc nằm trong snapshot, hoặc bị từ chối", async () => {
     const { entity, supplier, project } = await seed();
-    await close(supplier.id, K1);
-    await close(supplier.id, K2);
-    const k2 = await reconFor(supplier.id, K2.from);
+    await close(supplier.id, project.id, K1);
+    await close(supplier.id, project.id, K2);
+    const k2 = await reconFor(supplier.id, project.id, K2.from);
 
     const [write, sign] = await Promise.allSettled([
       createMaterialTransaction({
@@ -237,9 +243,9 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
 
   it("sửa phiếu đã chốt (kỳ chưa ký) gỡ event; dời ngày sang kỳ sau rồi ký/chốt vẫn giữ closing(k) = opening(k+1)", async () => {
     const { supplier, project, item } = await seed();
-    await close(supplier.id, K1);
-    await close(supplier.id, K2);
-    const k2 = await reconFor(supplier.id, K2.from);
+    await close(supplier.id, project.id, K1);
+    await close(supplier.id, project.id, K2);
+    const k2 = await reconFor(supplier.id, project.id, K2.from);
 
     // Phiếu 09/05 (đã chốt trong K2) bị dời sang 05/06 (thuộc K3): event cũ phải bị gỡ trong cùng transaction.
     const moved = await prisma.supplierDeliveryDaily.findFirstOrThrow({
@@ -257,19 +263,19 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
 
     // K2 không còn phiếu 09/05 nên ký được; snapshot không chứa event đã gỡ.
     await signReconciliation(k2.id);
-    const signedK2 = await reconFor(supplier.id, K2.from);
+    const signedK2 = await reconFor(supplier.id, project.id, K2.from);
 
     // Chốt K3 hồi sinh event với ngày mới (05/06) — không bị chặn bởi ngày cũ của event đã xoá mềm.
-    await close(supplier.id, K3);
-    const k3 = await reconFor(supplier.id, K3.from);
+    await close(supplier.id, project.id, K3);
+    const k3 = await reconFor(supplier.id, project.id, K3.from);
     expect(k3.opening).toBe(signedK2.closing);
   });
 
   it("kỳ đã ký: sửa/xoá phiếu có event nằm trong kỳ bị chặn, kể cả khi ngày phiếu đã lệch khỏi event", async () => {
     const { supplier, project, item } = await seed();
-    await close(supplier.id, K1);
-    await close(supplier.id, K2);
-    const k2 = await reconFor(supplier.id, K2.from);
+    await close(supplier.id, project.id, K1);
+    await close(supplier.id, project.id, K2);
+    const k2 = await reconFor(supplier.id, project.id, K2.from);
     await signReconciliation(k2.id);
 
     const inK2 = await prisma.supplierDeliveryDaily.findFirstOrThrow({
@@ -284,7 +290,7 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     await expect(softDeleteDelivery(inK2.id, supplier.id)).rejects.toThrow(/đã được NCC ký/);
     await expect(updateDelivery(inK2.id, { ...body, date: "2026-06-05" })).rejects.toThrow(/đã được NCC ký/);
     // Chốt K3 cũng không được ghi đè event nằm trong kỳ đã ký.
-    await expect(close(supplier.id, K3)).rejects.toThrow(/đã được NCC ký/);
+    await expect(close(supplier.id, project.id, K3)).rejects.toThrow(/đã được NCC ký/);
     const event = await prisma.ledgerTransaction.findFirstOrThrow({ where: { deliveryId: inK2.id, deletedAt: null } });
     expect(event.date.toISOString().slice(0, 10)).toBe("2026-05-13");
   });

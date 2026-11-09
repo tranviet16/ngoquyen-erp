@@ -80,6 +80,44 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 
 ---
 
+## [2026-11-06] — Công nợ vật tư theo công trình (chờ chạy thử và go-live)
+
+Kế hoạch: `plans/261105-0848-cong-no-vat-tu-theo-cong-trinh/`. Go-live theo `reports/go-live-runbook.md` của kế hoạch; chưa deploy.
+
+### Added
+- Phạm vi đối chiếu **NCC × công trình**: biên kỳ, chốt, ký, gỡ ký, khoá kỳ, snapshot, khoá số dư ban đầu và đồng bộ đợt thanh toán đều theo cặp. Ký A×X không khoá A×Y.
+- Guard mốc chuyển đổi toàn cục (`lib/vat-tu-ncc/pair-scope.ts`): sau khi có run `vat-tu-chuyen-doi` được ghi, mọi ghi vật tư có ngày ≤ mốc bị chặn ở mọi cặp, kể cả `dieu_chinh`. Run đã ghi mà thiếu mốc thì chặn hết (fail closed).
+- Marker "Kỳ chuyển đổi (khóa)": kỳ gắn `importRunId`, ký ngay khi import, không gỡ ký / sửa / xoá được qua UI.
+- Đường vào theo công trình: `/vat-tu-ncc/cong-trinh` và `/vat-tu-ncc/cong-trinh/[projectId]`. Liên kết sang trang NCC `?projectId=`; các tab giữ công trình; tab theo cặp thiếu tham số thì hiện bộ chọn công trình. Cột nợ chỉ hiện với quyền đọc `cong-no-vt`.
+- `/cong-no-vt/tong-hop-cong-trinh`: pivot NCC → công trình / Công trình → NCC, lọc Chủ thể. Có chế độ kỳ (Đầu kỳ / PS tăng / PS giảm / Cuối kỳ) và chế độ lũy kế (Số dư chuyển sang / LH lũy kế / Đã trả lũy kế / Còn nợ). Xuất Excel `cong-no-cong-trinh` cho quyền đọc `cong-no-vt`.
+- Cột "Chủ thể" sửa nhanh ở Dữ liệu nền tảng > Dự Án.
+- Import có review (`/admin/import`): tải cả thư mục (.xlsx/.csv, ≤ 200 file, ≤ 20 MB), lưu nguồn ở `import_runs.sourceFile`, review của adapter chạy thử rồi rollback, `reviewVersion`, xác nhận `ack`. Ghi đúng phiên bản đã xem trong một transaction. Hoàn tác giữ run ở trạng thái `rolled_back`.
+- Parser chuyển đổi Excel thuần (`lib/import/adapters/vat-tu-chuyen-doi/`): file tổng, CSV "Tổng công nợ", 23 file theo dõi, ngày bẩn và khử trùng phiếu. Adapter ghi / đối soát (phase 7) đang triển khai.
+- Script go-live `scripts/vat-tu-cutover-inventory.sql` (kiểm kê chỉ đọc, sinh danh sách đề xuất) và `scripts/vat-tu-cutover-cleanup.sql`. Script dọn chạy trong một transaction: điều kiện độc lập, kiểm mồ côi, `DELETE … RETURNING` ra CSV, ghi `audit_logs`, mặc định ROLLBACK.
+
+### Changed
+- Migration `20261106090000_vat_tu_pair_scope_and_import_review` (chỉ sửa tiến):
+  - `supplier_reconciliations.projectId` NOT NULL, unique theo `(supplierId, projectId, periodFrom, periodTo)`;
+  - 3 CHECK bắt buộc công trình ở sổ vật tư, số dư vật tư và phiếu ngày, kiểm ngay cả dòng xoá mềm;
+  - 4 cột review ở `import_runs`;
+  - migration dừng nếu còn kỳ đối chiếu cũ.
+- Chủ thể của mọi ghi vật tư suy từ `Project.entityId`. Không đổi được Chủ thể của công trình đã có dữ liệu vật tư.
+- Dòng đợt thanh toán `vat_tu` bắt buộc công trình. Duyệt / làm mới / đóng đợt từ chối dòng cũ thiếu công trình; từ chối dòng vẫn được.
+- Nhập liệu và Số dư ban đầu của Công nợ vật tư bắt buộc chọn công trình cho dòng mới.
+- Tab Công nợ của Dự án giữ nguồn `project_transactions`, thêm liên kết sang trang công trình.
+
+### Removed
+- Adapter import `cong-no-vat-tu`, `gach-nam-huong`, `quang-minh`: ghi sổ / phiếu vật tư không có công trình và không chống trùng. Run cũ vẫn hoàn tác được.
+
+### Fixed
+- Lưới phiếu ngày hiện đúng thông điệp khoá kỳ / mốc chuyển đổi ở production. Server action trả `{ ok, message }` thay vì ném lỗi, vì production ẩn thông điệp lỗi ném ra.
+- `listDeliveries` lọc đồng thời `dateFrom` và `dateTo` không còn ghi đè nhau.
+
+### Notes
+- Unit test, `tsc` và lint xanh theo báo cáo từng phase. Integration và e2e của các phase 1–6 chưa chạy (Docker tắt lúc làm); phải xanh trước go-live (runbook bước 1).
+
+---
+
 ## [2026-05-21] — State Obligations Tracking (Nghĩa vụ với Nhà nước)
 
 ### Added

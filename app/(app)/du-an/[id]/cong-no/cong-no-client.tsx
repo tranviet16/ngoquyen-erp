@@ -1,9 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useMemo, useTransition } from "react";
 import type { ReactElement } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { SupplierMultiSelect } from "./supplier-multi-select";
@@ -52,7 +53,10 @@ export function CongNoClient({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const params = useParams<{ id: string }>();
   const [pending, startTransition] = useTransition();
+  // Công nợ vật tư theo sổ cái (theo NCC × công trình) nằm ở module vat-tu-ncc; tab này giữ nguồn cũ.
+  const projectId = params?.id && /^\d+$/.test(params.id) ? params.id : null;
 
   const selected = useMemo<string[]>(() => {
     const sp = searchParams?.get("suppliers");
@@ -135,6 +139,14 @@ export function CongNoClient({
         <span className="ml-auto text-xs text-muted-foreground">
           Dữ liệu được nhập từ file Quản Lý Dự Án Xây Dựng (sheet &quot;Công Nợ&quot;).
         </span>
+        {projectId && (
+          <Link
+            href={`/vat-tu-ncc/cong-trinh/${projectId}`}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Công nợ vật tư theo sổ cái →
+          </Link>
+        )}
       </div>
 
       <DataGrid<DebtGridRow> columns={columns} rows={rows} handlers={{}} height={520} />

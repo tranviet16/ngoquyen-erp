@@ -1,11 +1,11 @@
 "use server";
 
 /**
- * Chốt kỳ vật tư NCC với biên kỳ `[from, to]` tuỳ chọn (mặc định gợi ý 27→26):
- * kế toán gắn đơn giá hàng loạt cho phiếu ngày trong kỳ, hệ thống sinh/đồng bộ
- * sự kiện lay_hang vào sổ cái công nợ vật tư — idempotent theo deliveryId.
- * Chủ Thể (entity) của event suy từ Project.entityId của từng phiếu.
- * Biên kỳ theo lib/vat-tu-ncc/period-bounds.ts; commit chạy dưới khoá advisory theo NCC.
+ * Chốt kỳ vật tư của một cặp NCC × công trình với biên kỳ `[from, to]` tuỳ chọn (mặc định
+ * gợi ý 27→26): kế toán gắn đơn giá hàng loạt cho phiếu ngày của cặp trong kỳ, hệ thống
+ * sinh/đồng bộ sự kiện lay_hang vào sổ cái công nợ vật tư — idempotent theo deliveryId.
+ * Chủ Thể (entity) của event suy từ Project.entityId của công trình.
+ * Biên kỳ theo lib/vat-tu-ncc/period-bounds.ts (theo cặp); commit chạy dưới khoá advisory theo NCC.
  */
 
 import { revalidatePath } from "next/cache";
@@ -17,11 +17,12 @@ import { parseIsoDateUtc } from "@/lib/ledger/business-date";
 import { periodLabel } from "./period";
 import { resolveQuotePrice } from "./quote-resolver";
 import { addDays, latestMarkerOf, validatePeriodBounds, type PeriodRangeDates } from "./period-bounds";
+import { requireProjectId } from "./pair-scope";
 import {
   assertPeriodBounds,
   loadPeriodBoundsContext,
   lockSuppliers,
-  suggestRangeForSupplier,
+  suggestRangeForPair,
 } from "./period-lock";
 
 /** Biên kỳ ISO `YYYY-MM-DD` (bao gồm cả hai đầu). */
@@ -91,23 +92,20 @@ function assertSupplierId(supplierId: unknown): asserts supplierId is number {
   }
 }
 
-async function loadPeriodData(supplierId: number, from: Date, to: Date) {
+async function loadPeriodData(supplierId: number, projectId: number, from: Date, to: Date) {
   const deliveries = await prisma.supplierDeliveryDaily.findMany({
     // Cận trên exclusive `< to + 1 ngày` theo quy ước ngày nghiệp vụ.
-    where: { supplierId, deletedAt: null, date: { gte: from, lt: addDays(to, 1) } },
+    where: { supplierId, projectId, deletedAt: null, date: { gte: from, lt: addDays(to, 1) } },
     orderBy: [{ date: "asc" }, { id: "asc" }],
   });
 
-  const projectIds = [...new Set(deliveries.map((d) => d.projectId).filter((p): p is number => p != null))];
   const itemIds = [...new Set(deliveries.map((d) => d.itemId))];
 
   const [projects, items] = await Promise.all([
-    projectIds.length
-      ? prisma.project.findMany({
-          where: { id: { in: projectIds } },
-          select: { id: true, code: true, name: true, entityId: true, entity: { select: { name: true } } },
-        })
-      : Promise.resolve([]),
+    prisma.project.findMany({
+      where: { id: projectId },
+      select: { id: true, code: true, name: true, entityId: true, entity: { select: { name: true } } },
+    }),
     itemIds.length
       ? prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, code: true, name: true } })
       : Promise.resolve([]),
@@ -134,19 +132,21 @@ function collectViolations(
 }
 
 /**
- * Xem trước chốt kỳ. Không truyền `range` → dùng kỳ gợi ý. Luôn trả kỳ gợi ý, marker gần
- * nhất và lỗi biên kỳ (nếu có) để UI khoá nút chốt.
+ * Xem trước chốt kỳ của cặp (NCC, công trình). Không truyền `range` → dùng kỳ gợi ý của cặp.
+ * Luôn trả kỳ gợi ý, marker gần nhất và lỗi biên kỳ (nếu có) để UI khoá nút chốt.
  */
 export async function previewPeriodClose(
   supplierId: number,
+  projectId: number,
   range?: PeriodRangeInput,
 ): Promise<PeriodClosePreview> {
   await requireReleasedModuleRequest("vat-tu-ncc");
   assertSupplierId(supplierId);
+  const pid = requireProjectId(projectId);
 
-  const ctx = await loadPeriodBoundsContext(supplierId);
+  const ctx = await loadPeriodBoundsContext(supplierId, pid);
   const latest = latestMarkerOf(ctx.markers);
-  const suggested = await suggestRangeForSupplier(supplierId, ctx);
+  const suggested = await suggestRangeForPair(supplierId, pid, ctx);
 
   const { from, to } = range === undefined ? suggested : parseRange(range);
   const boundsError = validatePeriodBounds({ from, to }, ctx);
@@ -154,7 +154,7 @@ export async function previewPeriodClose(
     (m) => m.signed && m.from.getTime() <= to.getTime() && m.to.getTime() >= from.getTime(),
   );
 
-  const { deliveries, projectMap, itemMap } = await loadPeriodData(supplierId, from, to);
+  const { deliveries, projectMap, itemMap } = await loadPeriodData(supplierId, pid, from, to);
 
   // Gợi ý giá — ưu tiên: (1) báo giá hiệu lực tại đúng ngày từng phiếu,
   // (2) fallback đơn giá lần nhập gần nhất trước kỳ theo từng vật tư.
@@ -228,11 +228,13 @@ export async function previewPeriodClose(
 
 export async function commitPeriodClose(
   supplierId: number,
+  projectId: number,
   range: PeriodRangeInput,
   prices: Array<{ deliveryId: number; unitPrice: number }>,
 ): Promise<{ closedCount: number; totalAmountTt: string }> {
   await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
   assertSupplierId(supplierId);
+  const pid = requireProjectId(projectId);
   const { from, to } = parseRange(range);
   const label = periodLabel(from, to);
   if (!Array.isArray(prices)) throw new Error("Danh sách đơn giá không hợp lệ");
@@ -246,20 +248,17 @@ export async function commitPeriodClose(
   const materialLedger = new LedgerService("material");
 
   const result = await prisma.$transaction(async (tx) => {
-    // Khoá NCC (cùng khoá với mọi đường ghi khác) rồi kiểm biên kỳ trên dữ liệu trong tx.
+    // Khoá NCC (cùng khoá với mọi đường ghi khác) rồi kiểm biên kỳ của cặp trên dữ liệu trong tx.
     await lockSuppliers(tx, [supplierId]);
-    await assertPeriodBounds(supplierId, { from, to }, tx);
+    await assertPeriodBounds(supplierId, pid, { from, to }, tx);
 
     const deliveries = await tx.supplierDeliveryDaily.findMany({
-      where: { supplierId, deletedAt: null, date: { gte: from, lt: addDays(to, 1) } },
+      where: { supplierId, projectId: pid, deletedAt: null, date: { gte: from, lt: addDays(to, 1) } },
       orderBy: [{ date: "asc" }, { id: "asc" }],
     });
-    if (!deliveries.length) throw new Error(`Kỳ ${label} không có phiếu nào để chốt.`);
+    if (!deliveries.length) throw new Error(`Kỳ ${label} không có phiếu nào của công trình để chốt.`);
 
-    const projectIds = [...new Set(deliveries.map((d) => d.projectId).filter((p): p is number => p != null))];
-    const projects = projectIds.length
-      ? await tx.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, entityId: true } })
-      : [];
+    const projects = await tx.project.findMany({ where: { id: pid }, select: { id: true, entityId: true } });
     const projectMap = new Map(projects.map((p) => [p.id, p]));
 
     const violations = collectViolations(deliveries, projectMap);
@@ -292,14 +291,13 @@ export async function commitPeriodClose(
         });
       }
 
-      const entityId = projectMap.get(d.projectId as number)!.entityId as number;
+      // Chủ thể của event suy từ công trình bên trong LedgerService (đã kiểm missing_entity ở trên).
       await materialLedger.upsertFromDelivery(
         {
           deliveryId: d.id,
           date: d.date,
-          entityId,
           partyId: supplierId,
-          projectId: d.projectId,
+          projectId: pid,
           itemId: d.itemId,
           qty: d.qty as Prisma.Decimal,
           unitPrice,
@@ -310,14 +308,15 @@ export async function commitPeriodClose(
       totalAmountTt = totalAmountTt.plus(totalAmount);
     }
 
-    // Marker kỳ đã chốt — bảng đối chiếu đọc marker này và tính số dẫn xuất
+    // Marker kỳ đã chốt của cặp — bảng đối chiếu đọc marker này và tính số dẫn xuất.
+    // Tìm theo (NCC, công trình, biên): cặp khác cùng biên có marker riêng.
     const existingRecon = await tx.supplierReconciliation.findFirst({
-      where: { supplierId, periodFrom: from, periodTo: to, deletedAt: null },
+      where: { supplierId, projectId: pid, periodFrom: from, periodTo: to, deletedAt: null },
       select: { id: true },
     });
     if (!existingRecon) {
       await tx.supplierReconciliation.create({
-        data: { supplierId, periodFrom: from, periodTo: to },
+        data: { supplierId, projectId: pid, periodFrom: from, periodTo: to },
       });
     }
 

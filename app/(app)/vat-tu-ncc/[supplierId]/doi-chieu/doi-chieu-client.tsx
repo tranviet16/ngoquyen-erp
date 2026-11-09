@@ -6,8 +6,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
-import { createReconciliation, softDeleteReconciliation } from "@/lib/vat-tu-ncc/reconciliation-service";
-import { unsignReconciliation } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
+import {
+  createReconciliationAction,
+  softDeleteReconciliationAction,
+  unsignReconciliationAction,
+} from "@/lib/vat-tu-ncc/reconciliation-actions";
 import { type ReconciliationInput } from "@/lib/vat-tu-ncc/schemas";
 import { ReconciliationForm } from "@/components/vat-tu-ncc/reconciliation-form";
 import { formatDate, formatVND } from "@/lib/utils/format";
@@ -28,17 +31,21 @@ export interface ReconListRow {
   signedBySupplier: boolean;
   signedDate: string | null;
   note: string | null;
+  /** Marker kỳ chuyển đổi từ Excel — không gỡ ký/xoá được. */
+  cutoverMarker: boolean;
 }
 
 interface Props {
   supplierId: number;
+  /** Công trình của cặp đang xem (từ `?projectId=`). */
+  projectId: number;
   initialData: ReconListRow[];
   canCreate: boolean;
   canDelete: boolean;
   isAdmin: boolean;
 }
 
-export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, isAdmin }: Props) {
+export function DoiChieuClient({ supplierId, projectId, initialData, canCreate, canDelete, isAdmin }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [, startTransition] = useTransition();
@@ -58,10 +65,15 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
 
   async function handleCreate(data: ReconciliationInput) {
     try {
-      const record = await createReconciliation(data);
+      // Action trả { ok, … }: thông điệp nghiệp vụ không bị ẩn ở bản production.
+      const result = await createReconciliationAction(data);
+      if (!result.ok) {
+        toast.error("Lỗi: " + result.message);
+        return;
+      }
       toast.success("Đã tạo kỳ đối chiếu");
       setCreateOpen(false);
-      router.push(`/vat-tu-ncc/${supplierId}/doi-chieu/${record.id}`);
+      router.push(`/vat-tu-ncc/${supplierId}/doi-chieu/${result.id}?projectId=${projectId}`);
     } catch (err) {
       toast.error("Lỗi: " + (err instanceof Error ? err.message : String(err)));
     }
@@ -70,7 +82,11 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
   async function handleDelete(id: number) {
     if (!confirm("Xóa kỳ đối chiếu này?")) return;
     try {
-      await softDeleteReconciliation(id, supplierId);
+      const result = await softDeleteReconciliationAction(id, supplierId);
+      if (!result.ok) {
+        toast.error("Lỗi: " + result.message);
+        return;
+      }
       toast.success("Đã xóa");
       startTransition(() => router.refresh());
     } catch (err) {
@@ -81,7 +97,11 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
   async function handleUnsign(id: number) {
     if (!confirm("Gỡ ký kỳ này? Số đông cứng sẽ bị xóa và kỳ tính lại từ sổ cái.")) return;
     try {
-      await unsignReconciliation(id);
+      const result = await unsignReconciliationAction(id);
+      if (!result.ok) {
+        toast.error("Lỗi: " + result.message);
+        return;
+      }
       toast.success("Đã gỡ ký");
       startTransition(() => router.refresh());
     } catch (err) {
@@ -128,7 +148,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
             {reconSort.sortedRows.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2 whitespace-nowrap">
-                  <Link href={`/vat-tu-ncc/${supplierId}/doi-chieu/${r.id}`} className="text-primary hover:underline">
+                  <Link href={`/vat-tu-ncc/${supplierId}/doi-chieu/${r.id}?projectId=${projectId}`} className="text-primary hover:underline">
                     {formatDate(r.periodFrom)} – {formatDate(r.periodTo)}
                   </Link>
                 </td>
@@ -150,7 +170,9 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
                 </td>
                 <td className="px-3 py-2 max-w-48 truncate">{r.note ?? ""}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                  {r.signedBySupplier
+                  {r.cutoverMarker
+                    ? <span className="text-xs text-muted-foreground">Kỳ chuyển đổi (khóa)</span>
+                    : r.signedBySupplier
                     ? isAdmin && (
                         <Button variant="outline" size="sm" onClick={() => handleUnsign(r.id)}>Gỡ ký</Button>
                       )
@@ -165,7 +187,7 @@ export function DoiChieuClient({ supplierId, initialData, canCreate, canDelete, 
       </div>
 
       <CrudDialog title="Tạo kỳ đối chiếu" open={createOpen} onOpenChange={setCreateOpen}>
-        <ReconciliationForm supplierId={supplierId} onSubmit={handleCreate} />
+        <ReconciliationForm supplierId={supplierId} projectId={projectId} onSubmit={handleCreate} />
       </CrudDialog>
     </div>
   );

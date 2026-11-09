@@ -14,10 +14,10 @@ import { DateInput, isoToDmy } from "@/components/ui/date-input";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import {
-  createMaterialTransaction,
-  patchMaterialTransaction,
-  softDeleteMaterialTransaction,
-} from "@/lib/cong-no-vt/material-ledger-service";
+  createMaterialTransactionAction,
+  patchMaterialTransactionAction,
+  softDeleteMaterialTransactionAction,
+} from "@/lib/cong-no-vt/material-ledger-actions";
 import { transactionSchema, type TransactionInput } from "@/lib/cong-no-vt/schemas";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/ledger/transaction-classification";
 import { formatDate, formatNumber } from "@/lib/utils/format";
@@ -39,18 +39,24 @@ export type PaymentTxRow = {
   content: string | null;
   /** Dòng sinh từ đợt thanh toán — chỉ xem. */
   fromRound: boolean;
-  /** Ngày ghi sổ rơi vào kỳ NCC đã ký — chỉ xem. */
+  /** Ngày ghi sổ ≤ mốc chuyển đổi hoặc rơi vào kỳ NCC đã ký — chỉ xem (server cũng từ chối). */
   locked: boolean;
+  /** Lý do khoá để hiển thị: giai đoạn chuyển đổi từ Excel hoặc kỳ đã ký. */
+  lockReason: "cutover" | "signed" | null;
 };
 
 interface Props {
   supplierId: number;
+  /** Công trình của cặp (từ `?projectId=`) — mọi dòng ghi vào cặp này. */
+  projectId: number;
   currentDebt: number;
   rows: PaymentTxRow[];
   entities: { id: number; name: string }[];
   projects: { id: number; code: string; name: string }[];
   canCreate: boolean;
   canEdit: boolean;
+  /** Mốc chuyển đổi (YYYY-MM-DD, bao gồm) khi đã có run chuyển đổi được commit: ngày ≤ mốc không ghi được. */
+  cutoverDate: string | null;
 }
 
 type FormInput = z.input<typeof transactionSchema>;
@@ -70,7 +76,17 @@ function buildContent(type: PaymentType, date: string, invoiceNo?: string | null
 
 const SELECT_CLASS = "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm";
 
-export function ThanhToanClient({ supplierId, currentDebt, rows, entities, projects, canCreate, canEdit }: Props) {
+export function ThanhToanClient({
+  supplierId,
+  projectId,
+  currentDebt,
+  rows,
+  entities,
+  projects,
+  canCreate,
+  canEdit,
+  cutoverDate,
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -84,7 +100,7 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
     transactionType: "thanh_toan",
     entityId: entities[0]?.id ?? 0,
     partyId: supplierId,
-    projectId: null,
+    projectId,
     amountTt: "0",
     amountHd: "0",
     invoiceNo: "",
@@ -128,7 +144,7 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
       transactionType: r.transactionType,
       entityId: r.entityId,
       partyId: supplierId,
-      projectId: r.projectId,
+      projectId: r.projectId ?? projectId,
       amountTt: r.amountTt,
       amountHd: r.amountHd,
       invoiceNo: r.invoiceNo ?? "",
@@ -150,23 +166,26 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
     };
     setSaving(true);
     try {
-      if (editingId != null) {
-        await patchMaterialTransaction(editingId, {
-          date: payload.date,
-          transactionType: payload.transactionType,
-          entityId: payload.entityId,
-          projectId: payload.projectId ?? null,
-          amountTt: payload.amountTt,
-          amountHd: payload.amountHd,
-          invoiceNo: payload.invoiceNo,
-          invoiceDate: payload.invoiceDate,
-          content: payload.content,
-        });
-        toast.success("Đã cập nhật");
-      } else {
-        await createMaterialTransaction(payload);
-        toast.success("Đã ghi sổ");
+      // Action trả { ok, … }: lỗi khoá kỳ / mốc chuyển đổi hiện trên toast cả ở bản production.
+      const result =
+        editingId != null
+          ? await patchMaterialTransactionAction(editingId, {
+              date: payload.date,
+              transactionType: payload.transactionType,
+              entityId: payload.entityId,
+              projectId: payload.projectId,
+              amountTt: payload.amountTt,
+              amountHd: payload.amountHd,
+              invoiceNo: payload.invoiceNo,
+              invoiceDate: payload.invoiceDate,
+              content: payload.content,
+            })
+          : await createMaterialTransactionAction(payload);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
       }
+      toast.success(editingId != null ? "Đã cập nhật" : "Đã ghi sổ");
       resetForm();
       startTransition(() => router.refresh());
     } catch (err) {
@@ -179,7 +198,11 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
   async function handleDelete(r: PaymentTxRow) {
     if (!confirm("Xóa giao dịch này khỏi sổ cái?")) return;
     try {
-      await softDeleteMaterialTransaction(r.id);
+      const result = await softDeleteMaterialTransactionAction(r.id);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
       toast.success("Đã xóa");
       if (editingId === r.id) resetForm();
       startTransition(() => router.refresh());
@@ -230,14 +253,14 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
               {errors.entityId && <p className="text-xs text-destructive">{errors.entityId.message}</p>}
             </div>
             <div>
-              <Label>Công trình (tùy chọn)</Label>
+              <Label>Công trình</Label>
               <select
                 className={SELECT_CLASS}
-                {...register("projectId", { setValueAs: (v) => (v === "" || v == null ? null : Number(v)) })}
+                {...register("projectId", { setValueAs: (v) => (v === "" || v == null ? undefined : Number(v)) })}
               >
-                <option value="">-- Không chọn --</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
               </select>
+              {errors.projectId && <p className="text-xs text-destructive">{errors.projectId.message}</p>}
             </div>
           </div>
 
@@ -268,9 +291,16 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              Nội dung: {buildContent(type, date, watchedInvoiceNo, watchedInvoiceDate)}
-            </p>
+            <div className="space-y-0.5">
+              <p className="text-xs text-muted-foreground">
+                Nội dung: {buildContent(type, date, watchedInvoiceNo, watchedInvoiceDate)}
+              </p>
+              {cutoverDate && (
+                <p className={date && date <= cutoverDate ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                  Ngày ghi sổ phải sau {isoToDmy(cutoverDate)} — giai đoạn tới mốc đã chuyển đổi từ Excel, không ghi/sửa được.
+                </p>
+              )}
+            </div>
             <div className="flex gap-2">
               {editingId != null && (
                 <Button type="button" variant="outline" onClick={resetForm} disabled={saving}>
@@ -325,7 +355,9 @@ export function ThanhToanClient({ supplierId, currentDebt, rows, entities, proje
                   <td className="px-3 py-2 whitespace-nowrap">{r.invoiceDate ? formatDate(r.invoiceDate) : ""}</td>
                   <td className="px-3 py-2 max-w-64 truncate">{r.content ?? ""}</td>
                   <td className="px-3 py-2 whitespace-nowrap">{r.fromRound ? "Đợt thanh toán" : "Nhập tay"}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{r.locked ? "Kỳ đã ký" : ""}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {r.lockReason === "cutover" ? "Đã chuyển đổi" : r.locked ? "Kỳ đã ký" : ""}
+                  </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     {canEdit && manual && (
                       <>

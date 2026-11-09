@@ -8,6 +8,7 @@ import type { AccessLevel } from "@/lib/acl/modules";
 import { getOutstandingDebt, getCumulativePaid } from "@/lib/ledger/balance-service";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
 import { syncClosedRoundToLedger } from "./payment-ledger-sync";
+import { MaterialScopeError, resolveMaterialEntityId } from "@/lib/vat-tu-ncc/pair-scope";
 import { bypassAudit } from "@/lib/async-context";
 import { writeAuditLog } from "@/lib/audit";
 
@@ -189,6 +190,41 @@ export async function createRound(input: CreateRoundInput) {
 }
 
 /**
+ * Dòng vat_tu thuộc công nợ vật tư theo cặp NCC × công trình: bắt buộc công trình và Chủ thể
+ * luôn = Chủ thể của công trình (giá trị client gửi bị thay). Loại khác giữ nguyên đầu vào.
+ */
+async function scopeItem(
+  category: PaymentCategory,
+  projectId: number | null,
+  entityId: number,
+  itemLabel = "Dòng vật tư",
+): Promise<{ projectId: number | null; entityId: number }> {
+  if (category !== "vat_tu") return { projectId, entityId };
+  if (projectId == null) {
+    throw new MaterialScopeError("missing_project", `${itemLabel}: thiếu công trình — chọn công trình cho dòng vật tư.`);
+  }
+  return { projectId, entityId: await resolveMaterialEntityId(prisma, projectId) };
+}
+
+/**
+ * Dòng vat_tu cũ (tạo trước khi bắt buộc công trình) không được duyệt / làm mới số dư / đóng:
+ * báo lỗi rõ từng dòng. Từ chối dòng (soDuyet = 0) vẫn được — đó là lối ra cho dòng cũ.
+ */
+function assertVatTuItemsHaveProject(
+  items: Array<{ id: number; category: string; projectId: number | null }>,
+  action: string,
+) {
+  const missing = items.filter((item) => item.category === "vat_tu" && item.projectId == null);
+  if (missing.length) {
+    throw new MaterialScopeError(
+      "missing_project",
+      `Không thể ${action}: dòng vật tư thiếu công trình (${missing.map((item) => `#${item.id}`).join(", ")}). ` +
+        `Sửa dòng khi đợt còn nháp hoặc từ chối dòng đó.`,
+    );
+  }
+}
+
+/**
  * Auto-fill congNo + luyKe from balance-service for categories with ledger backing.
  * dich_vu and khac have no ledger rows — they default to 0.
  * entityId is required to prevent cross-entity balance bleed (bug fix).
@@ -234,7 +270,7 @@ export async function upsertItem(input: UpsertItemInput) {
   // Patch only the fields the caller sent. Do NOT re-pull balances.
   if (input.id) {
     const existing = await prisma.paymentRoundItem.findUnique({
-      where: { id: input.id }, select: { roundId: true },
+      where: { id: input.id }, select: { roundId: true, category: true, projectId: true, entityId: true },
     });
     if (!existing || existing.roundId !== input.roundId) {
       throw new Error("Payment item does not belong to the selected round");
@@ -262,6 +298,18 @@ export async function upsertItem(input: UpsertItemInput) {
       }
       updateData.category = input.category;
     }
+    // Dòng sau khi sửa là vat_tu → phải có công trình, Chủ thể theo công trình.
+    const nextCategory = (input.category ?? existing.category) as PaymentCategory;
+    if (nextCategory === "vat_tu") {
+      const scoped = await scopeItem(
+        nextCategory,
+        input.projectId !== undefined ? input.projectId : existing.projectId,
+        input.entityId ?? existing.entityId,
+        `Dòng #${input.id}`,
+      );
+      updateData.projectId = scoped.projectId;
+      updateData.entityId = scoped.entityId;
+    }
 
     return prisma.paymentRoundItem.update({
       where: { id: input.id },
@@ -275,6 +323,7 @@ export async function upsertItem(input: UpsertItemInput) {
       `category không hợp lệ: "${input.category}". Phải là một trong: ${VALID_CATEGORIES.join(", ")}`
     );
   }
+  const scoped = await scopeItem(input.category, input.projectId, input.entityId);
 
   if (input.override) {
     // Admin override: use raw values without touching balance-service
@@ -282,9 +331,9 @@ export async function upsertItem(input: UpsertItemInput) {
     return prisma.paymentRoundItem.create({
       data: {
         roundId: input.roundId,
-        entityId: input.entityId,
+        entityId: scoped.entityId,
         supplierId: input.supplierId,
-        projectId: input.projectId,
+        projectId: scoped.projectId,
         category: input.category,
         congNo: input.congNo ?? 0,
         luyKe: input.luyKe ?? 0,
@@ -302,9 +351,9 @@ export async function upsertItem(input: UpsertItemInput) {
     // Auto-fill from balance-service (snapshot frozen at creation time)
     const filled = await autoFillBalances(
       input.category,
-      input.entityId,
+      scoped.entityId,
       input.supplierId,
-      input.projectId
+      scoped.projectId
     );
     congNo = filled.congNo;
     luyKe = filled.luyKe;
@@ -318,9 +367,9 @@ export async function upsertItem(input: UpsertItemInput) {
   return prisma.paymentRoundItem.create({
     data: {
       roundId: input.roundId,
-      entityId: input.entityId,
+      entityId: scoped.entityId,
       supplierId: input.supplierId,
-      projectId: input.projectId,
+      projectId: scoped.projectId,
       category: input.category,
       congNo,
       luyKe,
@@ -356,9 +405,11 @@ export async function refreshItemBalances(itemId: number) {
   if (item.round.createdById !== actor.id && !isAdmin(actor.role)) {
     throw new Error("Chỉ người lập đợt hoặc admin được làm mới số dư");
   }
+  assertVatTuItemsHaveProject([item], "làm mới số dư");
 
   const category = item.category as PaymentCategory;
-  const filled = await autoFillBalances(category, item.entityId, item.supplierId, item.projectId);
+  const scoped = await scopeItem(category, item.projectId, item.entityId, `Dòng #${item.id}`);
+  const filled = await autoFillBalances(category, scoped.entityId, item.supplierId, scoped.projectId);
 
   return prisma.paymentRoundItem.update({
     where: { id: itemId },
@@ -391,10 +442,15 @@ export async function refreshAllItemBalances(roundId: number) {
     where: { roundId },
     select: { id: true, category: true, entityId: true, supplierId: true, projectId: true },
   });
-  const refreshed = await Promise.all(items.map(async (item) => ({
-    id: item.id,
-    balances: await autoFillBalances(item.category as PaymentCategory, item.entityId, item.supplierId, item.projectId),
-  })));
+  assertVatTuItemsHaveProject(items, "làm mới số dư");
+  const refreshed = await Promise.all(items.map(async (item) => {
+    const category = item.category as PaymentCategory;
+    const scoped = await scopeItem(category, item.projectId, item.entityId, `Dòng #${item.id}`);
+    return {
+      id: item.id,
+      balances: await autoFillBalances(category, scoped.entityId, item.supplierId, scoped.projectId),
+    };
+  }));
   const now = new Date();
   await prisma.$transaction(async (tx) => {
     // updateMany làm khóa trạng thái nguyên tử (không đổi dữ liệu nghiệp vụ) —
@@ -468,6 +524,8 @@ export async function approveItem(input: {
     throw new Error("Người lập đợt không được tự duyệt");
 
   const soDuyet = input.soDuyet ?? Number(item.soDeNghi);
+  // Duyệt số > 0 sẽ ghi sổ vật tư khi đóng đợt → dòng vat_tu phải có công trình.
+  if (soDuyet > 0) assertVatTuItemsHaveProject([item], "duyệt");
 
   await prisma.paymentRoundItem.update({
     where: { id: input.itemId },
@@ -528,8 +586,9 @@ export async function bulkApproveAsRequested(roundId: number) {
     if (total === 0) return;
     const pendingItems = await tx.paymentRoundItem.findMany({
       where: { roundId, approvedAt: null },
-      select: { id: true, soDeNghi: true },
+      select: { id: true, soDeNghi: true, category: true, projectId: true },
     });
+    assertVatTuItemsHaveProject(pendingItems.filter((item) => Number(item.soDeNghi) > 0), "duyệt cả đợt");
     for (const item of pendingItems) {
       await tx.paymentRoundItem.update({
         where: { id: item.id },

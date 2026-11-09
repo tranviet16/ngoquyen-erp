@@ -67,7 +67,7 @@ async function seedMasterData() {
       ledgerType: "material",
       entityId: entity.id,
       partyId: supplier.id,
-      projectId: null,
+      projectId: project.id,
       balanceTt: EXCEL.openingPeriod5,
       balanceHd: 0,
       asOfDate: new Date("2026-04-27"),
@@ -105,19 +105,21 @@ async function seedTwoPeriods(ids: Awaited<ReturnType<typeof seedMasterData>>) {
 const P5 = { from: "2026-04-28", to: "2026-05-26" };
 const P6 = { from: "2026-05-27", to: "2026-06-26" };
 
-async function closePeriod5(supplierId: number) {
-  const preview = await previewPeriodClose(supplierId, P5);
+async function closePeriod5(supplierId: number, projectId: number) {
+  const preview = await previewPeriodClose(supplierId, projectId, P5);
   return commitPeriodClose(
     supplierId,
+    projectId,
     P5,
     preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1850 })),
   );
 }
 
-async function closePeriod6(supplierId: number) {
-  const preview = await previewPeriodClose(supplierId, P6);
+async function closePeriod6(supplierId: number, projectId: number) {
+  const preview = await previewPeriodClose(supplierId, projectId, P6);
   return commitPeriodClose(
     supplierId,
+    projectId,
     P6,
     preview.deliveries.map((d) => ({
       deliveryId: d.id,
@@ -126,7 +128,7 @@ async function closePeriod6(supplierId: number) {
   );
 }
 
-async function payPeriod5(entityId: number, supplierId: number) {
+async function payPeriod5(entityId: number, supplierId: number, projectId: number) {
   // Chuyển khoản 100tr trong kỳ 5 — nhập tay ngoài đợt (đường cong-no-vt/nhap-lieu)
   const ledger = new LedgerService("material");
   await ledger.create({
@@ -134,7 +136,7 @@ async function payPeriod5(entityId: number, supplierId: number) {
     transactionType: "thanh_toan",
     entityId,
     partyId: supplierId,
-    projectId: null,
+    projectId,
     amountTt: String(EXCEL.paidPeriod5),
     amountHd: "0",
     content: "Chuyển khoản kỳ 5",
@@ -163,11 +165,11 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     const ids = await seedMasterData();
     await seedTwoPeriods(ids);
 
-    await closePeriod5(ids.supplier.id);
-    await payPeriod5(ids.entity.id, ids.supplier.id);
-    await closePeriod6(ids.supplier.id);
+    await closePeriod5(ids.supplier.id, ids.project.id);
+    await payPeriod5(ids.entity.id, ids.supplier.id, ids.project.id);
+    await closePeriod6(ids.supplier.id, ids.project.id);
 
-    const list = await listReconciliationsDerived(ids.supplier.id);
+    const list = await listReconciliationsDerived(ids.supplier.id, ids.project.id);
     expect(list).toHaveLength(2);
     const [p6, p5] = list; // orderBy periodFrom desc
 
@@ -191,7 +193,7 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     expect(ledgerBalance).toBe(EXCEL.closingPeriod6);
 
     // Lưới an toàn: 0 mồ côi, 0 chênh trên cả 2 kỳ
-    const check = await checkPeriodConsistency(ids.supplier.id, "2026-04-28", "2026-06-26");
+    const check = await checkPeriodConsistency(ids.supplier.id, ids.project.id, "2026-04-28", "2026-06-26");
     expect(check.orphanDeliveries).toHaveLength(0);
     expect(check.orphanEvents).toHaveLength(0);
     expect(check.mismatches).toHaveLength(0);
@@ -200,8 +202,8 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
   it("chốt kỳ idempotent: chạy lại đổi giá → vẫn 1 event/phiếu, số cập nhật", async () => {
     const ids = await seedMasterData();
     await seedTwoPeriods(ids);
-    await closePeriod5(ids.supplier.id);
-    await closePeriod5(ids.supplier.id); // lần 2 cùng payload
+    await closePeriod5(ids.supplier.id, ids.project.id);
+    await closePeriod5(ids.supplier.id, ids.project.id); // lần 2 cùng payload
 
     const events = await prisma.ledgerTransaction.findMany({
       where: { transactionType: "lay_hang", partyId: ids.supplier.id, deletedAt: null },
@@ -210,8 +212,8 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     expect(events.every((e) => Number(e.totalTt) === 14_800_000)).toBe(true);
 
     // Đổi giá 1 phiếu rồi chốt lại → event cập nhật, không nhân đôi
-    const preview = await previewPeriodClose(ids.supplier.id, P5);
-    await commitPeriodClose(ids.supplier.id, P5, [
+    const preview = await previewPeriodClose(ids.supplier.id, ids.project.id, P5);
+    await commitPeriodClose(ids.supplier.id, ids.project.id, P5, [
       { deliveryId: preview.deliveries[0].id, unitPrice: 1900 },
     ]);
     const updated = await prisma.ledgerTransaction.findMany({
@@ -222,24 +224,24 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     expect(Number(updated[0].totalTt)).toBe(8000 * 1900);
   });
 
-  it("chốt kỳ chặn phiếu thiếu công trình / công trình chưa gán Chủ Thể", async () => {
+  it("chốt kỳ cặp có công trình chưa gán Chủ Thể bị chặn, không ghi partial", async () => {
     const ids = await seedMasterData();
     const orphanProject = await prisma.project.create({
       data: { code: "NO-ENT", name: "Chưa gán chủ thể", status: "active" },
     });
     await seedDelivery(ids.supplier.id, orphanProject.id, ids.item.id, "2026-05-10", 100);
-    await prisma.supplierDeliveryDaily.create({
-      data: { supplierId: ids.supplier.id, projectId: null, date: new Date("2026-05-11"), itemId: ids.item.id, qty: 50, unit: "viên" },
-    });
+    await seedDelivery(ids.supplier.id, orphanProject.id, ids.item.id, "2026-05-11", 50);
 
-    const preview = await previewPeriodClose(ids.supplier.id, P5);
+    const preview = await previewPeriodClose(ids.supplier.id, orphanProject.id, P5);
     expect(preview.violations).toHaveLength(2);
-    expect(preview.violations.map((v) => v.reason).sort()).toEqual([
-      "missing_entity",
-      "missing_project",
-    ]);
+    expect(preview.violations.every((v) => v.reason === "missing_entity")).toBe(true);
     await expect(
-      commitPeriodClose(ids.supplier.id, P5, preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1000 }))),
+      commitPeriodClose(
+        ids.supplier.id,
+        orphanProject.id,
+        P5,
+        preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1000 })),
+      ),
     ).rejects.toThrow(/chưa đủ điều kiện/);
     // Không ghi partial
     expect(await prisma.ledgerTransaction.count({ where: { partyId: ids.supplier.id } })).toBe(0);
@@ -248,11 +250,11 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
   it("ký kỳ → đông cứng snapshot, khóa ghi trong kỳ; gỡ ký chỉ từ kỳ mới nhất", async () => {
     const ids = await seedMasterData();
     await seedTwoPeriods(ids);
-    await closePeriod5(ids.supplier.id);
-    await payPeriod5(ids.entity.id, ids.supplier.id);
-    await closePeriod6(ids.supplier.id);
+    await closePeriod5(ids.supplier.id, ids.project.id);
+    await payPeriod5(ids.entity.id, ids.supplier.id, ids.project.id);
+    await closePeriod6(ids.supplier.id, ids.project.id);
 
-    const list = await listReconciliationsDerived(ids.supplier.id);
+    const list = await listReconciliationsDerived(ids.supplier.id, ids.project.id);
     const p5 = list.find((r) => r.periodFrom === "2026-04-28")!;
     const p6 = list.find((r) => r.periodFrom === "2026-05-27")!;
 
@@ -285,13 +287,14 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
         transactionType: "thanh_toan",
         entityId: ids.entity.id,
         partyId: ids.supplier.id,
+        projectId: ids.project.id,
         amountTt: "1",
         amountHd: "0",
       }),
     ).rejects.toThrow(/đã được NCC ký/);
 
     // Khóa ghi: chốt lại kỳ đã ký bị chặn
-    await expect(closePeriod5(ids.supplier.id)).rejects.toThrow();
+    await expect(closePeriod5(ids.supplier.id, ids.project.id)).rejects.toThrow();
 
     // dieu_chinh không bị khóa (lối ra duy nhất cho chênh lệch)
     await ledger.create({
@@ -299,6 +302,7 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
       transactionType: "dieu_chinh",
       entityId: ids.entity.id,
       partyId: ids.supplier.id,
+      projectId: ids.project.id,
       amountTt: "-5000",
       amountHd: "0",
       content: "Điều chỉnh sau ký",

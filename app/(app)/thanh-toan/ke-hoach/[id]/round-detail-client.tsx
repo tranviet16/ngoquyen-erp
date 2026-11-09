@@ -47,6 +47,8 @@ interface Project {
   id: number;
   code: string;
   name: string;
+  /** Chủ thể sở hữu công trình — dòng vat_tu lấy Chủ thể theo đây. */
+  entityId?: number | null;
 }
 type Decimalish = string | number | { toString(): string };
 
@@ -98,6 +100,30 @@ function categoryToLedgerType(c: PaymentCategory): "material" | "labor" | "all" 
   if (c === "vat_tu") return "material";
   if (c === "nhan_cong") return "labor";
   return "all";
+}
+
+/**
+ * Dòng vat_tu thuộc công nợ vật tư theo cặp NCC × công trình: bắt buộc công trình, Chủ thể luôn
+ * = Chủ thể của công trình (server cũng thay lại khi lưu). Trả null khi chưa chọn công trình
+ * hoặc công trình chưa gán Chủ thể.
+ */
+function projectEntityId(projects: Project[], projectId: number | null): number | null {
+  if (projectId == null) return null;
+  return projects.find((p) => p.id === projectId)?.entityId ?? null;
+}
+
+/** Thông báo chặn lưu dòng vat_tu (null = hợp lệ). */
+function vatTuScopeError(projects: Project[], projectId: number | null): string | null {
+  if (projectId == null) return "Dòng vật tư bắt buộc chọn công trình";
+  if (projectEntityId(projects, projectId) == null) {
+    return "Công trình chưa gán Chủ thể — gán ở Master data > Dự án";
+  }
+  return null;
+}
+
+function VatTuScopeHint({ message }: { message: string | null }) {
+  if (!message) return null;
+  return <p className="mt-1 text-xs text-destructive">{message}</p>;
 }
 
 async function fetchCascadeProjects(
@@ -404,9 +430,9 @@ function ItemRow({
     item.soDuyet !== null ? Number(item.soDuyet) : Number(item.soDeNghi)
   );
 
-  // Cascade state
+  // Cascade state — dòng vat_tu chọn công trình trước (mọi công trình), Chủ thể suy theo công trình.
   const [availableProjects, setAvailableProjects] = useState<Project[]>(
-    item.project ? [item.project] : []
+    item.category === "vat_tu" ? projects : item.project ? [item.project] : []
   );
   const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([item.supplier]);
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -467,12 +493,32 @@ function ItemRow({
   function handleProjectChange(pid: number | null) {
     setProjectId(pid);
     setSupplierId(0);
+    if (category === "vat_tu") {
+      const eid = projectEntityId(projects, pid);
+      if (eid == null) {
+        setAvailableSuppliers([]);
+        setSuppliersFetched(false);
+        return;
+      }
+      setEntityId(eid);
+      doFetchSuppliers(eid, pid, ledgerType);
+      return;
+    }
     doFetchSuppliers(entityId, pid, ledgerType);
   }
 
   function handleCategoryChange(cat: PaymentCategory) {
     setCategory(cat);
     const lt = categoryToLedgerType(cat);
+    if (cat === "vat_tu") {
+      setAvailableProjects(projects);
+      const eid = projectEntityId(projects, projectId);
+      if (eid != null) {
+        setEntityId(eid);
+        doFetchSuppliers(eid, projectId, lt);
+      }
+      return;
+    }
     if (entityId && projectId !== undefined) {
       doFetchSuppliers(entityId, projectId, lt);
     }
@@ -544,14 +590,18 @@ function ItemRow({
     item.note,
   ]);
 
+  const vatTuError = category === "vat_tu" ? vatTuScopeError(projects, projectId) : null;
+
   function save() {
+    if (vatTuError) { toast.error(vatTuError); return; }
     if (!supplierId) { toast.error("Chọn NCC"); return; }
+    const savedEntityId = category === "vat_tu" ? (projectEntityId(projects, projectId) ?? entityId) : entityId;
     startTransition(async () => {
       try {
         await upsertItemAction({
           id: item.id,
           roundId,
-          entityId,
+          entityId: savedEntityId,
           supplierId,
           projectId,
           category,
@@ -637,9 +687,11 @@ function ItemRow({
       <td className="px-2 py-2">
         {canEdit ? (
           <select
-            className="h-8 w-36 rounded border bg-background px-1 text-sm"
+            className="h-8 w-36 rounded border bg-background px-1 text-sm disabled:opacity-70"
             value={entityId}
             onChange={(e) => handleEntityChange(Number(e.target.value))}
+            disabled={category === "vat_tu"}
+            title={category === "vat_tu" ? "Dòng vật tư: Chủ thể theo công trình" : undefined}
           >
             {entities.map((en) => (
               <option key={en.id} value={en.id}>{en.name}</option>
@@ -651,17 +703,20 @@ function ItemRow({
       </td>
       <td className="px-2 py-2">
         {canEdit ? (
-          <select
-            className="h-8 w-44 rounded border bg-background px-1 text-sm"
-            value={projectId ?? ""}
-            onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-            disabled={loadingProjects || !entityId}
-          >
-            <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
-            {availableProjects.map((p) => (
-              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-            ))}
-          </select>
+          <>
+            <select
+              className="h-8 w-44 rounded border bg-background px-1 text-sm"
+              value={projectId ?? ""}
+              onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
+              disabled={loadingProjects || (category !== "vat_tu" && !entityId)}
+            >
+              <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
+              {availableProjects.map((p) => (
+                <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+              ))}
+            </select>
+            <VatTuScopeHint message={vatTuError} />
+          </>
         ) : item.project ? (
           `${item.project.code} — ${item.project.name}`
         ) : (
@@ -860,7 +915,8 @@ function NewItemRow({
   const [congNoInput, setCongNoInput] = useState(0);
   const [luyKeInput, setLuyKeInput] = useState(0);
 
-  const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
+  // Mặc định loại vat_tu: chọn công trình trước (mọi công trình), Chủ thể suy theo công trình.
+  const [availableProjects, setAvailableProjects] = useState<Project[]>(projects);
   const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
@@ -924,6 +980,12 @@ function NewItemRow({
     setSupplierId(null);
     setAvailableSuppliers([]);
     setSuppliersFetched(false);
+    if (category === "vat_tu") {
+      const eid = projectEntityId(projects, pid);
+      setEntityId(eid);
+      if (eid != null) doFetchSuppliers(eid, pid, ledgerType);
+      return;
+    }
     if (entityId) doFetchSuppliers(entityId, pid, ledgerType);
   }
 
@@ -932,6 +994,13 @@ function NewItemRow({
     const lt = categoryToLedgerType(cat);
     setSupplierId(null);
     setSuppliersFetched(false);
+    if (cat === "vat_tu") {
+      setAvailableProjects(projects);
+      const eid = projectEntityId(projects, projectId);
+      setEntityId(eid);
+      if (eid != null) doFetchSuppliers(eid, projectId, lt);
+      return;
+    }
     if (entityId && projectId !== undefined) {
       doFetchSuppliers(entityId, projectId, lt);
     }
@@ -950,7 +1019,10 @@ function NewItemRow({
     }
   }
 
+  const vatTuError = category === "vat_tu" ? vatTuScopeError(projects, projectId) : null;
+
   function add() {
+    if (vatTuError) { toast.error(vatTuError); return; }
     if (!entityId) { toast.error("Chọn Chủ thể"); return; }
     if (!supplierId) { toast.error("Chọn NCC"); return; }
     startTransition(async () => {
@@ -971,7 +1043,7 @@ function NewItemRow({
         setEntityId(null);
         setProjectId(null);
         setSupplierId(null);
-        setAvailableProjects([]);
+        setAvailableProjects(projects);
         setAvailableSuppliers([]);
         setSuppliersFetched(false);
         setCategory("vat_tu");
@@ -1007,11 +1079,13 @@ function NewItemRow({
       <td className="px-2 py-2">{nextIdx}</td>
       <td className="px-2 py-2">
         <select
-          className="h-8 w-36 rounded border bg-background px-1 text-sm"
+          className="h-8 w-36 rounded border bg-background px-1 text-sm disabled:opacity-70"
           value={entityId ?? ""}
           onChange={(e) => handleEntityChange(e.target.value ? Number(e.target.value) : null)}
+          disabled={category === "vat_tu"}
+          title={category === "vat_tu" ? "Dòng vật tư: Chủ thể theo công trình" : undefined}
         >
-          <option value="">— Chọn Chủ thể —</option>
+          <option value="">{category === "vat_tu" ? "— Theo công trình —" : "— Chọn Chủ thể —"}</option>
           {entities.map((en) => (
             <option key={en.id} value={en.id}>{en.name}</option>
           ))}
@@ -1022,13 +1096,14 @@ function NewItemRow({
           className="h-8 w-44 rounded border bg-background px-1 text-sm"
           value={projectId ?? ""}
           onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-          disabled={loadingProjects || !entityId}
+          disabled={loadingProjects || (category !== "vat_tu" && !entityId)}
         >
           <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
           {availableProjects.map((p) => (
             <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
           ))}
         </select>
+        {projectId != null && <VatTuScopeHint message={vatTuError} />}
       </td>
       <td className="px-2 py-2">
         <div className="space-y-1">

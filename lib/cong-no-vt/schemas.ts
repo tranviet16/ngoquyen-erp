@@ -16,12 +16,21 @@ const vatPctString = z
   }, "VAT % phải từ 0 đến 1 (e.g. 0.1 = 10%)")
   .default("0");
 
+/**
+ * Sổ vật tư theo cặp NCC × công trình: công trình bắt buộc. Chủ thể (`entityId`) vẫn nhận từ
+ * client cho tương thích kiểu, nhưng server luôn thay bằng Chủ thể của công trình.
+ */
+const requiredProjectId = z
+  .number({ error: "Chọn công trình" })
+  .int("Công trình không hợp lệ")
+  .positive("Chọn công trình");
+
 const transactionBaseSchema = z.object({
   date: z.string().min(1, "Ngày không được để trống"),
   transactionType: z.enum(TRANSACTION_TYPES),
   entityId: z.number().int().positive("Chủ thể không hợp lệ"),
   partyId: z.number().int().positive("NCC không hợp lệ"),
-  projectId: z.number().int().positive().optional().nullable(),
+  projectId: requiredProjectId,
   itemId: z.number().int().positive().optional().nullable(),
   amountTt: decimalString("Số tiền TT"),
   vatPctTt: vatPctString,
@@ -48,7 +57,7 @@ export const transactionSchema = transactionBaseSchema.superRefine((val, ctx) =>
 export const openingBalanceSchema = z.object({
   entityId: z.number().int().positive("Chủ thể không hợp lệ"),
   partyId: z.number().int().positive("NCC không hợp lệ"),
-  projectId: z.number().int().positive().optional().nullable(),
+  projectId: requiredProjectId,
   balanceTt: decimalString("Số dư TT"),
   balanceHd: decimalString("Số dư HĐ"),
   asOfDate: z.string().min(1, "Ngày không được để trống"),

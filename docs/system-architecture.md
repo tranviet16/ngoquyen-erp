@@ -21,7 +21,7 @@ Access is evaluated in this order:
 3. Resolve rollout availability. An entitled user opening a development module is redirected to `/dang-phat-trien`.
 4. For a ready module, continue with the existing resource-axis checks and business handler.
 
-`canAccess`, shared role guards, project visibility, bespoke APIs and server actions all enforce rollout state. Project pages repeat their project-scoped guard locally because App Router layouts and child pages may render in parallel. Project Server Actions independently enforce project scope and bind ID mutations to the record's owning project. Admins may bypass ACL entitlement according to the existing role policy, but they do not bypass a module's development status. The development page renders only an inert, synthetic blurred shell and never loads the destination component or business data.
+`canAccess`, shared role guards, project visibility, bespoke APIs and server actions all enforce rollout state. Project pages repeat their project-scoped guard locally because App Router layouts and child pages may render in parallel. Project Server Actions independently enforce project scope and bind ID mutations to the record's owning project. Active admins bypass both ACL entitlement and the development status (`requireReleasedModuleRequest`, `canAccess` and the page guards return early for `role = "admin"`; inactive users are denied first), so switching a module to `development` blocks only non-admin users — the go-live freeze of `vat-tu-ncc` / `cong-no-vt` / `thanh-toan.*` relies on admins staying out. The development page renders only an inert, synthetic blurred shell and never loads the destination component or business data.
 
 Release-status writes are allowlisted, require an active admin, reject protected core modules, and write the availability change plus its before/after `AuditLog` entry atomically in one serializable interactive transaction. Stale multi-admin baselines are rejected, serialization conflicts receive one bounded retry, and revalidation occurs only after commit. Integration fault injection verifies that an audit insert failure rolls back the availability update.
 
@@ -34,7 +34,7 @@ Gating mechanism for per-user visibility and route access at the module level.
 - **Levels:** `"read"`, `"comment"`, `"edit"`, `"admin"` (per-module valid sets; some modules have fewer options)
 - **Semantics:** Determines whether a user can see a module on the sidebar and access routes within that module
 - **Fallback:** If no `ModulePermission` row exists, the system falls back to the user's role grants in the `RolePermission` table, resolved by `lib/acl/role-permissions.ts`
-- **Admin ACL Short-Circuit (D1):** Users with `role = "admin"` bypass ACL entitlement checks, but remain subject to global module availability
+- **Admin ACL Short-Circuit (D1):** Active users with `role = "admin"` bypass ACL entitlement checks and the global module availability gate
 
 ### Axis 2: Resource Access (Trục 2 — Per-Module Axis Dispatch)
 
@@ -145,12 +145,59 @@ GET /api/tai-chinh/state-obligation/report       Period aggregation
 
 ---
 
-## Vật Tư NCC — Công nợ, Báo giá, Thanh toán, Chốt Kỳ (2026-10-06)
+## Vật Tư NCC — Công nợ, Báo giá, Thanh toán, Chốt Kỳ (2026-10-06; phạm vi cặp 2026-11-06)
 
 **Quy định cơ bản:**
 - **Nguồn sự thật công nợ:** `ledger_transactions` (ledgerType="material") + `ledger_opening_balances` — `SupplierReconciliation` là snapshot dẫn xuất, chỉ đông cứng khi ký.
+- **Phạm vi = cặp NCC × công trình:** biên kỳ, chốt, ký, gỡ ký, khoá kỳ, snapshot, khoá số dư ban đầu và đồng bộ đợt thanh toán đều nhận `(supplierId, projectId)`. Ký A×X không khoá A×Y.
 - **Quy ước ngày sổ cái:** `date` = ngày nghiệp vụ (business day) tại múi giờ Asia/Bangkok, lưu tại UTC 00:00 (TIMESTAMP(3) không múi giờ). Truy vấn cửa sổ: `date >= from AND date < to + 1 ngày`.
 - **Migration dữ liệu:** `20261006110000_normalize_ledger_dates_to_business_day` chuẩn hoá mọi `date` từ các nguồn cũ (đợt thanh toán ghi giờ đóng đợt, Excel import ghi nửa đêm → ngày nghiệp vụ Asia/Bangkok UTC 00:00). Có sao lưu DB trước chạy.
+
+### Phạm vi cặp NCC × công trình (2026-11-06)
+
+- **Bắt buộc công trình ở DB** (migration `20261106090000_vat_tu_pair_scope_and_import_review`):
+  - `supplier_reconciliations.projectId` NOT NULL, FK `Restrict`, unique một phần `supplier_recon_pair_period_unique (supplierId, projectId, periodFrom, periodTo) WHERE deletedAt IS NULL`;
+  - 3 CHECK kiểm ngay trên mọi dòng, kể cả dòng xoá mềm: `ledger_material_project_required`, `ledger_opening_material_project_required`, `supplier_delivery_project_required`;
+  - migration dừng nếu còn bất kỳ kỳ đối chiếu cũ nào. Dữ liệu cũ được dọn và bù công trình trước bằng `scripts/vat-tu-cutover-cleanup.sql`, theo danh sách duyệt từ `scripts/vat-tu-cutover-inventory.sql` (runbook go-live trong `plans/261105-0848-cong-no-vat-tu-theo-cong-trinh/reports/`).
+- **Đợt thanh toán:** không có CHECK trên `payment_round_items`, và dòng `vat_tu` cũ ở đợt đã đóng được giữ nguyên. Service bắt buộc công trình khi tạo hoặc sửa dòng `vat_tu`. Duyệt, duyệt cả đợt, làm mới số dư và đóng đợt đều từ chối dòng `vat_tu` cũ thiếu công trình; từ chối dòng thì vẫn được.
+- **Chủ thể suy từ công trình:** `resolveMaterialEntityId` (`lib/vat-tu-ncc/pair-scope.ts`) lấy `Project.entityId` cho mọi ghi vật tư (sổ, số dư, event từ phiếu, dòng đợt `vat_tu`, đồng bộ đợt). Công trình chưa có Chủ thể → `MaterialScopeError` mã `missing_entity`. Trong transaction ghi, công trình được đọc `FOR SHARE`. `patchProject` / `patchProjectEntity` (`lib/master-data/project-service.ts`) khoá dòng công trình `FOR UPDATE` rồi mới kiểm: gán Chủ thể lần đầu được, trừ khi công trình đã có dòng sổ / số dư vật tư mang Chủ thể khác; đổi hoặc bỏ Chủ thể bị từ chối khi công trình đã có sổ, phiếu, số dư hoặc kỳ vật tư.
+- **Khoá advisory giữ theo NCC** (`lockSuppliers`). Khoá thô hơn phạm vi nghiệp vụ vẫn đúng, vì mọi đường ghi (kể cả commit import) theo quy ước "khoá rồi mới kiểm" (`docs/code-standards.md`).
+- **Guard mốc chuyển đổi toàn cục** (`pair-scope.ts`):
+  - `getMaterialCutoverDate` đọc run `vat-tu-chuyen-doi` mới nhất ở trạng thái `committed`, lấy mốc ở `reviewJson.expected.cutoverDate` (ngày bao gồm, ví dụ `2026-10-26`) bằng một câu SQL chỉ đọc đúng trường đó (không kéo cả `reviewJson`);
+  - `assertAfterMaterialCutover` chặn mọi ghi vật tư có ngày ≤ mốc (`cutover_locked`), ở mọi cặp kể cả cặp mới, mọi loại kể cả `dieu_chinh`;
+  - run đã commit mà thiếu mốc thì fail closed (`cutover_invalid`); chưa có run thì không chặn;
+  - ghi của chính run import truyền `cutoverImportRunId`.
+- **Marker kỳ chuyển đổi:** kỳ có `importRunId` khác NULL (`isCutoverMarker`) được ký ngay khi import. Gỡ ký, sửa, xoá đều bị từ chối (`CUTOVER_MARKER_LOCKED_MESSAGE`); chỉ hoàn tác import mới gỡ được. UI hiện "Kỳ chuyển đổi (khóa)". `freezeReconciliationSnapshot` (`reconciliation-compute.ts`) tính snapshot và 4 cột tổng trong transaction của caller (caller khoá NCC trước).
+- **Dòng lũy kế 26/12/2025** (theo kế hoạch phase 7): cặp được duyệt lũy kế nhận 2 dòng `lay_hang` / `thanh_toan` ngày 26/12/2025, thay cho số dư ròng asOf 31/12/2025. Ngày 26/12 nằm ngoài Kỳ chuẩn T1/2026 (27/12→26/01), nên Đầu kỳ T1/2026 = Số Dư.
+- **Giao diện:**
+  - Đường vào theo công trình: `/vat-tu-ncc/cong-trinh` → `/vat-tu-ncc/cong-trinh/[projectId]` (`lib/vat-tu-ncc/project-overview-service.ts`) → trang NCC `?projectId=`.
+  - Cột nợ ở trang công trình chỉ hiện khi `canAccess(…, "cong-no-vt", read)`.
+  - Tab giữ `projectId` (`SupplierPairNav`, `components/vat-tu-ncc/pair-project-picker.tsx`). Tab theo cặp thiếu tham số thì hiện bộ chọn công trình; công trình không tồn tại → 404.
+  - Lỗi khoá kỳ / mốc của lưới phiếu đi qua `lib/vat-tu-ncc/delivery-actions.ts` (trả `{ ok, message }`) để toast hiện đúng ở production.
+- **Tổng hợp theo công trình** `/cong-no-vt/tong-hop-cong-trinh` (`project-debt-pivot.ts`, `project-debt-summary-service.ts`):
+  - pivot NCC → công trình hoặc Công trình → NCC, lọc Chủ thể, một lần `queryDetailReport`;
+  - chế độ kỳ: Đầu kỳ / PS tăng / PS giảm / Cuối kỳ; không có cận dưới thì chế độ lũy kế: Số dư chuyển sang / LH lũy kế / Đã trả lũy kế / Còn nợ;
+  - xuất Excel template `cong-no-cong-trinh`. Ma trận NCC × Chủ thể (`/cong-no-vt/tong-hop`) giữ nguyên.
+- Tab Công nợ của Dự án (`/du-an/[id]/cong-no`) giữ nguồn `project_transactions`, chỉ thêm liên kết sang trang công trình.
+
+### Import chuyển đổi và vòng đời run (`/admin/import`)
+
+- **Gói thư mục** (`lib/import/file-bundle.ts`, `bundle-path.ts`): adapter `acceptsBundle` nhận cả thư mục (.xlsx/.csv, ≤ 200 file, ≤ 20 MB; file ẩn, `~$…` và đuôi khác bị bỏ qua và liệt kê). `bundleHash` là `fileHash` của run. Nguồn lưu ở `import_runs.sourceFile`, để commit đọc lại đúng gói đã xem.
+- **Vòng đời run:**
+  - `preview`: `review` của adapter chạy thử trong transaction riêng đã khoá `lockScope` rồi rollback; kết quả lưu ở `reviewJson`, kèm `reviewVersion`.
+  - `committed`: một transaction 300 s. Thứ tự: khoá dòng run `FOR UPDATE` → đúng `reviewVersion` → chống trùng hash → `lockSuppliers` → review lại dưới khoá → `apply` → đổi trạng thái cùng câu ghi `reviewJson.expected`.
+  - `failed`: chỉ từ `preview`, khi lỗi thực thi. Lỗi điều kiện (`ImportPreconditionError`) giữ nguyên trạng thái.
+  - `rolled_back`: hoàn tác giữ run làm dấu vết, `sourceFile = NULL`.
+  - Run đã ghi không bị xoá.
+- **Guard hoàn tác** (`lib/import/rollback-guards.ts`) từ chối khi một cặp của run có kỳ ký ngoài run, dòng sổ hoặc số dư vật tư mới không thuộc run (kể cả `dieu_chinh`), hoặc event trỏ tới phiếu của run.
+- **Adapter đang đăng ký:** `bang-can-doi-vat-tu`, `du-toan-tong-hop-vt`, `cong-no-nhan-cong`, `du-an-xay-dung`, `tai-chinh-nq`, `sl-dt`. Đã gỡ `cong-no-vat-tu`, `gach-nam-huong`, `quang-minh` (ghi sổ / phiếu vật tư không có công trình, không chống trùng); run cũ của chúng vẫn hoàn tác được.
+- **Adapter `vat-tu-chuyen-doi`** (theo kế hoạch phase 7, đang triển khai; parser thuần `parseCutoverBundle` đã có ở `lib/import/adapters/vat-tu-chuyen-doi/`):
+  - nhận cả thư mục `Quản Lý Công Nợ`: file tổng, CSV "Tổng công nợ", 23 file theo dõi;
+  - review gồm ánh xạ tên, tách CDC, duyệt từng cặp (lũy kế / ròng), ngày mơ hồ, ghép sau mốc, neo;
+  - ghi trong một transaction: danh mục → số dư / lũy kế → Nhập Liệu ≤ mốc (cộng "Trả Nợ" sau mốc không khớp thanh toán ERP) → phiếu → marker 01/01→26/10/2026 đã ký cho mọi cặp có dữ liệu → đối soát V1–V4 bằng cùng đường mã với xem trước (V2–V4 lệch thì rollback);
+  - phiếu lịch sử không gắn `deliveryId` và không sinh event;
+  - "Lấy Hàng" sau mốc không bao giờ ghi thành dòng sổ, phải ghép được với phiếu;
+  - đợt `vat_tu` còn mở (draft / submitted / approved): xác nhận từng đợt "chưa chi và chưa có trong Nhập Liệu"; đợt có dòng trùng số tiền (± 1 đồng) với "Trả Nợ" cùng NCC × công trình bị chặn tới khi chọn bỏ dòng Nhập Liệu hoặc giữ cả hai. Đợt đã đóng có ngày > mốc trùng "Trả Nợ" ≤ mốc vẫn đi qua kiểm khớp chéo mốc.
 
 ### Phân loại giao dịch sổ cái
 
@@ -198,19 +245,19 @@ Dùng cho `/cong-no-vt/{bao-cao-thang, chi-tiet, tong-hop}` và `lib/export/temp
 
 **Lock & assertPeriodOpen:**
 - `lockSuppliers(tx, [supplierId1, supplierId2, ...])`: lấy advisory lock `pg_advisory_xact_lock(hashtext('vat-tu-ncc:' || id))` **trong transaction**, sắp xếp id tăng dần tránh deadlock
-- Mọi đường ghi (phiếu ngày, sổ cái vật tư, số dư ban đầu, chốt kỳ, ký/gỡ ký, đồng bộ đợt thanh toán) dùng cùng khoá trên NCC → không check-then-write race với ký kỳ
-- `assertPeriodOpen(supplierId, date, client)`: ném lỗi nếu `date` rơi vào kỳ ký → từ chối ghi, chênh lệch → `dieu_chinh` kỳ sau
+- Mọi đường ghi (phiếu ngày, sổ cái vật tư, số dư ban đầu, chốt kỳ, ký/gỡ ký, đồng bộ đợt thanh toán, commit import) dùng cùng khoá trên NCC → không check-then-write race với ký kỳ
+- `assertPeriodOpen(supplierId, projectId, date, client, opts?)`: guard mốc chuyển đổi trước, rồi ném lỗi nếu `date` rơi vào kỳ ký **của cặp** → từ chối ghi, chênh lệch → `dieu_chinh` kỳ sau. `assertMaterialTypeWritable` cho `dieu_chinh` bỏ khoá kỳ nhưng vẫn qua guard mốc.
 
-**Gợi ý kỳ tiếp theo:** `suggestNextPeriod()` dùng max(mốc opening + 1, ngày sau marker gần nhất, phiếu sớm nhất chưa có event) → cận từ, 26 cận đến.
+**Biên kỳ và gợi ý kỳ theo cặp:** `loadPeriodBoundsContext(supplierId, projectId)` → `validatePeriodBounds`; `suggestRangeForPair(supplierId, projectId, …)` dùng max(mốc opening + 1, ngày sau marker gần nhất của cặp, phiếu sớm nhất chưa có event) → cận từ, 26 cận đến. Sau import chuyển đổi, kỳ gợi ý đầu tiên là 27/10/2026→26/11/2026.
 
 ### Ký xác nhận & Snapshot
 
-`signReconciliation(supplierId, reconId)` (inside `$transaction` + khoá NCC):
+`signReconciliation(id)` (inside `$transaction` + khoá NCC; bảng chỉ gồm dòng của đúng cặp):
 - **Bảng dẫn xuất trước ký**: A (opening = cuối kỳ trước), B (Σ lay_hang + thue_hd), C (Σ thanh_toan) — live query
 - **Sau ký**: `openingBalance/totalIn/totalPaid/closingBalance` đông cứng (display-only), cộng full `signedSnapshotJson` (line items + subtotals = source of truth tái in)
 - **`totalIn` = B** (không gộp thue_hd riêng), **thuế trong JSON** (phiếu mục lục)
-- **Gỡ ký**: admin-only, từ chối nếu kỳ sau đã ký (break chain), xoá marker nếu gỡ ký kỳ cuối cùng
-- **Kỳ đã ký bất biến**; số dư ban đầu của NCC bị khoá sau ký đầu tiên
+- **Gỡ ký** (`unsignReconciliation(id)`): admin-only, từ chối nếu kỳ sau của cặp đã ký (break chain); marker chuyển đổi không gỡ được
+- **Kỳ đã ký bất biến**; số dư ban đầu của cặp bị khoá sau ký đầu tiên (`assertPairOpeningEditable`)
 
 ### Dữ liệu & Migrations
 
@@ -218,17 +265,19 @@ Dùng cho `/cong-no-vt/{bao-cao-thang, chi-tiet, tong-hop}` và `lib/export/temp
 - `Project.entityId: Int? FK → Entity` — Chủ thể cho phiếu dùng dự án
 - `SupplierDeliveryDaily.unitPrice/totalAmount: Decimal?` — null → gán khi chốt
 - `LedgerTransaction.deliveryId/paymentRoundItemId: Int? FK` (partial-unique) — liên kết & snapshot
-- `SupplierReconciliation`: 4 cột nullable (opened/in/out/closed) + `signedSnapshotJson: Json?`
+- `SupplierReconciliation`: 4 cột nullable (opened/in/out/closed) + `signedSnapshotJson: Json?`; `projectId Int` (NOT NULL, 2026-11-06); `importRunId` khác NULL = marker chuyển đổi
+- `ImportRun` (2026-11-06): `sourceFile Bytes?`, `reviewJson Json?`, `reviewVersion Int`, `rolledBackAt DateTime?`; trạng thái thêm `rolled_back`
 
 **Migrations:**
 - `20260729160000_add_project_entity_and_delivery_pricing`
 - `20260729161000_link_ledger_to_payment_item`
 - `20260729162000_reconciliation_derived_snapshot`
 - `20261006110000_normalize_ledger_dates_to_business_day` (phase 1)
+- `20261106090000_vat_tu_pair_scope_and_import_review` (chỉ sửa tiến; chạy sau script dọn)
 
-### Backlog (chưa trong phạm vi)
+### Đã xử lý (2026-11-06)
 
-- Importer (`cong-no-vat-tu.adapter.ts:189-200`) ghi SQL thô không qua khoá kỳ — công cụ admin tải lịch sử, từ chối nếu kỳ từ date trong ghi bị ký (user xử lý manual).
+- Ba importer cũ (`cong-no-vat-tu`, `gach-nam-huong`, `quang-minh`) ghi SQL thô không qua khoá kỳ và không có công trình đã được gỡ khỏi registry. Import chuyển đổi khoá NCC rồi mới kiểm và ghi.
 
 ---
 

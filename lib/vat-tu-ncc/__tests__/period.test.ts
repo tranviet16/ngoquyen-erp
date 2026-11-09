@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { periodRange, periodLabel } from "../period";
-import { deliverySchema } from "../schemas";
+import { deliverySchema, reconciliationSchema } from "../schemas";
 
 describe("periodRange — kỳ cố định 27 tháng trước → 26 tháng đích", () => {
   it.each([
@@ -38,6 +38,7 @@ describe("periodRange — kỳ cố định 27 tháng trước → 26 tháng đ�
 describe("deliverySchema — đơn giá tùy chọn", () => {
   const base = {
     supplierId: 1,
+    projectId: 3,
     date: "2026-05-04",
     itemId: 2,
     qty: 8000,
@@ -57,5 +58,27 @@ describe("deliverySchema — đơn giá tùy chọn", () => {
 
   it("từ chối giá âm", () => {
     expect(() => deliverySchema.parse({ ...base, unitPrice: -1 })).toThrow();
+  });
+
+  it("bắt buộc công trình (phiếu thuộc một cặp NCC × công trình)", () => {
+    const { projectId: _omit, ...withoutProject } = base;
+    void _omit;
+    const r = deliverySchema.safeParse(withoutProject);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]).toMatchObject({ path: ["projectId"], message: "Chọn công trình" });
+    expect(deliverySchema.safeParse({ ...base, projectId: 0 }).success).toBe(false);
+  });
+});
+
+describe("reconciliationSchema — kỳ đối chiếu theo cặp", () => {
+  const recon = { supplierId: 1, periodFrom: "2026-09-27", periodTo: "2026-10-26" };
+
+  it("bắt buộc công trình", () => {
+    expect(reconciliationSchema.safeParse(recon).success).toBe(false);
+    expect(reconciliationSchema.safeParse({ ...recon, projectId: 7 }).success).toBe(true);
+  });
+
+  it("vẫn kiểm từ ngày ≤ đến ngày", () => {
+    expect(reconciliationSchema.safeParse({ ...recon, projectId: 7, periodTo: "2026-09-01" }).success).toBe(false);
   });
 });

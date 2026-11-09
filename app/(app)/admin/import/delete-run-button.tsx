@@ -3,14 +3,22 @@
 import { useState, useTransition } from "react";
 import { deleteRun, rollbackRun, getRunRollbackInfo } from "./import-actions";
 
+/**
+ * Thao tác theo trạng thái run:
+ * - `committed` → Hoàn tác (run chuyển `rolled_back`, không bị xóa);
+ * - `preview` / `failed` không còn dữ liệu → Xóa;
+ * - còn lại (đã hoàn tác, run lỗi cũ còn dữ liệu) → không có nút.
+ */
 export function DeleteRunButton({
   id,
   status,
   supportsRollback,
+  hasData,
 }: {
   id: number;
   status: string;
   supportsRollback: boolean;
+  hasData: boolean;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -25,6 +33,19 @@ export function DeleteRunButton({
     );
   }
 
+  if (status !== "preview" && status !== "failed") return null;
+
+  if (hasData) {
+    return (
+      <span
+        className="text-xs text-muted-foreground"
+        title="Run còn dữ liệu gắn importRunId nên không xóa được — liên hệ quản trị hệ thống."
+      >
+        Còn dữ liệu
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -33,11 +54,8 @@ export function DeleteRunButton({
       onClick={() => {
         if (!confirm(`Xóa lần import #${id}? Hành động không hoàn tác.`)) return;
         startTransition(async () => {
-          try {
-            await deleteRun(id);
-          } catch (e) {
-            alert(String(e));
-          }
+          const result = await deleteRun(id);
+          if (!result.ok) alert(result.message);
         });
       }}
       className="text-red-600 hover:underline text-xs disabled:text-gray-400 disabled:cursor-not-allowed"
@@ -71,15 +89,12 @@ function RollbackButton({
     }
 
     setChecking(true);
-    let info: { total: number };
-    try {
-      info = await getRunRollbackInfo(id);
-    } catch (e) {
-      alert(String(e));
-      setChecking(false);
+    const info = await getRunRollbackInfo(id);
+    setChecking(false);
+    if (!info.ok) {
+      alert(info.message);
       return;
     }
-    setChecking(false);
 
     if (info.total === 0) {
       alert(
@@ -90,18 +105,14 @@ function RollbackButton({
 
     const msg =
       `Hoàn tác run #${id}?\n\n` +
-      `Sẽ xóa ${info.total} dòng dữ liệu đã import.\n\n` +
+      `Sẽ xóa ${info.total} dòng dữ liệu đã import. Run được giữ lại ở trạng thái "Đã hoàn tác".\n\n` +
       `Master data (NCC, Chủ thể, Dự án) sẽ KHÔNG bị xóa.\nHành động không hoàn tác.`;
     if (!confirm(msg)) return;
     if (!confirm(`Xác nhận lần 2: Xóa ${info.total} dòng dữ liệu của run #${id}?`)) return;
 
     startTransition(async () => {
-      try {
-        const result = await rollbackRun(id);
-        alert(`Đã hoàn tác: xóa ${result.total} rows.`);
-      } catch (e) {
-        alert(String(e));
-      }
+      const result = await rollbackRun(id);
+      alert(result.ok ? `Đã hoàn tác: xóa ${result.total} dòng.` : result.message);
     });
   };
 

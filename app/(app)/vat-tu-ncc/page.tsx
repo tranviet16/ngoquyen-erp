@@ -22,11 +22,19 @@ export default async function VatTuNccPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold">Vật tư theo Nhà cung cấp</h1>
-        <p className="text-sm text-muted-foreground">
-          Chọn NCC để xem chi tiết phiếu nhập vật tư và đối chiếu công nợ.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Vật tư theo Nhà cung cấp</h1>
+          <p className="text-sm text-muted-foreground">
+            Chọn NCC để xem chi tiết phiếu nhập vật tư và đối chiếu công nợ.
+          </p>
+        </div>
+        <Link
+          href="/vat-tu-ncc/cong-trinh"
+          className="rounded-md border px-3 py-2 text-sm font-medium hover:border-primary hover:text-primary transition-colors"
+        >
+          Theo công trình →
+        </Link>
       </div>
 
       {suppliers.length === 0 ? (

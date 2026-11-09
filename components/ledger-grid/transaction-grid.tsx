@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, type ReactElement } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, SelectOption } from "@/components/data-grid";
 import { adminEditable } from "@/lib/utils/admin-editable";
 import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type TransactionType } from "@/lib/ledger/transaction-classification";
+import { NEW_ROW_PROJECT_REQUIRED_MESSAGE, NewRowProjectSelect } from "./new-row-project-select";
+import { unwrapActionResult } from "./unwrap-action-result";
 
 const DataGrid = dynamic(
   () => import("@/components/data-grid").then((m) => m.DataGrid),
@@ -42,11 +44,15 @@ export interface TxRow {
   note: string | null;
 }
 
+/**
+ * Server action của lưới. Mỗi action trả thẳng dữ liệu (sổ nhân công, ném khi lỗi) hoặc
+ * `{ ok, row | rows } | { ok: false, message }` (sổ vật tư) — xem unwrapActionResult.
+ */
 export interface TxActions {
   patch: (id: number, patch: Record<string, unknown>) => Promise<unknown>;
   adminPatch?: (id: number, patch: Record<string, unknown>) => Promise<unknown>;
-  bulkUpsert: (rows: Array<Record<string, unknown> & { id?: number }>) => Promise<unknown[]>;
-  softDeleteMany: (ids: number[]) => Promise<void>;
+  bulkUpsert: (rows: Array<Record<string, unknown> & { id?: number }>) => Promise<unknown>;
+  softDeleteMany: (ids: number[]) => Promise<unknown>;
 }
 
 const ADMIN_RAW_COLS = new Set<keyof TxRow>(["totalTt", "totalHd"]);
@@ -67,6 +73,8 @@ interface Props {
   role?: string;
   /** Loại giao dịch cho phép chọn; mặc định tất cả (sổ nhân công không có thue_hd). */
   allowedTypes?: readonly TransactionType[];
+  /** Sổ vật tư: bắt buộc chọn công trình trước khi tạo dòng (sổ nhân công không truyền). */
+  requireProject?: boolean;
 }
 
 const STATUS_OPTIONS: SelectOption[] = [
@@ -114,8 +122,10 @@ export function LedgerTransactionGrid({
   canDelete,
   isAdmin = false,
   allowedTypes = TRANSACTION_TYPES,
+  requireProject = false,
 }: Props) {
   const router = useRouter();
+  const [newRowProjectId, setNewRowProjectId] = useState<number | null>(null);
 
   const txTypeOptions = useMemo<SelectOption[]>(
     () => allowedTypes.map((t) => ({ id: t, name: TRANSACTION_TYPE_LABELS[t] })),
@@ -148,26 +158,40 @@ export function LedgerTransactionGrid({
   const handlers: DataGridHandlers<TxRow> = {
     ...(canEdit ? { onCellEdit: async (rowId: number, col: string, value: unknown) => {
       const useAdmin = isAdmin && actions.adminPatch && ADMIN_RAW_COLS.has(col as keyof TxRow);
-      const updated = useAdmin
-        ? await actions.adminPatch!(rowId, { [col]: value })
-        : await actions.patch(rowId, { [col]: value });
+      const updated = unwrapActionResult(
+        useAdmin
+          ? await actions.adminPatch!(rowId, { [col]: value })
+          : await actions.patch(rowId, { [col]: value }),
+        "row",
+      );
       router.refresh();
       return dbTxToRow(updated as Record<string, unknown>);
     }, onBulkPaste: async (patches: Array<Partial<TxRow>>) => {
-      const result = await actions.bulkUpsert(
-        patches.map((p) => p as Record<string, unknown> & { id?: number }),
-      );
+      const result = unwrapActionResult(await actions.bulkUpsert(
+        patches.map((p) => {
+          // Dòng dán mới thiếu công trình lấy "Công trình cho dòng mới" (server vẫn kiểm bắt buộc).
+          const row = p as Record<string, unknown> & { id?: number };
+          return requireProject && !row.id && row.projectId == null && newRowProjectId != null
+            ? { ...row, projectId: newRowProjectId }
+            : row;
+        }),
+      ), "rows");
       router.refresh();
       return (result as Record<string, unknown>[]).map(dbTxToRow);
     } } : {}),
     ...(canCreate ? { onAddRow: async (template: Partial<TxRow>) => {
+      const projectId = template.projectId ?? newRowProjectId;
+      if (requireProject && projectId == null) {
+        toast.error(NEW_ROW_PROJECT_REQUIRED_MESSAGE);
+        return;
+      }
       const today = new Date().toISOString().slice(0, 10);
       const stub: Record<string, unknown> = {
         date: today,
         transactionType: "lay_hang",
         entityId: defaults.entityId,
         partyId: defaults.partyId,
-        projectId: null,
+        projectId: projectId ?? null,
         itemId: null,
         amountTt: "0",
         vatPctTt: "0",
@@ -180,21 +204,21 @@ export function LedgerTransactionGrid({
         ...(template as Record<string, unknown>),
       };
       try {
-        const result = await actions.bulkUpsert([stub]);
+        const result = unwrapActionResult(await actions.bulkUpsert([stub]), "rows") as Record<string, unknown>[];
         router.refresh();
-        return dbTxToRow(result[0] as Record<string, unknown>);
+        return dbTxToRow(result[0]);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Lỗi tạo dòng — chọn Chủ thể & đối tác trước");
         throw err;
       }
     } } : {}),
     ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
-      await actions.softDeleteMany(ids);
+      unwrapActionResult(await actions.softDeleteMany(ids));
       router.refresh();
     } } : {}),
   };
 
-  return (
+  const grid = (
     <DataGrid<TxRow>
       columns={columns}
       rows={initialData}
@@ -202,5 +226,12 @@ export function LedgerTransactionGrid({
       height={600}
       role={isAdmin ? "admin" : undefined}
     />
+  );
+  if (!requireProject || !canCreate) return grid;
+  return (
+    <div className="space-y-2">
+      <NewRowProjectSelect projects={projects} value={newRowProjectId} onChange={setNewRowProjectId} />
+      {grid}
+    </div>
   );
 }

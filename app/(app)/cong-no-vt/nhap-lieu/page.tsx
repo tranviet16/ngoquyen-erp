@@ -1,10 +1,10 @@
+import { listMaterialTransactions } from "@/lib/cong-no-vt/material-ledger-service";
 import {
-  listMaterialTransactions,
-  patchMaterialTransaction,
-  adminPatchMaterialTransaction,
-  bulkUpsertMaterialTransactions,
-  softDeleteMaterialTransactions,
-} from "@/lib/cong-no-vt/material-ledger-service";
+  patchMaterialTransactionAction,
+  adminPatchMaterialTransactionAction,
+  bulkUpsertMaterialTransactionsAction,
+  softDeleteMaterialTransactionsAction,
+} from "@/lib/cong-no-vt/material-ledger-actions";
 import { prisma } from "@/lib/prisma";
 import { LedgerTransactionGrid, type TxRow } from "@/components/ledger-grid/transaction-grid";
 import { requireModuleAccess } from "@/lib/acl/guards";
@@ -62,15 +62,17 @@ export default async function NhapLieuPage() {
         partyLabel="Nhà cung cấp"
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: suppliers[0]?.id ?? 0 }}
         actions={{
-          patch: patchMaterialTransaction,
-          adminPatch: adminPatchMaterialTransaction,
-          bulkUpsert: bulkUpsertMaterialTransactions,
-          softDeleteMany: softDeleteMaterialTransactions,
+          // Action trả { ok, … } — lỗi nghiệp vụ hiện trên toast cả ở bản production.
+          patch: patchMaterialTransactionAction,
+          adminPatch: adminPatchMaterialTransactionAction,
+          bulkUpsert: bulkUpsertMaterialTransactionsAction,
+          softDeleteMany: softDeleteMaterialTransactionsAction,
         }}
         canCreate={canCreate}
         canEdit={canEdit}
         canDelete={canEdit}
         isAdmin={role === "admin"}
+        requireProject
       />
     </div>
   );

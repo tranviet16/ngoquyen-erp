@@ -10,13 +10,21 @@ vi.mock("react", () => ({
 
 // ─── Hoisted mocks ─────────────────────────────────────────────────────────
 const mockDb = vi.hoisted(() => ({
-  entity: { update: vi.fn() },
+  entity: { update: vi.fn(), findFirst: vi.fn() },
   supplier: { update: vi.fn() },
   contractor: { update: vi.fn() },
   item: { update: vi.fn() },
-  project: { update: vi.fn() },
+  project: { update: vi.fn(), findFirst: vi.fn() },
+  // Đổi Chủ thể chạy trong transaction: khoá dòng công trình bằng SELECT … FOR UPDATE ($queryRaw).
+  $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
   loanContract: { update: vi.fn() },
   rolePermission: { findMany: vi.fn() },
+  // Dữ liệu công nợ vật tư của công trình — quyết định có được đổi Chủ thể hay không.
+  ledgerTransaction: { count: vi.fn() },
+  supplierDeliveryDaily: { count: vi.fn() },
+  ledgerOpeningBalance: { count: vi.fn() },
+  supplierReconciliation: { count: vi.fn() },
 }));
 const mockAuth = vi.hoisted(() => ({ getSession: vi.fn() }));
 const mockAvailability = vi.hoisted(() => ({
@@ -54,6 +62,7 @@ import {
 import {
   patchProject,
   patchDuAn,
+  patchProjectEntity,
 } from "@/lib/master-data/project-service";
 
 // loan-service has a slightly different getRole() name — same pattern
@@ -72,6 +81,7 @@ beforeEach(() => {
   // so happy-path/whitelist/Zod tests need a role that clears the RBAC gate.
   // The explicit "rejects viewer role" tests override this per-test.
   mockAuth.getSession.mockResolvedValue({ user: { role: "admin" } });
+  mockDb.$transaction.mockImplementation(async (fn: (tx: typeof mockDb) => unknown) => fn(mockDb));
 });
 
 // ─── patchEntity ────────────────────────────────────────────────────────────
@@ -207,6 +217,164 @@ describe("patchProject", () => {
     mockDb.project.update.mockResolvedValue(row);
     const result = await patchProject(2, { code: "DA02", name: "Dự án mới" });
     expect(result).toEqual(row);
+  });
+});
+
+// ─── patchProject: Chủ thể (entityId) ───────────────────────────────────────
+describe("patchProject entityId", () => {
+  function materialUsage(counts: { ledger?: number; deliveries?: number; openings?: number; recons?: number }) {
+    mockDb.ledgerTransaction.count.mockResolvedValue(counts.ledger ?? 0);
+    mockDb.supplierDeliveryDaily.count.mockResolvedValue(counts.deliveries ?? 0);
+    mockDb.ledgerOpeningBalance.count.mockResolvedValue(counts.openings ?? 0);
+    mockDb.supplierReconciliation.count.mockResolvedValue(counts.recons ?? 0);
+  }
+
+  /** Dòng công trình đọc dưới khoá FOR UPDATE (null = không tồn tại / đã xoá). */
+  function lockedProject(row: { entityId: number | null } | null) {
+    mockDb.$queryRaw.mockResolvedValue(row ? [row] : []);
+  }
+
+  beforeEach(() => {
+    mockDb.entity.findFirst.mockResolvedValue({ id: 3 });
+  });
+
+  it("locks the project row FOR UPDATE inside the transaction before checking and updating", async () => {
+    lockedProject({ entityId: 2 });
+    materialUsage({});
+    mockDb.project.update.mockResolvedValue({ id: 1, entityId: 3 });
+
+    await patchProject(1, { entityId: 3 });
+
+    expect(mockDb.$transaction).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = mockDb.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    expect(strings.join("?")).toMatch(/FROM projects WHERE id = \? AND "deletedAt" IS NULL FOR UPDATE/);
+    expect(values).toEqual([1]);
+    expect(mockDb.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDb.project.update.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("patching other fields does not open a transaction", async () => {
+    mockDb.project.update.mockResolvedValue({ id: 1, status: "paused" });
+    await patchProject(1, { status: "paused" });
+    expect(mockDb.$transaction).not.toHaveBeenCalled();
+    expect(mockDb.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("first assignment from NULL is allowed when existing material rows carry the same entity (or none)", async () => {
+    lockedProject({ entityId: null });
+    materialUsage({ deliveries: 5 }); // phiếu không mang Chủ thể; sổ / số dư mang Chủ thể khác = 0
+    mockDb.project.update.mockResolvedValue({ id: 1, entityId: 3 });
+
+    await patchProject(1, { entityId: 3 });
+
+    expect(mockDb.project.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { entityId: 3 } });
+    // Chỉ đếm dòng sổ / số dư vật tư của công trình mang Chủ thể KHÁC Chủ thể sẽ gán.
+    expect(mockDb.ledgerTransaction.count).toHaveBeenCalledWith({
+      where: { ledgerType: "material", projectId: 1, entityId: { not: 3 }, deletedAt: null },
+    });
+    expect(mockDb.ledgerOpeningBalance.count).toHaveBeenCalledWith({
+      where: { ledgerType: "material", projectId: 1, entityId: { not: 3 } },
+    });
+    expect(mockDb.supplierDeliveryDaily.count).not.toHaveBeenCalled();
+  });
+
+  it("rejects the first assignment when material rows of the project carry a different entity", async () => {
+    lockedProject({ entityId: null });
+    materialUsage({ ledger: 2, openings: 1 });
+
+    await expect(patchProject(1, { entityId: 3 })).rejects.toThrow(
+      /Không thể gán Chủ thể #3.*2 dòng sổ vật tư, 1 số dư ban đầu vật tư mang Chủ thể khác/,
+    );
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown or deleted project", async () => {
+    lockedProject(null);
+    await expect(patchProject(1, { entityId: 3 })).rejects.toThrow(/Dự án #1 không tồn tại/);
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+
+  it("keeping the same entity is a no-op that skips the usage check", async () => {
+    lockedProject({ entityId: 3 });
+    mockDb.project.update.mockResolvedValue({ id: 1, entityId: 3 });
+
+    await patchProject(1, { entityId: 3 });
+
+    expect(mockDb.ledgerTransaction.count).not.toHaveBeenCalled();
+    expect(mockDb.project.update).toHaveBeenCalled();
+  });
+
+  it("rejects changing the entity when the project has deliveries / reconciliations", async () => {
+    lockedProject({ entityId: 2 });
+    materialUsage({ deliveries: 4, recons: 1 });
+
+    await expect(patchProject(1, { entityId: 3 })).rejects.toThrow(/Không thể đổi Chủ thể.*4 phiếu.*1 kỳ đối chiếu/);
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects changing the entity when only material ledger rows or opening balances exist", async () => {
+    lockedProject({ entityId: 2 });
+    materialUsage({ openings: 1 });
+    await expect(patchProject(1, { entityId: 3 })).rejects.toThrow(/số dư ban đầu vật tư/);
+
+    materialUsage({ ledger: 7 });
+    await expect(patchProject(1, { entityId: 3 })).rejects.toThrow(/7 dòng sổ vật tư/);
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects clearing the entity (→ null) when material data exists", async () => {
+    lockedProject({ entityId: 2 });
+    materialUsage({ ledger: 1 });
+    await expect(patchProject(1, { entityId: null })).rejects.toThrow(/Không thể đổi Chủ thể/);
+  });
+
+  it("allows changing the entity while the project has no material data", async () => {
+    lockedProject({ entityId: 2 });
+    materialUsage({});
+    mockDb.project.update.mockResolvedValue({ id: 1, entityId: 3 });
+
+    await patchProject(1, { entityId: 3 });
+
+    expect(mockDb.project.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { entityId: 3 } });
+    // Chỉ đếm dữ liệu vật tư chưa xoá của đúng công trình.
+    expect(mockDb.supplierDeliveryDaily.count).toHaveBeenCalledWith({ where: { projectId: 1, deletedAt: null } });
+    expect(mockDb.ledgerTransaction.count).toHaveBeenCalledWith({
+      where: { ledgerType: "material", projectId: 1, deletedAt: null },
+    });
+  });
+
+  it("rejects an unknown or deleted entity", async () => {
+    lockedProject({ entityId: null });
+    mockDb.entity.findFirst.mockResolvedValue(null);
+    await expect(patchProject(1, { entityId: 9 })).rejects.toThrow(/Chủ thể #9 không tồn tại/);
+  });
+
+  it("rejects a non-integer entityId (Zod)", async () => {
+    await expect(patchProject(1, { entityId: "abc" })).rejects.toThrow();
+    await expect(patchProject(1, { entityId: 0 })).rejects.toThrow();
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+
+  it("patchProjectEntity returns the refusal reason instead of throwing", async () => {
+    lockedProject({ entityId: 2 });
+    materialUsage({ deliveries: 1 });
+
+    const result = await patchProjectEntity(1, 3);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toMatch(/Không thể đổi Chủ thể/);
+  });
+
+  it("patchProjectEntity returns ok on success and rethrows non-business errors", async () => {
+    lockedProject({ entityId: null });
+    materialUsage({});
+    mockDb.project.update.mockResolvedValue({ id: 1, entityId: 3 });
+    await expect(patchProjectEntity(1, 3)).resolves.toEqual({ ok: true });
+
+    class DbError extends Error {}
+    mockDb.project.update.mockRejectedValue(new DbError("connection reset"));
+    await expect(patchProjectEntity(1, 3)).rejects.toThrow(/connection reset/);
   });
 });
 

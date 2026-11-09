@@ -2,6 +2,7 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { getRuns, getAdapters } from "./import-actions";
 import { ImportUploadForm } from "./import-upload-form";
 import { DeleteRunButton } from "./delete-run-button";
+import { importRunStatusBadge, importRunStatusLabel } from "./run-status";
 import { ServerSortableTableHead } from "@/components/server-sortable-table-head";
 import { stableSemanticSort, type SemanticKind } from "@/lib/table/semantic-compare";
 import type { SortSelection } from "@/lib/table/sort-state";
@@ -30,27 +31,17 @@ export default async function AdminImportPage({ searchParams }: { searchParams: 
   const sortParams = new URLSearchParams(rawSort ? { sort: rawSort } : {});
   const rollbackByAdapter = new Map(adapters.map((a) => [a.name, a.supportsRollback]));
 
-  function statusBadge(status: string) {
-    const colors: Record<string, string> = {
-      pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300",
-      preview: "bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-300",
-      committed: "bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-300",
-      failed: "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300",
-    };
-    return colors[status] ?? "bg-gray-100 text-gray-800 dark:bg-gray-500/15 dark:text-gray-300";
-  }
-
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Nhập dữ liệu Excel</h1>
         <p className="text-sm text-muted-foreground">
-          Import dữ liệu lịch sử từ file Excel SOP. Chỉ admin mới có quyền thực hiện.
+          Import dữ liệu lịch sử từ file Excel SOP hoặc cả thư mục. Chỉ admin mới có quyền thực hiện.
         </p>
       </div>
 
       <div className="border rounded-lg p-4 space-y-4">
-        <h2 className="font-semibold">Tải lên file mới</h2>
+        <h2 className="font-semibold">Tải lên nguồn mới</h2>
         <ImportUploadForm adapters={adapters} />
       </div>
 
@@ -81,8 +72,11 @@ export default async function AdminImportPage({ searchParams }: { searchParams: 
                     <td className="p-2 max-w-[200px] truncate" title={r.fileName}>{r.fileName}</td>
                     <td className="p-2 font-mono text-xs">{r.adapter}</td>
                     <td className="p-2">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadge(r.status)}`}>
-                        {r.status}
+                      <span
+                        className={`px-2 py-0.5 rounded text-xs font-medium ${importRunStatusBadge(r.status)}`}
+                        title={r.status}
+                      >
+                        {importRunStatusLabel(r.status)}
                       </span>
                     </td>
                     <td className="p-2 text-right">{r.rowsImported}</td>
@@ -100,6 +94,7 @@ export default async function AdminImportPage({ searchParams }: { searchParams: 
                         id={r.id}
                         status={r.status}
                         supportsRollback={rollbackByAdapter.get(r.adapter) ?? true}
+                        hasData={r.hasData}
                       />
                     </td>
                   </tr>

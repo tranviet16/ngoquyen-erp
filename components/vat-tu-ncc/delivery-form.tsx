@@ -25,10 +25,12 @@ interface Props {
   items: ItemOption[];
   projects: ProjectOption[];
   defaultValues?: Partial<DeliveryInput>;
+  /** Trang đang xem một cặp NCC × công trình: công trình cố định, không đổi được trong form. */
+  lockedProjectId?: number;
   onSubmit: (d: DeliveryInput) => Promise<void>;
 }
 
-export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaultValues, onSubmit }: Props) {
+export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaultValues, lockedProjectId, onSubmit }: Props) {
   const form = useForm<DeliveryInput>({
     resolver: zodResolver(deliverySchema),
     defaultValues: {
@@ -38,6 +40,7 @@ export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaul
       qty: 1,
       unit: items[0]?.unit ?? "",
       ...defaultValues,
+      ...(lockedProjectId != null ? { projectId: lockedProjectId } : {}),
     },
   });
 
@@ -77,13 +80,14 @@ export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaul
             </FormControl><FormMessage /></FormItem>
           )} />
           <FormField control={form.control} name="projectId" render={({ field }) => (
-            <FormItem><FormLabel>Dự án (tùy chọn)</FormLabel><FormControl>
+            <FormItem><FormLabel>Công trình</FormLabel><FormControl>
               <select
                 value={field.value ?? ""}
                 onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
+                disabled={lockedProjectId != null}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-70"
               >
-                <option value="">-- Không chọn --</option>
+                <option value="">-- Chọn công trình --</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
               </select>
             </FormControl><FormMessage /></FormItem>

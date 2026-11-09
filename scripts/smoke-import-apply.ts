@@ -1,23 +1,27 @@
 /**
- * Smoke test: run each import adapter end-to-end against dev DB.
+ * Smoke test: run each import adapter end-to-end against a dev/test DB.
  *
  * For every adapter:
- *   1. read its SOP .xlsx file
- *   2. previewImport()
+ *   1. read its SOP .xlsx file (or build a small workbook when SOP has no sample for it)
+ *   2. previewImport()  — engine stores the source + review (reviewVersion 1)
  *   3. auto-resolve conflicts via findFirst-or-create
- *   4. commitImport()
- *   5. assert getRollbackInfo total > 0
- *   6. rollbackImportRun()
- *   7. assert getRollbackInfo total === 0 after rollback
+ *   4. refreshPreview(runId, mapping)  — zod-validated, reviewVersion += 1
+ *   5. commitImport(runId, reviewVersion)  — reads the stored source, no re-upload
+ *   6. assert getRollbackInfo total > 0
+ *   7. rollbackImportRun()  — the run is kept as "rolled_back"
+ *   8. assert getRollbackInfo total === 0 and status === "rolled_back"
  *
- * Run:  npx tsx --env-file=.env scripts/smoke-import-apply.ts
+ * Run:  npx tsx --env-file=.env scripts/smoke-import-apply.ts [adapter]
+ * Ghi thật vào DB của file env được chỉ định — chỉ chạy trên DB dev/test, không chạy trên production.
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import {
   previewImport,
+  refreshPreview,
   commitImport,
   getRollbackInfo,
   rollbackImportRun,
@@ -30,13 +34,43 @@ interface Case {
   file: string;
   /** Optional minimum row count expected (sanity check) */
   minRows?: number;
+  /** Workbook dựng sẵn khi thư mục SOP không có file mẫu cho adapter này. */
+  build?: () => Buffer;
 }
 
 const SOP_DIR = path.resolve(process.cwd(), "SOP");
 
+/** SOP không có file công nợ nhân công — dựng workbook nhỏ đúng bố cục "Nhập Liệu" / "Số Dư Ban Đầu". */
+function laborWorkbook(): Buffer {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ["BẢNG NHẬP LIỆU CÔNG NỢ NHÂN CÔNG"],
+      ["smoke"],
+      ["Ngày GD", "Loại GD", "Chủ Thể", "Đội Thi Công", "Dự Án / Công Trình", "Hạng Mục", "Tổng TT (VND)", "Tổng HĐ (VND)", "Số HĐ", "Nội dung"],
+      ["10/02/2026", "Lấy hàng", "Smoke Chủ Thể", "Smoke Đội", "Smoke Dự Án", "Xây tô", "1,000,000", "1,100,000", "SMOKE-01", "smoke"],
+      ["12/02/2026", "Trả tiền", "Smoke Chủ Thể", "Smoke Đội", "Smoke Dự Án", "", "500,000", "0", "", "smoke"],
+    ]),
+    "Nhập Liệu",
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    XLSX.utils.aoa_to_sheet([
+      ["SỐ DƯ BAN ĐẦU"],
+      ["smoke"],
+      [""],
+      [""],
+      ["Chủ Thể", "Đội Thi Công", "Dự Án", "Số Dư TT", "Số Dư HĐ", "Ngày Xác Nhận"],
+      ["Smoke Chủ Thể", "Smoke Đội", "Smoke Dự Án", "2,000,000", "2,000,000", "01/01/2026"],
+    ]),
+    "Số Dư Ban Đầu",
+  );
+  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+}
+
 const CASES: Case[] = [
-  { adapter: "gach-nam-huong",  file: "Gạch Nam Hương.xlsx",                minRows: 1 },
-  { adapter: "quang-minh",      file: "Quang Minh cát,gạch.xlsx",            minRows: 1 },
+  { adapter: "cong-no-nhan-cong", file: "(dựng sẵn) cong-no-nhan-cong.xlsx", minRows: 3, build: laborWorkbook },
   { adapter: "du-an-xay-dung",  file: "Quản Lý Dự Án Xây Dựng.xlsx",         minRows: 10 },
   { adapter: "sl-dt",           file: "SL - DT.xlsx",                        minRows: 50 },
   { adapter: "tai-chinh-nq",    file: "Hệ thống quản lý tài chính NQ.xlsx",  minRows: 50 },
@@ -91,12 +125,17 @@ function slug(s: string): string {
   );
 }
 
-async function runCase(c: Case): Promise<void> {
+function loadSource(c: Case): Buffer {
+  if (c.build) return c.build();
   const filePath = path.join(SOP_DIR, c.file);
   if (!fs.existsSync(filePath)) {
     throw new Error(`SOP file not found: ${filePath}`);
   }
-  const buf = fs.readFileSync(filePath);
+  return fs.readFileSync(filePath);
+}
+
+async function runCase(c: Case): Promise<void> {
+  const buf = loadSource(c);
   console.log(`\n[${c.adapter}] file="${c.file}" size=${buf.length}b`);
 
   const preview = await previewImport(buf, c.adapter, c.file, "smoke-test");
@@ -108,11 +147,15 @@ async function runCase(c: Case): Promise<void> {
       `parsed rows ${preview.parsedData.rows.length} < expected min ${c.minRows}`,
     );
   }
+  if (preview.review.blocking.length > 0) {
+    throw new Error(`preview has blocking errors: ${preview.review.blocking.join("; ")}`);
+  }
 
   const mapping = await autoResolveMapping(preview.parsedData.conflicts);
-  console.log(`  mapping keys=${Object.keys(mapping).length}`);
+  const refreshed = await refreshPreview(preview.runId, mapping, "smoke-test");
+  console.log(`  mapping keys=${Object.keys(mapping).length} reviewVersion=${refreshed.reviewVersion}`);
 
-  const commit = await commitImport(preview.runId, buf, mapping);
+  const commit = await commitImport(preview.runId, refreshed.reviewVersion);
   console.log(
     `  commit: imported=${commit.rowsImported} skipped=${commit.rowsSkipped} errors=${commit.errors.length}`,
   );
@@ -142,9 +185,13 @@ async function runCase(c: Case): Promise<void> {
   const rb = await rollbackImportRun(preview.runId);
   console.log(`  rollback executed: total deleted=${rb.total}`);
 
-  const after = await getRollbackInfo(preview.runId).catch(() => ({ total: 0 }));
+  const after = await getRollbackInfo(preview.runId);
   if (after.total !== 0) {
     throw new Error(`rollback left ${after.total} rows behind`);
+  }
+  const run = await prisma.importRun.findUniqueOrThrow({ where: { id: preview.runId }, select: { status: true } });
+  if (run.status !== "rolled_back") {
+    throw new Error(`run status after rollback is "${run.status}", expected "rolled_back"`);
   }
   console.log(`  ✓ ${c.adapter} OK`);
 }

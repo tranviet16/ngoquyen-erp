@@ -8,7 +8,12 @@ import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
 import { Button } from "@/components/ui/button";
 import { CrudDialog } from "@/components/master-data/crud-dialog";
-import { createDelivery, updateDelivery, softDeleteDelivery } from "@/lib/vat-tu-ncc/delivery-service";
+import {
+  createDeliveryAction,
+  deleteDeliveryAction,
+  updateDeliveryAction,
+  type DeliveryActionResult,
+} from "@/lib/vat-tu-ncc/delivery-actions";
 import { type DeliveryInput } from "@/lib/vat-tu-ncc/schemas";
 import { DeliveryForm } from "./delivery-form";
 import { formatDate } from "@/lib/utils/format";
@@ -68,9 +73,28 @@ interface Props {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** Trang đang xem một cặp (`?projectId=`): form tạo/sửa khoá sẵn công trình này. */
+  lockedProjectId?: number;
 }
 
-export function DeliveryGrid({ supplierId, initialData, items, projects, quotes, canCreate, canEdit, canDelete }: Props) {
+/** Ném lỗi khi server action trả `ok: false` — thông điệp nghiệp vụ đi nguyên văn lên toast. */
+function unwrap(result: DeliveryActionResult): void {
+  if (!result.ok) throw new Error(result.message);
+}
+
+const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+export function DeliveryGrid({
+  supplierId,
+  initialData,
+  items,
+  projects,
+  quotes,
+  canCreate,
+  canEdit,
+  canDelete,
+  lockedProjectId,
+}: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<DeliveryRow | null>(null);
@@ -103,7 +127,7 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
     { id: "unit", title: "ĐVT", kind: "text", width: 80, readonly: true },
     { id: "unitPrice", title: "Đơn giá", kind: "number", width: 120 },
     { id: "totalAmount", title: "Thành tiền", kind: "number", width: 130, readonly: true },
-    { id: "projectLabel", title: "Dự án", kind: "text", width: 100, readonly: true },
+    { id: "projectLabel", title: "Công trình", kind: "text", width: 100, readonly: true },
     { id: "cbVatTu", title: "Cán bộ VT", kind: "text", width: 140 },
     { id: "chiHuyCt", title: "Chỉ huy CT", kind: "text", width: 140 },
     { id: "keToan", title: "Kế toán", kind: "text", width: 120 },
@@ -113,11 +137,13 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
   const patchDelivery = async (id: number, patch: Partial<DeliveryGridRow>) => {
     const current = rowsById.get(id);
     if (!current) throw new Error(`Phiếu #${id} không tồn tại`);
+    // Phiếu luôn thuộc một công trình (cặp NCC × công trình); dòng cũ thiếu thì sửa qua "Sửa đầy đủ".
+    if (current.projectId == null) throw new Error(`Phiếu #${id} chưa có công trình — dùng "Sửa đầy đủ" để chọn công trình.`);
     const currentPrice = current.unitPrice == null ? undefined : Number(current.unitPrice);
     const patchedPrice = typeof patch.unitPrice === "number" ? patch.unitPrice : currentPrice;
     const merged: DeliveryInput = {
       supplierId,
-      projectId: current.projectId ?? undefined,
+      projectId: current.projectId,
       date: new Date(current.date).toISOString().split("T")[0],
       itemId: current.itemId,
       qty: typeof patch.qty === "number" ? patch.qty : Number(current.qty),
@@ -129,7 +155,7 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
       keToan: typeof patch.keToan === "string" ? (patch.keToan || undefined) : (current.keToan ?? undefined),
       note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
     };
-    await updateDelivery(id, merged);
+    unwrap(await updateDeliveryAction(id, merged));
   };
 
   const handlers: DataGridHandlers<DeliveryGridRow> = {
@@ -139,13 +165,23 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
         toast.success("Đã lưu");
         startTransition(() => router.refresh());
       } catch (err) {
-        toast.error("Lưu thất bại: " + (err instanceof Error ? err.message : String(err)));
+        toast.error("Lưu thất bại: " + errorMessage(err));
         startTransition(() => router.refresh());
       }
     } } : {}),
     ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
+      // Xoá từng phiếu; phiếu thuộc kỳ đã ký / trước mốc chuyển đổi bị từ chối — báo lỗi, xoá tiếp phần còn lại.
+      const failures: string[] = [];
+      let deleted = 0;
       for (const id of ids) {
-        await softDeleteDelivery(id, supplierId);
+        const result = await deleteDeliveryAction(id, supplierId);
+        if (result.ok) deleted++;
+        else failures.push(`#${id}: ${result.message}`);
+      }
+      if (deleted > 0) toast.success(`Đã xoá ${deleted} phiếu`);
+      if (failures.length > 0) {
+        const shown = failures.slice(0, 3).join("; ");
+        toast.error(`Không xoá được ${failures.length} phiếu — ${shown}${failures.length > 3 ? "; …" : ""}`);
       }
       startTransition(() => router.refresh());
     } } : {}),
@@ -158,19 +194,29 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
   };
 
   async function handleCreate(data: DeliveryInput) {
-    await createDelivery(data);
-    setCreateOpen(false);
-    startTransition(() => router.refresh());
+    try {
+      unwrap(await createDeliveryAction(data));
+      toast.success("Đã thêm phiếu nhập");
+      setCreateOpen(false);
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Thêm phiếu thất bại: " + errorMessage(err));
+    }
   }
 
   async function handleEdit(data: DeliveryInput) {
     if (!editTarget) return;
-    await updateDelivery(editTarget.id, data);
-    setEditTarget(null);
-    startTransition(() => router.refresh());
+    try {
+      unwrap(await updateDeliveryAction(editTarget.id, data));
+      toast.success("Đã lưu phiếu");
+      setEditTarget(null);
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Lưu phiếu thất bại: " + errorMessage(err));
+    }
   }
 
-  const defaultValues: DeliveryInput | undefined = editTarget ? {
+  const defaultValues: Partial<DeliveryInput> | undefined = editTarget ? {
     supplierId,
     projectId: editTarget.projectId ?? undefined,
     date: new Date(editTarget.date).toISOString().split("T")[0],
@@ -197,7 +243,7 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Chỉnh sửa nhanh: nhấp đúp vào ô <strong>SL</strong>, <strong>Đơn giá</strong>, <strong>Cán bộ VT</strong>, <strong>Chỉ huy CT</strong>, <strong>Kế toán</strong>, <strong>Ghi chú</strong>. Thành tiền tự tính = SL × Đơn giá. Đổi <strong>Vật tư</strong> hoặc <strong>Dự án</strong> qua nút &quot;Sửa đầy đủ&quot;.
+        Chỉnh sửa nhanh: nhấp đúp vào ô <strong>SL</strong>, <strong>Đơn giá</strong>, <strong>Cán bộ VT</strong>, <strong>Chỉ huy CT</strong>, <strong>Kế toán</strong>, <strong>Ghi chú</strong>. Thành tiền tự tính = SL × Đơn giá. Đổi <strong>Vật tư</strong>{lockedProjectId == null && <> hoặc <strong>Công trình</strong></>} qua nút &quot;Sửa đầy đủ&quot;.
       </p>
 
       <DataGrid<DeliveryGridRow>
@@ -209,13 +255,14 @@ export function DeliveryGrid({ supplierId, initialData, items, projects, quotes,
       />
 
       <CrudDialog title="Thêm phiếu nhập vật tư" open={createOpen} onOpenChange={setCreateOpen}>
-        <DeliveryForm mode="create" supplierId={supplierId} quotes={quotes} items={items} projects={projects} onSubmit={handleCreate} />
+        <DeliveryForm mode="create" supplierId={supplierId} quotes={quotes} items={items} projects={projects}
+          lockedProjectId={lockedProjectId} onSubmit={handleCreate} />
       </CrudDialog>
 
       <CrudDialog title="Sửa phiếu nhập vật tư" open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         {editTarget && (
           <DeliveryForm mode="edit" supplierId={supplierId} quotes={quotes} items={items} projects={projects}
-            defaultValues={defaultValues} onSubmit={handleEdit} />
+            lockedProjectId={lockedProjectId} defaultValues={defaultValues} onSubmit={handleEdit} />
         )}
       </CrudDialog>
     </div>

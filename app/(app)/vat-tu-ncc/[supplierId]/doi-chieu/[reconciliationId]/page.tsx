@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 import { getReconciliationView } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
+import { PairProjectRequired, parseProjectIdParam } from "@/components/vat-tu-ncc/pair-project-required";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
 import { formatDate, formatVND, formatNumber } from "@/lib/utils/format";
@@ -12,16 +14,19 @@ import { SignReconButton } from "./sign-button";
 
 interface Props {
   params: Promise<{ supplierId: string; reconciliationId: string }>;
-  searchParams: Promise<{ sort?: string }>;
+  searchParams: Promise<{ sort?: string; projectId?: string | string[] }>;
 }
 
 export const dynamic = "force-dynamic";
 
-function AmountSortHead({ basePath, sort }: { basePath: string; sort: SortSelection }) {
+function AmountSortHead({ basePath, params, sort }: { basePath: string; params: URLSearchParams; sort: SortSelection }) {
   const active = sort.mode !== "default" && sort.col === "amount";
   const mode = active ? sort.mode : "default";
   const next = nextSortState("amount", sort);
-  const href = next.mode === "default" ? basePath : `${basePath}?sort=amount:${next.mode}`;
+  const nextParams = new URLSearchParams(params);
+  if (next.mode === "default") nextParams.delete("sort");
+  else nextParams.set("sort", `amount:${next.mode}`);
+  const href = nextParams.size ? `${basePath}?${nextParams}` : basePath;
   const currentLabel = mode === "asc" ? "tăng dần" : mode === "desc" ? "giảm dần" : "mặc định";
   const nextLabel = next.mode === "asc" ? "tăng dần" : next.mode === "desc" ? "giảm dần" : "mặc định";
 
@@ -43,15 +48,28 @@ export default async function ReconDetailPage({ params, searchParams }: Props) {
   const { supplierId, reconciliationId } = await params;
   const sid = Number(supplierId);
   const rid = Number(reconciliationId);
-  if (isNaN(sid) || isNaN(rid)) notFound();
+  if (!Number.isInteger(sid) || sid <= 0 || !Number.isInteger(rid) || rid <= 0) notFound();
   const { userId } = await requireModuleAccess("vat-tu-ncc", { minLevel: "read", scope: "module" });
-  const canEdit = await canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "edit", scope: "module" });
+  const sp = await searchParams;
+  // Kỳ đối chiếu thuộc đúng một cặp NCC × công trình: thiếu công trình thì chọn trước (về danh sách
+  // kỳ của công trình đã chọn — kỳ này chỉ mở được dưới đúng công trình của nó).
+  const projectId = parseProjectIdParam(sp.projectId);
+  if (projectId == null) return <PairProjectRequired supplierId={sid} tab="doi-chieu" />;
 
-  const view = await getReconciliationView(rid);
-  if (view.supplierId !== sid) notFound();
+  // Kỳ phải thuộc đúng NCC (route) VÀ đúng công trình (query) — sai cặp thì 404, không lộ kỳ của cặp khác.
+  const owned = await prisma.supplierReconciliation.findFirst({
+    where: { id: rid, supplierId: sid, projectId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!owned) notFound();
+
+  const [canEdit, view] = await Promise.all([
+    canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "edit", scope: "module" }),
+    getReconciliationView(rid),
+  ]);
+  if (view.supplierId !== sid || view.projectId !== projectId) notFound();
 
   const totalDebt = view.closing;
-  const sp = await searchParams;
   const [sortCol, sortDir] = sp.sort?.split(":") ?? [];
   const layHangColumns: Record<string, {
     accessor: (row: (typeof view.layHangRows)[number]) => unknown;
@@ -71,19 +89,31 @@ export default async function ReconDetailPage({ params, searchParams }: Props) {
   const layHangRows = activeColumn
     ? stableSemanticSort(view.layHangRows, activeColumn.accessor, sort.mode, activeColumn.kind)
     : [...view.layHangRows];
-  const sortParams = new URLSearchParams();
+  // Link sắp xếp giữ `?projectId=` — mất tham số thì trang sẽ hiện bộ chọn công trình.
+  const sortParams = new URLSearchParams({ projectId: String(projectId) });
 
   return (
     <div className="space-y-4 print:text-black">
       <div className="flex items-center justify-between gap-2 print:hidden">
-        <Link href={`/vat-tu-ncc/${sid}/doi-chieu`} className="text-sm text-muted-foreground hover:underline">
+        <Link href={`/vat-tu-ncc/${sid}/doi-chieu?projectId=${view.projectId}`} className="text-sm text-muted-foreground hover:underline">
           ← Danh sách kỳ
         </Link>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {view.cutoverMarker && (
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              Kỳ chuyển đổi (khóa)
+            </span>
+          )}
           <PrintButton label="In bảng đối chiếu" />
-          {canEdit && !view.signedBySupplier && <SignReconButton reconciliationId={rid} />}
+          {canEdit && !view.signedBySupplier && !view.cutoverMarker && <SignReconButton reconciliationId={rid} />}
         </div>
       </div>
+
+      {view.cutoverMarker && (
+        <p className="rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700 print:hidden dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-300">
+          Kỳ chuyển đổi từ Excel (ký khi import) — không gỡ ký, sửa hay xoá được. Chênh lệch ghi bút toán điều chỉnh ở kỳ sau.
+        </p>
+      )}
 
       {!view.signedBySupplier && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 print:hidden dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
@@ -142,7 +172,7 @@ export default async function ReconDetailPage({ params, searchParams }: Props) {
                 <ServerSortableTableHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} column="unitPrice" label="Đơn giá" sort={sort} align="right" />
               )}
               {view.signedBySupplier ? <th colSpan={2} className="text-right">Thành tiền</th> : (
-                <AmountSortHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} sort={sort} />
+                <AmountSortHead basePath={`/vat-tu-ncc/${sid}/doi-chieu/${rid}`} params={sortParams} sort={sort} />
               )}
             </tr>
             {layHangRows.map((r, i) => (

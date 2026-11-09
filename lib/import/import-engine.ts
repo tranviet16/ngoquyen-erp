@@ -1,11 +1,18 @@
 /**
- * Import Engine — orchestrates the full import pipeline.
+ * Import Engine — vòng đời một run import.
  *
- * Flow:
- *   upload .xlsx → sha256 hash → adapter.parse() → adapter.validate()
- *   → save ImportRun (status=preview) → return preview to UI
- *   → admin resolves conflicts (mapping) → commitImport()
- *   → adapter.apply() in $transaction → update ImportRun (status=committed)
+ *   Preview  (status = preview): parse → validate → lưu `sourceFile` (file đơn hoặc gói thư mục) +
+ *            ánh xạ tự điền (chỉ tên chuẩn hóa trùng khít) → `review` của adapter (chạy trong
+ *            transaction riêng đã khóa `lockScope`, luôn rollback) → `reviewJson`, `reviewVersion = 1`.
+ *   Refresh  (chỉ khi preview): kiểm mapping bằng zod → review lại → `reviewVersion += 1`; xác nhận
+ *            (`ack:`) không còn trong `requiredAcks` bị bỏ; ghi `ackedBy/ackedAt`.
+ *   Commit   `commitImport(runId, reviewVersion)` trong MỘT transaction 300 giây:
+ *            khóa dòng run (FOR UPDATE) → phải đang preview (nếu không: ném, KHÔNG đổi trạng thái)
+ *            → đúng `reviewVersion` → chống trùng hash (trong transaction) → `lockSuppliers(lockScope)`
+ *            → review lại dưới khóa (không lỗi chặn, đủ xác nhận) → `apply` → `committed` cùng
+ *            transaction. Lỗi thực thi: rollback, rồi chỉ chuyển `failed` nếu run vẫn đang preview.
+ *   Rollback xem `import-rollback.ts` (committed → rolled_back, giữ run).
+ *   Delete   chỉ run preview/failed không còn dòng dữ liệu nào mang `importRunId`.
  *
  * Audit bypass note: adapter.apply() uses prisma.$executeRaw for bulk inserts.
  * This intentionally bypasses the audit middleware extension — acceptable for
@@ -13,19 +20,22 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import { sha256Hex } from "./file-hash";
+import { lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
 import { getAdapter } from "./adapters/adapter-registry";
-import type { ParsedData, ResolvedMapping } from "./adapters/adapter-types";
+import type { ImportMapping, ImportTx } from "./adapters/adapter-types";
+import { ImportError, ImportPreconditionError, errorMessage, isTransientDbError } from "./import-errors";
+import { EMPTY_REVIEW, missingAcks, normalizeAdapterReview, parseStoredReview, validateMapping } from "./import-review";
+import { findRunIdsWithData, lockRunRow, markRunFailed, readSourceFile, updateRunIfStatus } from "./import-run-store";
+import { LONG_TX_OPTIONS, parseRunSource, toJson } from "./import-source";
 
-export interface PreviewResult {
-  runId: number;
-  adapterName: string;
-  fileName: string;
-  fileHash: string;
-  parsedData: ParsedData;
-  validationErrors: { rowIndex: number; field: string; message: string }[];
-  duplicateWarning: boolean; // true if same fileHash was already committed
-}
+export {
+  previewImport,
+  previewBundleImport,
+  refreshPreview,
+  type PreviewResult,
+  type RefreshResult,
+} from "./import-preview";
+export { getRollbackInfo, rollbackImportRun, type RollbackResult } from "./import-rollback";
 
 export interface CommitResult {
   runId: number;
@@ -34,312 +44,142 @@ export interface CommitResult {
   errors: { rowIndex: number; message: string }[];
 }
 
-/**
- * Step 1: Parse + validate without writing to DB.
- * Creates an ImportRun record with status="preview".
- */
-export async function previewImport(
-  fileBuffer: Buffer,
-  adapterName: string,
-  fileName: string,
-  createdBy: string
-): Promise<PreviewResult> {
-  const adapter = getAdapter(adapterName);
-  if (!adapter) throw new Error(`Unknown adapter: ${adapterName}`);
-
-  const fileHash = sha256Hex(fileBuffer);
-
-  // Check if same file was already committed
-  const committed = await prisma.importRun.findFirst({
-    where: { fileHash, status: "committed" },
-  });
-
-  const parsedData = await adapter.parse(fileBuffer);
-  const validation = adapter.validate(parsedData);
-
-  // Upsert ImportRun in preview state
-  const run = await prisma.importRun.create({
-    data: {
-      fileName,
-      fileHash,
-      adapter: adapterName,
-      status: "preview",
-      rowsTotal: parsedData.rows.length,
-      errors: validation.errors.length > 0
-        ? (validation.errors as unknown as Parameters<typeof prisma.importRun.create>[0]["data"]["errors"])
-        : undefined,
-      createdBy,
-    },
-  });
-
-  return {
-    runId: run.id,
-    adapterName,
-    fileName,
-    fileHash,
-    parsedData,
-    validationErrors: validation.errors,
-    duplicateWarning: !!committed,
-  };
-}
-
-/**
- * Step 2: Commit — write rows to DB inside a transaction.
- * Updates ImportRun to status="committed" on success or "failed" on error.
- */
-export async function commitImport(
-  runId: number,
-  fileBuffer: Buffer,
-  mapping: ResolvedMapping
-): Promise<CommitResult> {
-  const run = await prisma.importRun.findUnique({ where: { id: runId } });
-  if (!run) throw new Error(`ImportRun #${runId} not found`);
-  if (run.status === "committed") throw new Error("Import run already committed");
-
-  const adapter = getAdapter(run.adapter);
-  if (!adapter) throw new Error(`Unknown adapter: ${run.adapter}`);
-
-  // Re-parse (buffer may have changed — use stored fileHash to detect mismatch)
-  const currentHash = sha256Hex(fileBuffer);
-  if (currentHash !== run.fileHash) {
-    throw new Error("File hash mismatch — please re-upload the original file");
+async function commitInTransaction(tx: ImportTx, runId: number, reviewVersion: number): Promise<CommitResult> {
+  const run = await lockRunRow(tx, runId);
+  if (!run) throw new ImportPreconditionError(`ImportRun #${runId} không tồn tại`);
+  if (run.status !== "preview") {
+    throw new ImportPreconditionError(`Run đã được ghi hoặc hoàn tác (run #${runId} đang "${run.status}") — không ghi lại.`);
   }
+  if (run.reviewVersion !== reviewVersion) {
+    throw new ImportPreconditionError("Bản xem trước đã thay đổi, tải lại trang.");
+  }
+  const stored = parseStoredReview(run.reviewJson);
+  if (!stored || run.reviewVersion < 1) {
+    throw new ImportPreconditionError("Run chưa có kết quả xem trước — bấm Lưu & tính lại.");
+  }
+  if (stored.blocking.length > 0) {
+    throw new ImportPreconditionError(`Còn ${stored.blocking.length} lỗi chặn — xử lý rồi Lưu & tính lại.`);
+  }
+  const adapter = getAdapter(run.adapter);
+  if (!adapter) throw new ImportPreconditionError(`Adapter "${run.adapter}" không còn trong hệ thống`);
 
-  // Block re-commit if this file was already imported successfully — admin must
-  // rollback the previous run first. Prevents accidental double-import duplication.
-  const prior = await prisma.importRun.findFirst({
+  // Chống import trùng file trong transaction; khóa theo hash để hai run cùng hash không cùng lọt.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`import-file:${run.fileHash}`}))`;
+  const prior = await tx.importRun.findFirst({
     where: { fileHash: run.fileHash, status: "committed", id: { not: runId } },
     select: { id: true },
   });
   if (prior) {
-    throw new Error(
-      `File này đã được import ở run #${prior.id}. Hoàn tác run đó trước khi import lại.`,
+    throw new ImportPreconditionError(`File này đã được import ở run #${prior.id}. Hoàn tác run đó trước khi import lại.`);
+  }
+
+  let mapping: ImportMapping;
+  try {
+    mapping = validateMapping(adapter, run.mapping ?? {});
+  } catch (err) {
+    throw new ImportPreconditionError(`${errorMessage(err)} — sửa ánh xạ rồi Lưu & tính lại.`);
+  }
+  const source = await readSourceFile(tx, runId);
+  if (!source) throw new ImportPreconditionError("Run không còn file nguồn — tải lên lại.");
+  const data = await parseRunSource(adapter, source, run);
+
+  // Khóa rồi mới kiểm: NCC của run → review lại → ghi.
+  await lockSuppliers(tx, adapter.lockScope?.(data, mapping) ?? []);
+  const underLock = adapter.review
+    ? normalizeAdapterReview(await adapter.review(data, mapping, tx, { runId, phase: "commit" }))
+    : EMPTY_REVIEW;
+  if (underLock.blocking.length > 0) {
+    throw new ImportPreconditionError(
+      `Kiểm lại lúc ghi phát hiện lỗi chặn: ${underLock.blocking.slice(0, 3).join("; ")} — Lưu & tính lại.`,
+    );
+  }
+  const missing = missingAcks({ requiredAcks: underLock.requiredAcks, acks: stored.acks });
+  if (missing.length > 0) {
+    throw new ImportPreconditionError(
+      `Còn ${missing.length} mục chưa xác nhận (${missing.slice(0, 3).join(", ")}) — Lưu & tính lại.`,
     );
   }
 
-  const parsedData = await adapter.parse(fileBuffer);
+  const summary = await adapter.apply(data, mapping, tx, runId);
+  const committed = await updateRunIfStatus(tx, runId, "preview", {
+    status: "committed",
+    committedAt: new Date(),
+    rowsImported: summary.rowsImported,
+    rowsSkipped: summary.rowsSkipped,
+    errors: summary.errors.length > 0 ? toJson(summary.errors) : undefined,
+    ...(summary.expected !== undefined
+      ? { reviewJson: toJson({ ...(run.reviewJson as Record<string, unknown>), expected: summary.expected }) }
+      : {}),
+  });
+  // Không thể xảy ra khi đang giữ FOR UPDATE — ném để rollback thay vì ghi nửa vời.
+  if (!committed) throw new Error(`Run #${runId} đổi trạng thái trong lúc ghi`);
+  return { runId, rowsImported: summary.rowsImported, rowsSkipped: summary.rowsSkipped, errors: summary.errors };
+}
 
+export const TRANSIENT_COMMIT_MESSAGE =
+  "Cơ sở dữ liệu đang bận (deadlock, chờ khóa hoặc hết thời gian giao dịch) — không có gì được ghi, " +
+  "run vẫn ở trạng thái xem trước. Bấm Ghi lại sau ít phút.";
+
+/**
+ * Ghi run đúng phiên bản review người dùng đã xem. Không cần tải lại file: đọc `sourceFile` đã lưu.
+ * `ImportPreconditionError` → run giữ nguyên trạng thái; lỗi DB tạm thời (deadlock, hết giờ chờ
+ * khóa / giao dịch, lỗi tuần tự hoá) cũng vậy — transaction đã rollback, ghi lại là được, không bắt
+ * tải lại gói; lỗi khác → `failed` (chỉ từ preview).
+ */
+export async function commitImport(runId: number, reviewVersion: number): Promise<CommitResult> {
+  if (!Number.isInteger(runId) || runId <= 0) throw new ImportError("runId không hợp lệ");
+  if (!Number.isInteger(reviewVersion) || reviewVersion < 0) throw new ImportError("reviewVersion không hợp lệ");
   try {
-    // Each commit runs inside a single transaction per adapter
-    const summary = await prisma.$transaction(async (tx) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return adapter.apply(parsedData, mapping, tx as any, runId);
-    });
-
-    await prisma.importRun.update({
-      where: { id: runId },
-      data: {
-        status: "committed",
-        rowsImported: summary.rowsImported,
-        rowsSkipped: summary.rowsSkipped,
-        errors: summary.errors.length > 0
-          ? (summary.errors as unknown as Parameters<typeof prisma.importRun.update>[0]["data"]["errors"])
-          : undefined,
-        mapping: mapping as unknown as Parameters<typeof prisma.importRun.update>[0]["data"]["mapping"],
-        committedAt: new Date(),
-      },
-    });
-
-    return {
-      runId,
-      rowsImported: summary.rowsImported,
-      rowsSkipped: summary.rowsSkipped,
-      errors: summary.errors,
-    };
+    return await prisma.$transaction((tx) => commitInTransaction(tx, runId, reviewVersion), LONG_TX_OPTIONS);
   } catch (err) {
-    await prisma.importRun.update({
-      where: { id: runId },
-      data: {
-        status: "failed",
-        errors: [{ rowIndex: -1, message: String(err) }] as unknown as Parameters<typeof prisma.importRun.update>[0]["data"]["errors"],
-      },
-    });
+    if (err instanceof ImportPreconditionError) throw err;
+    if (isTransientDbError(err)) {
+      console.warn(`[import] Commit run #${runId} gặp lỗi DB tạm thời — giữ trạng thái xem trước`, err);
+      throw new ImportPreconditionError(TRANSIENT_COMMIT_MESSAGE);
+    }
+    await markRunFailed(runId, err);
     throw err;
   }
 }
 
-/** List recent import runs for history table */
+/** List recent import runs for history table (không kéo sourceFile / reviewJson). */
 export async function listImportRuns(limit = 50) {
   return prisma.importRun.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
+    omit: { sourceFile: true, reviewJson: true },
   });
 }
 
-/** Get single run with full error details */
+/** Get single run with full error details (không kéo sourceFile). */
 export async function getImportRun(id: number) {
-  return prisma.importRun.findUnique({ where: { id } });
+  return prisma.importRun.findUnique({ where: { id }, omit: { sourceFile: true } });
+}
+
+/** Id run (trong `ids`) còn dữ liệu mang `importRunId` — trang danh sách dùng để ẩn nút Xóa. */
+export async function findImportRunIdsWithData(ids: readonly number[]): Promise<Set<number>> {
+  return findRunIdsWithData(prisma, ids);
 }
 
 /**
- * Delete a preview/failed import run. Refuses to delete committed runs
- * (those have data in the DB — use rollbackImportRun for that).
+ * Xóa run chỉ khi `status ∈ {preview, failed}` và không còn dòng nào mang `importRunId` của run.
+ * Run `committed` dùng Hoàn tác; run `rolled_back` được giữ làm dấu vết.
  */
-export async function deleteImportRun(id: number) {
-  const run = await prisma.importRun.findUnique({ where: { id } });
-  if (!run) throw new Error(`ImportRun #${id} không tồn tại`);
-  if (run.status === "committed") {
-    throw new Error("Không thể xóa lần import đã commit. Dùng Hoàn tác.");
-  }
-  await prisma.importRun.delete({ where: { id } });
-}
-
-/**
- * Count rows tagged with this run — used to decide whether rollback is supported
- * (runs created before the importRunId column was added will return 0).
- */
-export async function getRollbackInfo(id: number) {
-  const [
-    tx,
-    open,
-    est,
-    ptx,
-    sdd,
-    psc,
-    lc,
-    je,
-    psch,
-    pacc,
-    pco,
-    pcon,
-    p3wf,
-    srec,
-    lpay,
-    pra,
-    eclass,
-    psds,
-    slLot,
-    slMs,
-    slPp,
-    slMi,
-    slPs,
-  ] = await Promise.all([
-    prisma.ledgerTransaction.count({ where: { importRunId: id } }),
-    prisma.ledgerOpeningBalance.count({ where: { importRunId: id } }),
-    prisma.projectEstimate.count({ where: { importRunId: id } }),
-    prisma.projectTransaction.count({ where: { importRunId: id } }),
-    prisma.supplierDeliveryDaily.count({ where: { importRunId: id } }),
-    prisma.paymentSchedule.count({ where: { importRunId: id } }),
-    prisma.loanContract.count({ where: { importRunId: id } }),
-    prisma.journalEntry.count({ where: { importRunId: id } }),
-    prisma.projectSchedule.count({ where: { importRunId: id } }),
-    prisma.projectAcceptance.count({ where: { importRunId: id } }),
-    prisma.projectChangeOrder.count({ where: { importRunId: id } }),
-    prisma.projectContract.count({ where: { importRunId: id } }),
-    prisma.project3WayCashflow.count({ where: { importRunId: id } }),
-    prisma.supplierReconciliation.count({ where: { importRunId: id } }),
-    prisma.loanPayment.count({ where: { importRunId: id } }),
-    prisma.payableReceivableAdjustment.count({ where: { importRunId: id } }),
-    prisma.expenseClassification.count({ where: { importRunId: id } }),
-    prisma.projectSupplierDebtSnapshot.count({ where: { importRunId: id } }),
-    prisma.slDtLot.count({ where: { importRunId: id } }),
-    prisma.slDtMilestoneScore.count({ where: { importRunId: id } }),
-    prisma.slDtPaymentPlan.count({ where: { importRunId: id } }),
-    prisma.slDtMonthlyInput.count({ where: { importRunId: id } }),
-    prisma.slDtProgressStatus.count({ where: { importRunId: id } }),
-  ]);
-  return {
-    ledgerTransactions: tx,
-    ledgerOpeningBalances: open,
-    projectEstimates: est,
-    projectTransactions: ptx,
-    supplierDeliveryDaily: sdd,
-    paymentSchedules: psc,
-    loanContracts: lc,
-    journalEntries: je,
-    projectSchedules: psch,
-    projectAcceptances: pacc,
-    projectChangeOrders: pco,
-    projectContracts: pcon,
-    project3WayCashflows: p3wf,
-    supplierReconciliations: srec,
-    loanPayments: lpay,
-    payableReceivableAdjustments: pra,
-    expenseClassifications: eclass,
-    projectSupplierDebtSnapshots: psds,
-    slDtLots: slLot,
-    slDtMilestoneScores: slMs,
-    slDtPaymentPlans: slPp,
-    slDtMonthlyInputs: slMi,
-    slDtProgressStatuses: slPs,
-    total:
-      tx + open + est + ptx + sdd + psc + lc + je +
-      psch + pacc + pco + pcon + p3wf + srec + lpay + pra + eclass + psds +
-      slLot + slMs + slPp + slMi + slPs,
-  };
-}
-
-/**
- * Rollback a committed import run: delete every ledger row tagged with its id,
- * then delete the run itself. Master data (Supplier/Entity/Project) is preserved.
- */
-export async function rollbackImportRun(id: number) {
-  const run = await prisma.importRun.findUnique({ where: { id } });
-  if (!run) throw new Error(`ImportRun #${id} không tồn tại`);
-  if (run.status !== "committed") {
-    throw new Error("Chỉ có thể hoàn tác run đã commit");
-  }
-
-  return prisma.$transaction(async (tx) => {
-    // Raw SQL bypasses the audit extension's deleteMany guard. Bulk rollback
-    // is intentional and the ImportRun record is the audit trail.
-    const txCount = await tx.$executeRaw`DELETE FROM ledger_transactions WHERE "importRunId" = ${id}`;
-    const openCount = await tx.$executeRaw`DELETE FROM ledger_opening_balances WHERE "importRunId" = ${id}`;
-    // Delete loan_payments tagged directly first, then any leftover under contracts being removed.
-    const lpDirect = await tx.$executeRaw`DELETE FROM loan_payments WHERE "importRunId" = ${id}`;
-    const lpCascaded = await tx.$executeRaw`DELETE FROM loan_payments WHERE "loanContractId" IN (SELECT id FROM loan_contracts WHERE "importRunId" = ${id})`;
-    const lpCount = lpDirect + lpCascaded;
-    const lcCount = await tx.$executeRaw`DELETE FROM loan_contracts WHERE "importRunId" = ${id}`;
-    const estCount = await tx.$executeRaw`DELETE FROM project_estimates WHERE "importRunId" = ${id}`;
-    const ptxCount = await tx.$executeRaw`DELETE FROM project_transactions WHERE "importRunId" = ${id}`;
-    const sddCount = await tx.$executeRaw`DELETE FROM supplier_delivery_daily WHERE "importRunId" = ${id}`;
-    const pscCount = await tx.$executeRaw`DELETE FROM payment_schedules WHERE "importRunId" = ${id}`;
-    const jeCount = await tx.$executeRaw`DELETE FROM journal_entries WHERE "importRunId" = ${id}`;
-    const pschCount = await tx.$executeRaw`DELETE FROM project_schedules WHERE "importRunId" = ${id}`;
-    const paccCount = await tx.$executeRaw`DELETE FROM project_acceptances WHERE "importRunId" = ${id}`;
-    const pcoCount = await tx.$executeRaw`DELETE FROM project_change_orders WHERE "importRunId" = ${id}`;
-    const pconCount = await tx.$executeRaw`DELETE FROM project_contracts WHERE "importRunId" = ${id}`;
-    const p3wfCount = await tx.$executeRaw`DELETE FROM project_3way_cashflows WHERE "importRunId" = ${id}`;
-    const srecCount = await tx.$executeRaw`DELETE FROM supplier_reconciliations WHERE "importRunId" = ${id}`;
-    const praCount = await tx.$executeRaw`DELETE FROM payable_receivable_adjustments WHERE "importRunId" = ${id}`;
-    const eclassCount = await tx.$executeRaw`DELETE FROM expense_classifications WHERE "importRunId" = ${id}`;
-    const psdsCount = await tx.$executeRaw`DELETE FROM project_supplier_debt_snapshots WHERE "importRunId" = ${id}`;
-    // SL-DT module — delete children before lots (deleting a lot cascades to its
-    // children, so a child tagged by another run could vanish; clear by run first).
-    const slPpCount = await tx.$executeRaw`DELETE FROM sl_dt_payment_plans WHERE "importRunId" = ${id}`;
-    const slMiCount = await tx.$executeRaw`DELETE FROM sl_dt_monthly_inputs WHERE "importRunId" = ${id}`;
-    const slPsCount = await tx.$executeRaw`DELETE FROM sl_dt_progress_statuses WHERE "importRunId" = ${id}`;
-    const slLotCount = await tx.$executeRaw`DELETE FROM sl_dt_lots WHERE "importRunId" = ${id}`;
-    const slMsCount = await tx.$executeRaw`DELETE FROM sl_dt_milestone_scores WHERE "importRunId" = ${id}`;
-    await tx.importRun.delete({ where: { id } });
-    return {
-      ledgerTransactions: txCount,
-      ledgerOpeningBalances: openCount,
-      projectEstimates: estCount,
-      projectTransactions: ptxCount,
-      supplierDeliveryDaily: sddCount,
-      paymentSchedules: pscCount,
-      loanContracts: lcCount,
-      loanPayments: lpCount,
-      journalEntries: jeCount,
-      projectSchedules: pschCount,
-      projectAcceptances: paccCount,
-      projectChangeOrders: pcoCount,
-      projectContracts: pconCount,
-      project3WayCashflows: p3wfCount,
-      supplierReconciliations: srecCount,
-      payableReceivableAdjustments: praCount,
-      expenseClassifications: eclassCount,
-      projectSupplierDebtSnapshots: psdsCount,
-      slDtPaymentPlans: slPpCount,
-      slDtMonthlyInputs: slMiCount,
-      slDtProgressStatuses: slPsCount,
-      slDtLots: slLotCount,
-      slDtMilestoneScores: slMsCount,
-      total:
-        txCount + openCount + estCount + ptxCount + sddCount + pscCount + lcCount + lpCount + jeCount +
-        pschCount + paccCount + pcoCount + pconCount + p3wfCount + srecCount + praCount + eclassCount + psdsCount +
-        slPpCount + slMiCount + slPsCount + slLotCount + slMsCount,
-    };
+export async function deleteImportRun(id: number): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const run = await lockRunRow(tx, id);
+    if (!run) throw new ImportError(`ImportRun #${id} không tồn tại`);
+    if (run.status !== "preview" && run.status !== "failed") {
+      throw new ImportError(
+        run.status === "committed"
+          ? "Không thể xóa lần import đã ghi. Dùng Hoàn tác."
+          : `Không thể xóa run đang "${run.status}" — run đã hoàn tác được giữ làm dấu vết.`,
+      );
+    }
+    if ((await findRunIdsWithData(tx, [id])).size > 0) {
+      throw new ImportError(`Run #${id} còn dữ liệu gắn importRunId — không thể xóa.`);
+    }
+    // SQL thô: audit extension của delete sẽ đọc cả sourceFile vào audit log.
+    await tx.$executeRaw`DELETE FROM import_runs WHERE id = ${id}`;
   });
 }

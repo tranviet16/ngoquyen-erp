@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,41 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { ProjectForm } from "@/components/master-data/project-form";
-import { createProject, updateProject, softDeleteProject, patchProject } from "@/lib/master-data/project-service";
+import {
+  createProject,
+  updateProject,
+  softDeleteProject,
+  patchProject,
+  patchProjectEntity,
+} from "@/lib/master-data/project-service";
 import { type ProjectInput } from "@/lib/master-data/schemas";
 import { PROJECT_SPEC, type ProjectRow } from "@/lib/master-data/projects/table-spec";
 import { formatNumber } from "@/lib/utils/format";
+
+type EntityOption = { id: number; name: string };
+type ProjectListRow = ProjectRow & { entityId: number | null };
+
+/**
+ * Cột "Chủ thể" (sửa nhanh bằng select). Chủ thể là nguồn suy Chủ thể cho công nợ vật tư; server
+ * từ chối đổi khi công trình đã có dữ liệu vật tư (gán lần đầu luôn được).
+ */
+function entityColumn(entities: EntityOption[]): ColumnDef<Record<string, unknown>> {
+  const names = new Map(entities.map((e) => [e.id, e.name]));
+  return {
+    key: "entityId",
+    header: "Chủ thể",
+    className: "w-[200px]",
+    editable: true,
+    editKind: "select",
+    editOptions: entities.map((e) => ({ id: String(e.id), name: e.name })),
+    parseEdit: (raw) => (raw === "" ? null : Number(raw)),
+    render: (row) => {
+      const id = typeof row.entityId === "number" ? row.entityId : null;
+      if (id == null) return <span className="text-muted-foreground">Chưa gán</span>;
+      return names.get(id) ?? `#${id}`;
+    },
+  };
+}
 
 const PROJECT_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   {
@@ -71,18 +102,24 @@ const PROJECT_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
 ];
 
 interface ProjectsClientProps {
-  data: ProjectRow[];
+  data: ProjectListRow[];
+  entities: EntityOption[];
   total: number;
   page: number;
   pageSize: number;
   searchValue: string;
 }
 
-export function ProjectsClient({ data, total, page, pageSize, searchValue }: ProjectsClientProps) {
+export function ProjectsClient({ data, entities, total, page, pageSize, searchValue }: ProjectsClientProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProjectRow | null>(null);
   const [, startTransition] = useTransition();
+  // Chèn "Chủ thể" sau "Chủ đầu tư".
+  const columns = useMemo(() => {
+    const at = PROJECT_COLUMNS.findIndex((c) => c.key === "ownerInvestor") + 1;
+    return [...PROJECT_COLUMNS.slice(0, at), entityColumn(entities), ...PROJECT_COLUMNS.slice(at)];
+  }, [entities]);
 
   async function handleCreate(input: ProjectInput) {
     await createProject(input);
@@ -116,7 +153,7 @@ export function ProjectsClient({ data, total, page, pageSize, searchValue }: Pro
       </div>
 
       <DataTable
-        columns={PROJECT_COLUMNS}
+        columns={columns}
         data={data as unknown as Record<string, unknown>[]}
         total={total}
         page={page}
@@ -125,7 +162,13 @@ export function ProjectsClient({ data, total, page, pageSize, searchValue }: Pro
         searchPlaceholder="Tìm theo mã hoặc tên..."
         resourceSpec={PROJECT_SPEC}
         onCellEdit={async (row, key, value) => {
-          const project = row as unknown as ProjectRow;
+          const project = row as unknown as ProjectListRow;
+          if (key === "entityId") {
+            // Trả kết quả để lý do từ chối (đã có dữ liệu vật tư) hiện đúng trên toast.
+            const result = await patchProjectEntity(project.id, typeof value === "number" ? value : null);
+            if (!result.ok) throw new Error(result.message);
+            return;
+          }
           return patchProject(project.id, { [key]: value }) as Promise<Record<string, unknown>>;
         }}
         onRowClick={(row) => router.push(`/master-data/projects/${(row as unknown as ProjectRow).id}`)}

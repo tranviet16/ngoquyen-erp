@@ -37,6 +37,13 @@ export const projectSchema = z.object({
   { message: "Ngày bắt đầu phải <= ngày kết thúc", path: ["endDate"] },
 );
 
+/** Chủ thể của công trình (sửa nhanh ở danh sách): id dương hoặc null = bỏ gán. */
+export const projectEntityIdSchema = z
+  .number({ error: "Chủ thể không hợp lệ" })
+  .int("Chủ thể không hợp lệ")
+  .positive("Chủ thể không hợp lệ")
+  .nullable();
+
 export const categorySchema = z.object({
   code: z.string().min(1, "Mã hạng mục không được để trống"),
   name: z.string().min(1, "Tên không được để trống"),
