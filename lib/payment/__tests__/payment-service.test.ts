@@ -237,10 +237,11 @@ describe("upsertItem — create path", () => {
   });
 
   it("auto-fills congNo/luyKe from balance-service for vat_tu", async () => {
+    mockDb.project.findUnique.mockResolvedValue({ entityId: 3 });
     vi.mocked(getOutstandingDebt).mockResolvedValue(new Prisma.Decimal("500"));
     vi.mocked(getCumulativePaid).mockResolvedValue(new Prisma.Decimal("120"));
     await svc.upsertItem({
-      roundId: 1, supplierId: 7, entityId: 3, projectId: null,
+      roundId: 1, supplierId: 7, entityId: 3, projectId: 11,
       category: "vat_tu", soDeNghi: 1000,
     });
     expect(mockDb.paymentRoundItem.create).toHaveBeenCalledWith(
@@ -262,8 +263,9 @@ describe("upsertItem — create path", () => {
   });
 
   it("trusts explicit congNo/luyKe and does not auto-fill", async () => {
+    mockDb.project.findUnique.mockResolvedValue({ entityId: 3 });
     await svc.upsertItem({
-      roundId: 1, supplierId: 7, entityId: 3, projectId: null,
+      roundId: 1, supplierId: 7, entityId: 3, projectId: 11,
       category: "vat_tu", congNo: 99, luyKe: 11, soDeNghi: 1000,
     });
     expect(getOutstandingDebt).not.toHaveBeenCalled();
@@ -272,6 +274,40 @@ describe("upsertItem — create path", () => {
         data: expect.objectContaining({ congNo: 99, luyKe: 11, balancesRefreshedAt: null }),
       }),
     );
+  });
+
+  it("rejects a vat_tu item without a project (pair-scoped material debt)", async () => {
+    await expect(
+      svc.upsertItem({ roundId: 1, supplierId: 7, entityId: 3, projectId: null, category: "vat_tu", soDeNghi: 1000 }),
+    ).rejects.toThrow(/thiếu công trình/);
+    expect(mockDb.paymentRoundItem.create).not.toHaveBeenCalled();
+  });
+
+  it("derives entityId of a vat_tu item from Project.entityId, ignoring the client value", async () => {
+    mockDb.project.findUnique.mockResolvedValue({ entityId: 3 });
+    await svc.upsertItem({
+      roundId: 1, supplierId: 7, entityId: 99, projectId: 11,
+      category: "vat_tu", congNo: 1, luyKe: 1, soDeNghi: 1000,
+    });
+    expect(mockDb.paymentRoundItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ entityId: 3, projectId: 11 }) }),
+    );
+  });
+
+  it("rejects a vat_tu item whose project has no entity (missing_entity)", async () => {
+    mockDb.project.findUnique.mockResolvedValue({ entityId: null });
+    await expect(
+      svc.upsertItem({ roundId: 1, supplierId: 7, entityId: 3, projectId: 11, category: "vat_tu", soDeNghi: 1000 }),
+    ).rejects.toMatchObject({ code: "missing_entity", message: expect.stringMatching(/Công trình chưa gán Chủ thể/) });
+    expect(mockDb.paymentRoundItem.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects editing an item into vat_tu without a project", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({ roundId: 1, category: "khac", projectId: null, entityId: 1 });
+    await expect(
+      svc.upsertItem({ id: 5, roundId: 1, supplierId: 7, entityId: 3, projectId: null, category: "vat_tu", soDeNghi: 1 }),
+    ).rejects.toThrow(/thiếu công trình/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
   });
 });
 
@@ -302,9 +338,19 @@ describe("refreshItemBalances", () => {
     );
   });
 
-  it("recomputes congNo/luyKe from balance-service", async () => {
+  it("rejects refreshing a legacy vat_tu item without a project", async () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
-      category: "vat_tu", entityId: 1, supplierId: 1, projectId: null,
+      id: 4, category: "vat_tu", entityId: 1, supplierId: 1, projectId: null,
+      round: { status: "draft", createdById: "admin1" },
+    });
+    await expect(svc.refreshItemBalances(4)).rejects.toThrow(/thiếu công trình \(#4\)/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
+  });
+
+  it("recomputes congNo/luyKe from balance-service", async () => {
+    mockDb.project.findUnique.mockResolvedValue({ entityId: 1 });
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      id: 1, category: "vat_tu", entityId: 1, supplierId: 1, projectId: 11,
       round: { status: "draft", createdById: "admin1" },
     });
     vi.mocked(getOutstandingDebt).mockResolvedValue(new Prisma.Decimal("777"));
@@ -440,6 +486,14 @@ describe("approveItem", () => {
     await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow("Forbidden payment department");
   });
 
+  it("rejects approving a legacy vat_tu item without a project", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      id: 8, category: "vat_tu", projectId: null, soDeNghi: 100, round: { id: 1, status: "submitted" },
+    });
+    await expect(svc.approveItem({ itemId: 8 })).rejects.toThrow(/thiếu công trình \(#8\)/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
+  });
+
   it("auto-approves the round once every item is resolved", async () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
       soDeNghi: 100, round: { id: 1, status: "submitted" },
@@ -475,6 +529,18 @@ describe("rejectItem", () => {
   it("throws when the round is not submitted", async () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({ round: { id: 1, status: "approved" } });
     await expect(svc.rejectItem(1)).rejects.toThrow("Đợt phải ở trạng thái đã gửi");
+  });
+
+  it("still rejects (soDuyet = 0) a legacy vat_tu item without a project — the way out", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      id: 8, category: "vat_tu", projectId: null, round: { id: 1, status: "submitted" },
+    });
+    mockDb.paymentRoundItem.update.mockResolvedValue({ id: 8 });
+    mockDb.paymentRoundItem.count.mockResolvedValue(2);
+    await svc.rejectItem(8);
+    expect(mockDb.paymentRoundItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ soDuyet: 0 }) }),
+    );
   });
 
   it("sets soDuyet to 0 on reject", async () => {
@@ -523,6 +589,18 @@ describe("bulkApproveAsRequested", () => {
         data: expect.objectContaining({ status: "approved" }),
       }),
     );
+  });
+
+  it("rejects bulk approval while a pending vat_tu item has no project", async () => {
+    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "submitted" });
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.paymentRoundItem.count.mockResolvedValue(2);
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([
+      { id: 1, soDeNghi: 100, category: "khac", projectId: null },
+      { id: 2, soDeNghi: 200, category: "vat_tu", projectId: null },
+    ]);
+    await expect(svc.bulkApproveAsRequested(1)).rejects.toThrow(/thiếu công trình \(#2\)/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
   });
 
   it("rolls back before approving items when the round status changes concurrently", async () => {
@@ -581,8 +659,10 @@ describe("closeRound", () => {
     mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
     mockDb.paymentRound.findUnique.mockResolvedValue({ month: "2026-06", sequence: 1 });
     mockDb.paymentRoundItem.findMany.mockResolvedValue([
-      { id: 7, entityId: 2, supplierId: 3, projectId: null, soDuyet: new Prisma.Decimal(500) },
+      { id: 7, supplierId: 3, projectId: 11, soDuyet: new Prisma.Decimal(500) },
     ]);
+    mockDb.project.findUnique.mockResolvedValue({ entityId: 2 }); // Chủ thể suy từ công trình
+    mockDb.$queryRaw.mockResolvedValue([]); // chưa có run chuyển đổi đã commit → không có mốc
     mockDb.supplierReconciliation.findFirst.mockResolvedValue(null); // kỳ chưa ký → không khóa
     mockDb.ledgerTransaction.findFirst.mockResolvedValue(null); // chưa có event → create
     await svc.closeRound(1);
@@ -599,9 +679,37 @@ describe("closeRound", () => {
           transactionType: "thanh_toan",
           paymentRoundItemId: 7,
           partyId: 3,
+          projectId: 11,
+          entityId: 2,
         }),
       }),
     );
+    // Khoá kỳ kiểm theo cặp (NCC 3, công trình 11).
+    expect(mockDb.supplierReconciliation.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ supplierId: 3, projectId: 11 }) }),
+    );
+  });
+
+  it("refuses to close while a vat_tu item has no project, writing nothing to the ledger", async () => {
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.paymentRound.findUnique.mockResolvedValue({ month: "2026-06", sequence: 1 });
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([
+      { id: 7, supplierId: 3, projectId: null, soDuyet: new Prisma.Decimal(500) },
+    ]);
+    await expect(svc.closeRound(1)).rejects.toThrow(/thiếu công trình \(#7\)/);
+    expect(mockDb.ledgerTransaction.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to close on or before the committed cutover date", async () => {
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.paymentRound.findUnique.mockResolvedValue({ month: "2026-06", sequence: 1 });
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([
+      { id: 7, supplierId: 3, projectId: 11, soDuyet: new Prisma.Decimal(500) },
+    ]);
+    // Mốc rất xa trong tương lai → ngày đóng (hôm nay) luôn ≤ mốc, test không phụ thuộc đồng hồ.
+    mockDb.$queryRaw.mockResolvedValue([{ id: 1, cutoverDate: "2999-12-31" }]);
+    await expect(svc.closeRound(1)).rejects.toMatchObject({ code: "cutover_locked" });
+    expect(mockDb.ledgerTransaction.create).not.toHaveBeenCalled();
   });
 });
 

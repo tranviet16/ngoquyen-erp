@@ -1,8 +1,14 @@
 import { z } from "zod";
 
+/** Công trình bắt buộc: công nợ vật tư (phiếu, kỳ đối chiếu) theo cặp NCC × công trình. */
+const requiredProjectId = z
+  .number({ error: "Chọn công trình" })
+  .int("Công trình không hợp lệ")
+  .positive("Chọn công trình");
+
 export const deliverySchema = z.object({
   supplierId: z.number().int().positive(),
-  projectId: z.number().int().positive().optional(),
+  projectId: requiredProjectId,
   date: z.string().min(1, "Ngày không được để trống"),
   itemId: z.number().int().positive(),
   qty: z.number().positive("Số lượng phải > 0"),
@@ -17,10 +23,11 @@ export const deliverySchema = z.object({
 
 export type DeliveryInput = z.infer<typeof deliverySchema>;
 
-// Kỳ đối chiếu chỉ là marker (NCC + khoảng kỳ + ghi chú) — mọi số tiền
+// Kỳ đối chiếu chỉ là marker (NCC × công trình + khoảng kỳ + ghi chú) — mọi số tiền
 // đều dẫn xuất từ sổ cái; ký mới đông cứng số vào snapshot.
 export const reconciliationSchema = z.object({
   supplierId: z.number().int().positive(),
+  projectId: requiredProjectId,
   periodFrom: z.string().min(1, "Từ ngày không được để trống"),
   periodTo: z.string().min(1, "Đến ngày không được để trống"),
   note: z.string().optional(),

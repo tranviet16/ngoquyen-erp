@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, type ReactElement } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, SelectOption } from "@/components/data-grid";
+import { NEW_ROW_PROJECT_REQUIRED_MESSAGE, NewRowProjectSelect } from "./new-row-project-select";
+import { unwrapActionResult } from "./unwrap-action-result";
 
 const DataGrid = dynamic(
   () => import("@/components/data-grid").then((m) => m.DataGrid),
@@ -29,10 +31,14 @@ export interface OpeningRow {
   note: string | null;
 }
 
+/**
+ * Server action của lưới. Mỗi action trả thẳng dữ liệu (số dư nhân công, ném khi lỗi) hoặc
+ * `{ ok, row | rows } | { ok: false, message }` (số dư vật tư) — xem unwrapActionResult.
+ */
 export interface OpeningActions {
   patch: (id: number, patch: Record<string, unknown>) => Promise<unknown>;
-  bulkUpsert: (rows: Array<Record<string, unknown> & { id?: number }>) => Promise<unknown[]>;
-  deleteMany: (ids: number[]) => Promise<void>;
+  bulkUpsert: (rows: Array<Record<string, unknown> & { id?: number }>) => Promise<unknown>;
+  deleteMany: (ids: number[]) => Promise<unknown>;
 }
 
 interface Props {
@@ -47,6 +53,8 @@ interface Props {
   canEdit: boolean;
   canDelete: boolean;
   role?: string;
+  /** Sổ vật tư: bắt buộc chọn công trình trước khi tạo dòng (sổ nhân công không truyền). */
+  requireProject?: boolean;
 }
 
 export function dbObToRow(b: Record<string, unknown>): OpeningRow {
@@ -74,8 +82,10 @@ export function LedgerOpeningGrid({
   canCreate,
   canEdit,
   canDelete,
+  requireProject = false,
 }: Props) {
   const router = useRouter();
+  const [newRowProjectId, setNewRowProjectId] = useState<number | null>(null);
 
   const columns = useMemo<DataGridColumn<OpeningRow>[]>(
     () => [
@@ -93,22 +103,33 @@ export function LedgerOpeningGrid({
 
   const handlers: DataGridHandlers<OpeningRow> = {
     ...(canEdit ? { onCellEdit: async (rowId: number, col: string, value: unknown) => {
-      const updated = await actions.patch(rowId, { [col]: value });
+      const updated = unwrapActionResult(await actions.patch(rowId, { [col]: value }), "row");
       router.refresh();
       return dbObToRow(updated as Record<string, unknown>);
     }, onBulkPaste: async (patches: Array<Partial<OpeningRow>>) => {
-      const result = await actions.bulkUpsert(
-        patches.map((p) => p as Record<string, unknown> & { id?: number }),
-      );
+      const result = unwrapActionResult(await actions.bulkUpsert(
+        patches.map((p) => {
+          // Dòng dán mới thiếu công trình lấy "Công trình cho dòng mới" (server vẫn kiểm bắt buộc).
+          const row = p as Record<string, unknown> & { id?: number };
+          return requireProject && !row.id && row.projectId == null && newRowProjectId != null
+            ? { ...row, projectId: newRowProjectId }
+            : row;
+        }),
+      ), "rows");
       router.refresh();
       return (result as Record<string, unknown>[]).map(dbObToRow);
     } } : {}),
     ...(canCreate ? { onAddRow: async (template: Partial<OpeningRow>) => {
+      const projectId = template.projectId ?? newRowProjectId;
+      if (requireProject && projectId == null) {
+        toast.error(NEW_ROW_PROJECT_REQUIRED_MESSAGE);
+        return;
+      }
       const today = new Date().toISOString().slice(0, 10);
       const stub: Record<string, unknown> = {
         entityId: defaults.entityId,
         partyId: defaults.partyId,
-        projectId: null,
+        projectId: projectId ?? null,
         balanceTt: "0",
         balanceHd: "0",
         asOfDate: today,
@@ -116,26 +137,33 @@ export function LedgerOpeningGrid({
         ...(template as Record<string, unknown>),
       };
       try {
-        const result = await actions.bulkUpsert([stub]);
+        const result = unwrapActionResult(await actions.bulkUpsert([stub]), "rows") as Record<string, unknown>[];
         router.refresh();
-        return dbObToRow(result[0] as Record<string, unknown>);
+        return dbObToRow(result[0]);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Lỗi tạo dòng — chọn Chủ thể & đối tác trước");
         throw err;
       }
     } } : {}),
     ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
-      await actions.deleteMany(ids);
+      unwrapActionResult(await actions.deleteMany(ids));
       router.refresh();
     } } : {}),
   };
 
-  return (
+  const grid = (
     <DataGrid<OpeningRow>
       columns={columns}
       rows={initialData}
       handlers={handlers}
       height={500}
     />
+  );
+  if (!requireProject || !canCreate) return grid;
+  return (
+    <div className="space-y-2">
+      <NewRowProjectSelect projects={projects} value={newRowProjectId} onChange={setNewRowProjectId} />
+      {grid}
+    </div>
   );
 }

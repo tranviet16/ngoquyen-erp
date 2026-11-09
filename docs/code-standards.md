@@ -284,6 +284,44 @@ await db.$transaction(
 
 Chunk operations in batches of 100 to prevent timeout. Wrap entire batch in a single transaction for atomicity.
 
+## Ghi dữ liệu nghiệp vụ (vật tư, thanh toán, import)
+
+### Khoá rồi mới kiểm
+
+Mọi đường ghi sổ vật tư, phiếu ngày, số dư ban đầu, kỳ đối chiếu, đồng bộ đợt thanh toán và commit import chạy trong một `$transaction` theo đúng thứ tự:
+1. Khoá: `lockSuppliers(tx, supplierIds)` (`lib/vat-tu-ncc/period-lock.ts`, `pg_advisory_xact_lock` theo NCC, id tăng dần chống deadlock).
+2. Kiểm trên chính `tx`: kỳ đã ký của cặp, mốc chuyển đổi (`assertPeriodOpen` / `assertMaterialTypeWritable`), guard độc quyền hoặc guard hoàn tác.
+3. Ghi.
+
+Kiểm trước rồi mới khoá là lỗi check-then-write: một lần ký kỳ hay một import chen vào giữa sẽ lọt qua. Khoá giữ theo NCC (thô hơn phạm vi cặp nhưng đúng); không thêm khoá toàn cục.
+
+Commit import khoá dòng run (`SELECT … FOR UPDATE`) trước, rồi khoá NCC theo `lockScope`, review lại dưới khoá, sau đó mới `apply` (`lib/import/import-engine.ts`).
+
+### Adapter import
+
+- **Fail-fast:** `apply` ném lỗi ngay khi gặp lỗi, không `try/catch` từng dòng bên trong transaction. Transaction Postgres đã hỏng mà vẫn được đánh `committed` là ghi một phần.
+- **Có review:** adapter cần duyệt khai báo `review(data, mapping, db, { runId, phase })` → `{ payload, blocking, requiredAcks }`.
+  - Pha `preview` được chạy thử ghi; engine sở hữu transaction và luôn rollback, nên adapter không tự mở `$transaction`.
+  - Pha `commit` không được ghi gì.
+  - Engine từ chối ghi khi còn `blocking`, hoặc còn mã `requiredAcks` chưa được xác nhận. Mã `ack` nên chứa giá trị được xác nhận, để số đổi thì phải xác nhận lại.
+- **Một transaction:** mọi dòng của một run ghi trong transaction commit (300 s) và mang `importRunId`. Không tự ghi `import_runs`; trả `ImportSummary.expected` để engine lưu cùng câu đổi trạng thái `committed`.
+- Ghi bằng `$executeRaw`, hoặc `updateMany` trong `bypassAudit`. `create` / `update` của Prisma đi qua audit extension, mà extension này ghi bằng kết nối riêng, không rollback theo transaction.
+- Hợp đồng đầy đủ: `lib/import/README.md`, `lib/import/adapters/adapter-types.ts`.
+
+### Server action trả `{ ok, … }`
+
+Ở bản production, React Flight chỉ gửi `digest` của lỗi ném ra từ server action, nên thông điệp bị ẩn. Action có lỗi nghiệp vụ mà người dùng cần đọc (khoá kỳ, mốc chuyển đổi, thiếu công trình, lỗi chặn import…) phải **trả** kết quả thay vì ném:
+
+```typescript
+export type ActionResult<T extends object = object> = ({ ok: true } & T) | { ok: false; message: string };
+```
+
+- Guard module vẫn chạy trong action: `await requireReleasedModuleRequest(moduleKey, …)`, đúng một lần mỗi action.
+- Trả nguyên văn lỗi nghiệp vụ đã biết: lớp lỗi riêng (`MaterialScopeError`, `ModuleRequestError`, `ImportError`…), `ZodError`, và `Error` thuần do guard ném (`err.constructor === Error`).
+- Lỗi khác (Prisma, hạ tầng) chỉ ghi log ở server; trả một thông điệp chung để không lộ chi tiết nội bộ.
+- Client kiểm `result.ok` rồi `toast.error(result.message)`.
+- Mẫu: `lib/vat-tu-ncc/delivery-actions.ts`, `app/(app)/admin/import/import-actions.ts`, `patchProjectEntity` (`lib/master-data/project-service.ts`).
+
 ## Build & Validation
 
 ### Pre-Commit Checks

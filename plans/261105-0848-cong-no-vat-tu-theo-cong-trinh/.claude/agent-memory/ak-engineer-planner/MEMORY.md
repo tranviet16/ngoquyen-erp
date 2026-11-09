@@ -1,0 +1,1 @@
+- [Excel công nợ data quirks](project_excel_cong_no_data_quirks.md) — dirty dates, out-of-range block lines, anchor formula, CSV/NL oddities, import UI lacks mapping step

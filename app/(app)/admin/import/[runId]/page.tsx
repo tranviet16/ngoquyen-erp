@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
+import { missingAcks, parseStoredReview, readStoredMapping, type StoredReview } from "@/lib/import/import-review";
 import { getRun } from "../import-actions";
+import { importRunStatusLabel } from "../run-status";
 import { CommitPanel } from "./commit-panel";
+import { AdapterReviewSection } from "./adapter-review-components";
+import { BundleFilesPanel, ReviewStatusPanel } from "./review-status-panel";
 import { ServerSortableTableHead } from "@/components/server-sortable-table-head";
 import { stableSemanticSort } from "@/lib/table/semantic-compare";
 import type { SortSelection } from "@/lib/table/sort-state";
@@ -16,8 +20,14 @@ export default async function ImportRunDetailPage({ params, searchParams }: Prop
   await requireActiveAdmin();
 
   const { runId } = await params;
-  const run = await getRun(parseInt(runId, 10));
+  const id = Number(runId);
+  if (!Number.isInteger(id) || id <= 0) notFound();
+  const run = await getRun(id);
   if (!run) notFound();
+
+  const review: StoredReview = parseStoredReview(run.reviewJson) ?? { payload: null, blocking: [], requiredAcks: [], acks: {} };
+  const missing = missingAcks(review);
+  const hasReview = run.reviewVersion > 0;
 
   const errors = Array.isArray(run.errors) ? (run.errors as { rowIndex: number; message: string }[]) : [];
   const { sort: rawSort } = await searchParams;
@@ -39,6 +49,7 @@ export default async function ImportRunDetailPage({ params, searchParams }: Prop
     if (s === "committed") return "text-green-700";
     if (s === "failed") return "text-red-600";
     if (s === "preview") return "text-blue-600";
+    if (s === "rolled_back") return "text-gray-600";
     return "text-yellow-600";
   }
 
@@ -56,7 +67,9 @@ export default async function ImportRunDetailPage({ params, searchParams }: Prop
         </div>
         <div>
           <div className="text-muted-foreground text-xs">Trạng thái</div>
-          <div className={`font-semibold ${statusColor(run.status)}`}>{run.status}</div>
+          <div className={`font-semibold ${statusColor(run.status)}`} title={run.status}>
+            {importRunStatusLabel(run.status)}
+          </div>
         </div>
         <div>
           <div className="text-muted-foreground text-xs">Tổng dòng</div>
@@ -72,8 +85,14 @@ export default async function ImportRunDetailPage({ params, searchParams }: Prop
         </div>
         {run.committedAt && (
           <div>
-            <div className="text-muted-foreground text-xs">Commit lúc</div>
+            <div className="text-muted-foreground text-xs">Ghi lúc</div>
             <div>{new Date(run.committedAt).toLocaleString("vi-VN")}</div>
+          </div>
+        )}
+        {run.rolledBackAt && (
+          <div>
+            <div className="text-muted-foreground text-xs">Hoàn tác lúc</div>
+            <div>{new Date(run.rolledBackAt).toLocaleString("vi-VN")}</div>
           </div>
         )}
         <div className="col-span-2">
@@ -82,8 +101,37 @@ export default async function ImportRunDetailPage({ params, searchParams }: Prop
         </div>
       </div>
 
-      {run.status === "preview" && (
-        <CommitPanel runId={run.id} />
+      {review.bundle && <BundleFilesPanel bundle={review.bundle} />}
+
+      {hasReview && <ReviewStatusPanel reviewVersion={run.reviewVersion} review={review} missingAcks={missing} />}
+
+      {hasReview && (
+        <AdapterReviewSection
+          runId={run.id}
+          adapterName={run.adapter}
+          status={run.status}
+          editable={run.status === "preview"}
+          reviewVersion={run.reviewVersion}
+          mapping={readStoredMapping(run.mapping)}
+          review={review}
+          missingAcks={missing}
+        />
+      )}
+
+      {run.status === "preview" && hasReview && (
+        <CommitPanel
+          runId={run.id}
+          reviewVersion={run.reviewVersion}
+          blockingCount={review.blocking.length}
+          missingAckCount={missing.length}
+        />
+      )}
+
+      {run.status === "preview" && !hasReview && (
+        <div className="border rounded-lg p-4 text-sm text-amber-800 dark:text-amber-300">
+          Run này chưa có kết quả xem trước (tạo trước khi engine lưu nguồn, hoặc bước xem trước bị gián đoạn).
+          Xóa run và tải lên lại.
+        </div>
       )}
 
       {errors.length > 0 && (

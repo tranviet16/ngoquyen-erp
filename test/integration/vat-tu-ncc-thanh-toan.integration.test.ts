@@ -36,7 +36,7 @@ import {
   listReconciliationsDerived,
   signReconciliation,
 } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
-import { supplierBalanceAsOf } from "@/lib/vat-tu-ncc/supplier-balance";
+import { pairBalanceAsOf, supplierBalanceAsOf } from "@/lib/vat-tu-ncc/supplier-balance";
 import { syncClosedRoundToLedger } from "@/lib/payment/payment-ledger-sync";
 import type { TransactionInput } from "@/lib/cong-no-vt/schemas";
 
@@ -66,7 +66,7 @@ async function seed() {
       ledgerType: "material",
       entityId: entity.id,
       partyId: supplier.id,
-      projectId: null,
+      projectId: project.id,
       balanceTt: EXPECTED.opening,
       balanceHd: 0,
       asOfDate: new Date("2026-04-27"),
@@ -92,6 +92,7 @@ async function seed() {
   const recon = await prisma.supplierReconciliation.create({
     data: {
       supplierId: supplier.id,
+      projectId: project.id,
       periodFrom: new Date("2026-04-28"),
       periodTo: new Date("2026-05-26"),
     },
@@ -101,7 +102,7 @@ async function seed() {
 }
 
 function txInput(
-  ids: { entity: { id: number }; supplier: { id: number } },
+  ids: { entity: { id: number }; supplier: { id: number }; project: { id: number } },
   overrides: Partial<TransactionInput>,
 ): TransactionInput {
   return {
@@ -109,7 +110,7 @@ function txInput(
     transactionType: "thanh_toan",
     entityId: ids.entity.id,
     partyId: ids.supplier.id,
-    projectId: null,
+    projectId: ids.project.id,
     amountTt: "0",
     vatPctTt: "0",
     amountHd: "0",
@@ -120,7 +121,8 @@ function txInput(
 }
 
 async function recon(supplierId: number, reconId: number) {
-  const list = await listReconciliationsDerived(supplierId);
+  const marker = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: reconId }, select: { projectId: true } });
+  const list = await listReconciliationsDerived(supplierId, marker.projectId);
   const row = list.find((r) => r.id === reconId);
   if (!row) throw new Error("Không thấy kỳ đối chiếu");
   return row;
@@ -172,6 +174,8 @@ describe("vat-tu-ncc tab Thanh toán (integration)", () => {
     expect(view.taxRows[0].invoiceNo).toBe("00000232");
     expect(view.totalTax).toBe(EXPECTED.tax);
 
+    expect(await pairBalanceAsOf(ids.supplier.id, ids.project.id, new Date("2026-05-26"))).toBe(EXPECTED.closingAfterTax);
+    // NCC chỉ có một công trình → tổng NCC = số dư của cặp.
     expect(await supplierBalanceAsOf(ids.supplier.id, new Date("2026-05-26"))).toBe(EXPECTED.closingAfterTax);
   });
 

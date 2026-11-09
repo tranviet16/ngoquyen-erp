@@ -92,6 +92,7 @@ async function seed() {
   const recon = await prisma.supplierReconciliation.create({
     data: {
       supplierId: supplier.id,
+      projectId: project.id,
       periodFrom: new Date("2026-04-27"),
       periodTo: new Date("2026-05-26"),
     },
@@ -120,7 +121,7 @@ describe("cong-no thue_hd (integration)", () => {
     expect(view.taxRows[0].invoiceDate).toBe("2026-05-29");
     expect(view.closing).toBe(EXPECTED.closing);
 
-    const [row] = await listReconciliationsDerived(recon.supplierId);
+    const [row] = await listReconciliationsDerived(recon.supplierId, recon.projectId);
     expect(row.totalIn).toBe(EXPECTED.totalIn);
     expect(row.otherAmount).toBe(EXPECTED.totalTax);
   });

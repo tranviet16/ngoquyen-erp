@@ -1,68 +1,56 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { doCommit } from "../import-actions";
 
 interface Props {
   runId: number;
+  /** Phiên bản review đang hiển thị — server từ chối nếu đã có bản mới hơn. */
+  reviewVersion: number;
+  blockingCount: number;
+  missingAckCount: number;
 }
 
-export function CommitPanel({ runId }: Props) {
+/** Ghi run từ nguồn đã lưu (không tải lại file), đúng phiên bản review đang xem. */
+export function CommitPanel({ runId, reviewVersion, blockingCount, missingAckCount }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [file, setFile] = useState<File | null>(null);
+  const blocked = blockingCount > 0 || missingAckCount > 0;
 
-  function handleCommit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!file) { toast.error("Chọn lại file để commit"); return; }
-
+  function handleCommit() {
+    if (blocked) return;
+    if (!confirm(`Ghi dữ liệu của run #${runId} (bản xem trước v${reviewVersion}) vào cơ sở dữ liệu?`)) return;
     startTransition(async () => {
-      try {
-        const fd = new FormData();
-        fd.set("runId", String(runId));
-        fd.set("file", file);
-        fd.set("mapping", "{}");
-        const result = await doCommit(fd);
-        toast.success(`Commit thành công: ${result.rowsImported} dòng nhập, ${result.rowsSkipped} bỏ qua`);
-        router.refresh();
-      } catch (err) {
-        toast.error(`Commit thất bại: ${String(err)}`);
+      const result = await doCommit(runId, reviewVersion);
+      if (result.ok) {
+        toast.success(`Ghi thành công: ${result.rowsImported} dòng nhập, ${result.rowsSkipped} bỏ qua`);
+      } else {
+        toast.error(`Ghi thất bại: ${result.message}`);
       }
+      router.refresh();
     });
   }
 
   return (
     <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-500/10 dark:border-blue-500/30 space-y-3">
-      <h2 className="font-semibold text-blue-900 dark:text-blue-200">Sẵn sàng để commit</h2>
+      <h2 className="font-semibold text-blue-900 dark:text-blue-200">
+        {blocked ? "Chưa ghi được" : "Sẵn sàng để ghi"}
+      </h2>
       <p className="text-sm text-blue-700 dark:text-blue-300">
-        Upload lại file gốc để xác nhận và ghi dữ liệu vào cơ sở dữ liệu.
-        Thao tác này không thể hoàn tác.
+        {blocked
+          ? `Còn ${blockingCount} lỗi chặn và ${missingAckCount} mục chưa xác nhận. Xử lý rồi "Lưu & tính lại" trước khi ghi.`
+          : `Ghi đúng bản xem trước v${reviewVersion} từ nguồn đã tải lên, trong một giao dịch. Sau khi ghi chỉ có thể Hoàn tác.`}
       </p>
-      <form onSubmit={handleCommit} className="flex gap-3 items-end">
-        <div>
-          <label className="text-sm font-medium block mb-1">Chọn lại file Excel</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            required
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="border rounded px-3 py-2 text-sm"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={isPending || !file}
-          className="px-4 py-2 bg-green-700 text-white rounded text-sm font-medium disabled:opacity-50"
-        >
-          {isPending ? "Đang commit..." : "Commit dữ liệu"}
-        </button>
-      </form>
-      <p className="text-xs text-muted-foreground">
-        Lưu ý: Nếu có conflict (NCC/Item chưa khớp), liên hệ admin để map thủ công
-        trước khi commit. Conflict resolver UI đầy đủ sẽ có trong Phase 10.
-      </p>
+      <button
+        type="button"
+        onClick={handleCommit}
+        disabled={isPending || blocked}
+        className="px-4 py-2 bg-green-700 text-white rounded text-sm font-medium disabled:opacity-50"
+      >
+        {isPending ? "Đang ghi..." : "Ghi dữ liệu"}
+      </button>
     </div>
   );
 }

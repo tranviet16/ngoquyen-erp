@@ -96,6 +96,18 @@ const API_RISK_MANIFEST: readonly RiskManifestRecord[] = [
     recovery: standardRecovery,
   },
   {
+    id: "api-project-material-balance-export",
+    kind: "api-route",
+    path: "app/api/du-an/[id]/can-doi/export/route.ts",
+    operation: "GET",
+    tier: "P0",
+    dataClassification: "restricted",
+    owners: { technical: "application", business: "operations", release: "release" },
+    authorization: { reference: "released du-an module, read access scoped to the requested project", status: "defined" },
+    requiredTests: ["allow", "deny", "cross-scope", "audit", "recovery"],
+    recovery: standardRecovery,
+  },
+  {
     id: "api-cascade-projects",
     kind: "api-route",
     path: "app/api/cong-no/cascade-projects/route.ts",

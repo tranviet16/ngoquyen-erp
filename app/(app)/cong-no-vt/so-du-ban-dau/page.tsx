@@ -1,9 +1,9 @@
+import { listMaterialOpeningBalances } from "@/lib/cong-no-vt/material-ledger-service";
 import {
-  listMaterialOpeningBalances,
-  patchMaterialOpeningBalance,
-  bulkUpsertMaterialOpeningBalances,
-  deleteMaterialOpeningBalances,
-} from "@/lib/cong-no-vt/material-ledger-service";
+  patchMaterialOpeningBalanceAction,
+  bulkUpsertMaterialOpeningBalancesAction,
+  deleteMaterialOpeningBalancesAction,
+} from "@/lib/cong-no-vt/material-ledger-actions";
 import { prisma } from "@/lib/prisma";
 import { LedgerOpeningGrid, type OpeningRow } from "@/components/ledger-grid/opening-grid";
 import { requireModuleAccess } from "@/lib/acl/guards";
@@ -47,13 +47,15 @@ export default async function SoDuBanDauPage() {
         partyLabel="Nhà cung cấp"
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: suppliers[0]?.id ?? 0 }}
         actions={{
-          patch: patchMaterialOpeningBalance,
-          bulkUpsert: bulkUpsertMaterialOpeningBalances,
-          deleteMany: deleteMaterialOpeningBalances,
+          // Action trả { ok, … } — lỗi nghiệp vụ hiện trên toast cả ở bản production.
+          patch: patchMaterialOpeningBalanceAction,
+          bulkUpsert: bulkUpsertMaterialOpeningBalancesAction,
+          deleteMany: deleteMaterialOpeningBalancesAction,
         }}
         canCreate={canCreate}
         canEdit={canEdit}
         canDelete={canEdit}
+        requireProject
       />
     </div>
   );

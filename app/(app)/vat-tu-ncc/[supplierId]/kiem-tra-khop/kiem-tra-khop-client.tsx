@@ -13,9 +13,11 @@ import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface Props {
   supplierId: number;
+  /** Công trình của cặp đang kiểm (từ `?projectId=`). */
+  projectId: number;
 }
 
-export function KiemTraKhopClient({ supplierId }: Props) {
+export function KiemTraKhopClient({ supplierId, projectId }: Props) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [result, setResult] = useState<PeriodCheckResult | null>(null);
@@ -54,7 +56,7 @@ export function KiemTraKhopClient({ supplierId }: Props) {
     }
     setLoading(true);
     try {
-      setResult(await checkPeriodConsistency(supplierId, dateFrom, dateTo));
+      setResult(await checkPeriodConsistency(supplierId, projectId, dateFrom, dateTo));
     } catch (err) {
       toast.error("Lỗi: " + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -91,6 +93,13 @@ export function KiemTraKhopClient({ supplierId }: Props) {
         </label>
         <Button onClick={runCheck} disabled={loading}>{loading ? "Đang kiểm tra…" : "Kiểm tra"}</Button>
       </div>
+
+      {result && (result.historicalDeliveries.length > 0 || result.historicalEvents.length > 0) && (
+        <p className="text-sm text-muted-foreground">
+          Giai đoạn chuyển đổi từ Excel (tới mốc): {result.historicalDeliveries.length} phiếu và {result.historicalEvents.length} dòng
+          Nhập Liệu là lịch sử Excel — không cần event, không tính là lệch.
+        </p>
+      )}
 
       {clean && (
         <p className="rounded-md border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-700 dark:bg-green-900/30 dark:text-green-300">

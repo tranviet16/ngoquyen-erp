@@ -31,7 +31,8 @@ export default async function Page({
     }),
     prisma.project.findMany({
       where: { deletedAt: null },
-      select: { id: true, code: true, name: true },
+      // entityId: dòng vat_tu tự điền Chủ thể theo công trình.
+      select: { id: true, code: true, name: true, entityId: true },
       orderBy: { code: "asc" },
     }),
     prisma.user.findUnique({

@@ -5,18 +5,16 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DateInput } from "@/components/ui/date-input";
-import {
-  previewPeriodClose,
-  commitPeriodClose,
-  type PeriodClosePreview,
-  type PeriodRangeInput,
-} from "@/lib/vat-tu-ncc/period-close-service";
+import type { PeriodClosePreview, PeriodRangeInput } from "@/lib/vat-tu-ncc/period-close-service";
+import { commitPeriodCloseAction, previewPeriodCloseAction } from "@/lib/vat-tu-ncc/period-close-actions";
 import { formatVND } from "@/lib/utils/format";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 interface Props {
   supplierId: number;
+  /** Công trình của cặp đang chốt (từ `?projectId=`). */
+  projectId: number;
   canEdit: boolean;
   /** Xem trước kỳ gợi ý, tính ở server khi mở trang. */
   initialPreview: PeriodClosePreview;
@@ -36,7 +34,7 @@ const REASON_LABEL: Record<string, string> = {
   missing_entity: "công trình chưa gán Chủ Thể",
 };
 
-export function ChotKyClient({ supplierId, canEdit, initialPreview }: Props) {
+export function ChotKyClient({ supplierId, projectId, canEdit, initialPreview }: Props) {
   const router = useRouter();
   const [from, setFrom] = useState(initialPreview.periodFrom);
   const [to, setTo] = useState(initialPreview.periodTo);
@@ -64,7 +62,13 @@ export function ChotKyClient({ supplierId, canEdit, initialPreview }: Props) {
     }
     setLoading(true);
     try {
-      const data = await previewPeriodClose(supplierId, range);
+      // Action trả { ok, … }: thông điệp nghiệp vụ không bị ẩn ở bản production.
+      const result = await previewPeriodCloseAction(supplierId, projectId, range);
+      if (!result.ok) {
+        toast.error("Không tải được kỳ: " + result.message);
+        return;
+      }
+      const data = result.preview;
       setPreview(data);
       setFrom(data.periodFrom);
       setTo(data.periodTo);
@@ -106,7 +110,11 @@ export function ChotKyClient({ supplierId, canEdit, initialPreview }: Props) {
         const payload = preview.deliveries
           .filter((d) => prices[d.id] !== "" && Number.isFinite(Number(prices[d.id])))
           .map((d) => ({ deliveryId: d.id, unitPrice: Number(prices[d.id]) }));
-        const result = await commitPeriodClose(supplierId, range, payload);
+        const result = await commitPeriodCloseAction(supplierId, projectId, range, payload);
+        if (!result.ok) {
+          toast.error("Chốt kỳ thất bại: " + result.message);
+          return;
+        }
         toast.success(
           `Đã chốt kỳ: ${result.closedCount} phiếu, phát sinh ${formatVND(Number(result.totalAmountTt))}`,
         );

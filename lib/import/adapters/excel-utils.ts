@@ -1,6 +1,6 @@
 /**
  * Shared excel parsing helpers for stub-rebuilt adapters
- * (gach-nam-huong, quang-minh, sl-dt, cong-no-vat-tu).
+ * (sl-dt, cong-no-nhan-cong, …).
  * The legacy adapters keep their inlined copies — DO NOT migrate them
  * unless the touch is part of a deliberate refactor.
  */

@@ -36,7 +36,7 @@ type Props = Omit<React.ComponentProps<"input">, "type" | "value" | "onChange"> 
  * Hybrid date input: text field accepts dd/mm/yyyy typed entry,
  * calendar button opens the browser native picker. Stores ISO yyyy-mm-dd.
  */
-export function DateInput({ value, onChange, className, disabled, name, ...rest }: Props) {
+export function DateInput({ value, onChange, onBlur, onKeyDown, className, disabled, name, ...rest }: Props) {
   const [text, setText] = React.useState(() => isoToDmy(value ?? ""));
   const pickerRef = React.useRef<HTMLInputElement>(null);
 
@@ -71,12 +71,18 @@ export function DateInput({ value, onChange, className, disabled, name, ...rest 
         value={text}
         disabled={disabled}
         onChange={(e) => setText(e.target.value)}
-        onBlur={(e) => commit(e.target.value)}
+        // Commit the typed text first, then forward to the caller (e.g. react-hook-form's
+        // field.onBlur). Callers' handlers must not replace commit, or typed dates are lost.
+        onBlur={(e) => {
+          commit(e.target.value);
+          onBlur?.(e);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
             e.preventDefault();
             commit((e.target as HTMLInputElement).value);
           }
+          onKeyDown?.(e);
         }}
         className="h-8 w-full min-w-0 rounded-lg border border-input bg-transparent pl-2.5 pr-8 py-1 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80"
         {...rest}

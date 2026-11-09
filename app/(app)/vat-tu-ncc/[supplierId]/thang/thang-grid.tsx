@@ -31,9 +31,11 @@ interface ThangRow extends RowWithId {
 
 interface Props {
   rows: ThangSource[];
+  /** Công trình đang lọc ("Mã — Tên"); null = mọi công trình của NCC. */
+  scopeLabel?: string | null;
 }
 
-export function ThangGrid({ rows: source }: Props) {
+export function ThangGrid({ rows: source, scopeLabel }: Props) {
   const rows: ThangRow[] = source.map((r, idx) => {
     const d = new Date(r.month);
     return {
@@ -54,7 +56,12 @@ export function ThangGrid({ rows: source }: Props) {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Vật tư tháng (tổng hợp từ phiếu ngày)</h2>
+      <div>
+        <h2 className="text-lg font-semibold">Vật tư tháng (tổng hợp từ phiếu ngày)</h2>
+        <p className="text-sm text-muted-foreground">
+          {scopeLabel ? `Chỉ phiếu của công trình ${scopeLabel}.` : "Cộng phiếu của mọi công trình của NCC."}
+        </p>
+      </div>
       <DataGrid<ThangRow> columns={columns} rows={rows} handlers={{}} height={500} />
     </div>
   );

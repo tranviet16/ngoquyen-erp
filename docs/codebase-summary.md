@@ -163,6 +163,7 @@ ngoquyyen-erp/
 
 **Routes:**
 - `/cong-no-vt/` — Supplier debt (Vật Tư Materials dept)
+- `/cong-no-vt/tong-hop-cong-trinh` — Tổng hợp công nợ vật tư theo công trình (2026-11-06): pivot NCC → công trình / Công trình → NCC, lọc Chủ thể, chế độ kỳ hoặc lũy kế, xuất Excel `cong-no-cong-trinh`; một lần `queryDetailReport` (`lib/cong-no-vt/project-debt-summary-service.ts`, `project-debt-pivot.ts`)
 - `/cong-no-nc/` — Supplier debt (Nhân Công Labor dept)
 - `/api/cong-no/cascade-projects` — Fetch projects by ledgerType + entityIds (ACL: cong-no-vt, cong-no-nc, thanh-toan.ke-hoach)
 - `/api/thanh-toan/cascade-suppliers` — Fetch suppliers by ledgerType + entityId + projectId
@@ -211,7 +212,8 @@ ngoquyyen-erp/
 - Entity-Supplier-Project-Category (4×N) matrix for granular balance tracking
 - Auto-fill congNo + luyKe from balance-service per ledgerType (material/labor)
 - Service: `lib/payment/payment-service.ts` with entityId threading to balance-service (prevents cross-entity bleed)
-- **NEW (2026-07-29):** `closeRound(roundId)` (approved→closed) transactionally calls `syncClosedRoundToLedger` (`lib/payment/payment-ledger-sync.ts`) which writes one `thanh_toan` `LedgerTransaction` per `PaymentRoundItem` where `category="vat_tu"` and `soDuyet > 0`; date = ngày đóng đợt. Idempotent via `ledgerTransaction.paymentRoundItemId` (1 dòng đợt ↔ tối đa 1 event). Blocked by `assertPeriodOpen` if the close date falls inside a signed NCC reconciliation period. `nhan_cong`/`dich_vu`/`khac` chưa sync (out of scope).
+- **NEW (2026-07-29):** `closeRound(roundId)` (approved→closed) transactionally calls `syncClosedRoundToLedger` (`lib/payment/payment-ledger-sync.ts`) which writes one `thanh_toan` `LedgerTransaction` per `PaymentRoundItem` where `category="vat_tu"` and `soDuyet > 0`; date = ngày đóng đợt. Idempotent via `ledgerTransaction.paymentRoundItemId` (1 dòng đợt ↔ tối đa 1 event). `nhan_cong`/`dich_vu`/`khac` chưa sync (out of scope).
+- **Theo cặp NCC × công trình (2026-11-06):** dòng `vat_tu` bắt buộc công trình khi tạo/sửa; Chủ thể của dòng và của event suy từ `Project.entityId` (UI khoá ô Chủ thể). Duyệt, duyệt cả đợt, làm mới số dư và đóng đợt từ chối dòng `vat_tu` cũ thiếu công trình (`MaterialScopeError` `missing_project`, liệt kê `#id`); từ chối dòng vẫn được. Đóng đợt khoá các NCC rồi gọi `assertPeriodOpen(supplierId, projectId, ngày đóng)` — chặn khi ngày đóng nằm trong kỳ ký của cặp hoặc ≤ mốc chuyển đổi.
 
 **Schema (PaymentRoundItem):**
 - `entityId: Int FK` — Project entity (chu thể); replaced `projectScope` enum (2026-05-15)
@@ -239,19 +241,16 @@ ngoquyyen-erp/
 
 ### 8. Import System (lib/import/)
 
-**Purpose:** Bulk data import from SOP Excel file.
+**Purpose:** Nạp dữ liệu lịch sử từ một file Excel SOP hoặc cả thư mục (.xlsx/.csv) qua `/admin/import`. Chi tiết hợp đồng adapter: `lib/import/README.md`.
 
-**Adapters:** Tab-specific parsers for:
-- du-an-xay-dung (projects)
-- ho-tro-van-hanh (task templates)
-- phieu-phoi-hop (coordination forms)
-- [5 more in 2026-05-03 expansion]
+**Adapters đang đăng ký** (`lib/import/adapters/adapter-registry.ts`): `bang-can-doi-vat-tu`, `du-toan-tong-hop-vt`, `cong-no-nhan-cong`, `du-an-xay-dung`, `tai-chinh-nq`, `sl-dt`. Đã gỡ `cong-no-vat-tu`, `gach-nam-huong`, `quang-minh` (2026-11-06: ghi sổ/phiếu vật tư không công trình). Adapter `vat-tu-chuyen-doi` (chuyển đổi công nợ vật tư cả thư mục) đang triển khai theo `plans/261105-0848-cong-no-vat-tu-theo-cong-trinh/phase-07-cutover-adapter.md`; parser thuần đã có ở `lib/import/adapters/vat-tu-chuyen-doi/`.
 
-**Features:**
-- Dry-run validation before commit
-- Auto-create serial lots during apply
-- Column mapping per tab
-- Error logging and rollback on failure
+**Features (2026-11-06):**
+- Gói thư mục (`file-bundle.ts`, `bundle-path.ts`): ≤ 200 file, ≤ 20 MB; file ẩn / `~$` / đuôi khác bị bỏ qua và liệt kê; nguồn lưu ở `import_runs.sourceFile`.
+- Xem trước có review của adapter (chạy thử trong transaction rồi rollback), `reviewVersion`, xác nhận `ack:<mã>`; "Lưu & tính lại" qua `refreshPreviewAction`.
+- Ghi đúng phiên bản đã xem trong một transaction (300 s), khoá dòng run rồi khoá NCC (`lockScope`) trước khi kiểm lại.
+- Trạng thái `preview → committed → rolled_back`; `failed` chỉ từ `preview`; run đã ghi không bị xoá. Guard hoàn tác ở `rollback-guards.ts`.
+- Server action trả `{ ok, … }` (`app/(app)/admin/import/import-actions.ts`) để thông điệp lỗi hiện được ở production.
 
 ### 9. Supplier Material Reconciliation (vat-tu-ncc) — NEW 2026-07-29
 
@@ -259,15 +258,16 @@ ngoquyyen-erp/
 
 **Flow:**
 1. Daily slip (`SupplierDeliveryDaily`, per NCC × công trình × ngày) — `unitPrice`/`totalAmount` are nullable until period close (accountant assigns price then, not at daily entry).
-2. **Chốt kỳ** (`/vat-tu-ncc/[supplierId]/chot-ky`): fixed period 27 tháng trước → 26 tháng đích (`lib/vat-tu-ncc/period.ts`, `periodRange(year, month)`). Bulk price assignment (with prior-period price suggestion) → `commitPeriodClose` (`lib/vat-tu-ncc/period-close-service.ts`) upserts one `lay_hang` `LedgerTransaction` per slip, keyed by `LedgerTransaction.deliveryId` (idempotent, partial-unique). `entityId` on the event is derived from the slip's `Project.entityId` FK. Slips missing `projectId` are rejected at close time.
-3. **Đối chiếu** (`/vat-tu-ncc/[supplierId]/doi-chieu`): `SupplierReconciliation` is a *derived snapshot* — unsigned periods compute A (opening = prior period's closing carry-over), B (Σ `lay_hang`), C (Σ `thanh_toan`) live from the ledger via `lib/vat-tu-ncc/reconciliation-derive-service.ts` (`getReconciliationView`, `listReconciliationsDerived`). Signing (`signReconciliation`) freezes the 4 total columns + a full `signedSnapshotJson` (reprint source) and **locks all writes** dated inside `[periodFrom, periodTo]` for that supplier — enforced by `assertPeriodOpen` (`lib/vat-tu-ncc/period-lock.ts`) in delivery-service, ledger-service, payment-ledger-sync, and admin ledger patch. Differences post-signing must go through a `dieu_chinh` (adjustment) event in the following period. Unsign (`unsignReconciliation`) is admin-only and restricted to the latest signed period per supplier (preserves the carry-over chain). Manual entry of `openingBalance/totalIn/totalPaid` is removed from the UI.
+2. **Chốt kỳ** (`/vat-tu-ncc/[supplierId]/chot-ky?projectId=`): biên kỳ tuỳ chọn, liền kề marker gần nhất **của cặp** (`previewPeriodClose(s, p, range?)`, `commitPeriodClose(s, p, range, prices)` trong `lib/vat-tu-ncc/period-close-service.ts`) upserts one `lay_hang` `LedgerTransaction` per slip of the pair, keyed by `LedgerTransaction.deliveryId` (idempotent, partial-unique). `entityId` on the event is derived from the slip's `Project.entityId`; công trình chưa có Chủ thể → lỗi `missing_entity`.
+3. **Đối chiếu** (`/vat-tu-ncc/[supplierId]/doi-chieu?projectId=`): `SupplierReconciliation` is a *derived snapshot* **per NCC × công trình** (2026-11-06: `projectId` NOT NULL) — unsigned periods compute A (opening = prior period's closing carry-over of the pair), B (Σ `lay_hang`), C (Σ `thanh_toan`) live from the ledger via `lib/vat-tu-ncc/reconciliation-derive-service.ts` (`getReconciliationView(id)`, `listReconciliationsDerived(s, p)`). Signing (`signReconciliation(id)`) freezes the 4 total columns + a full `signedSnapshotJson` (reprint source, chỉ dòng của cặp) and **locks all writes** dated inside `[periodFrom, periodTo]` for that pair — enforced by `assertPeriodOpen(supplierId, projectId, date, …)` (`lib/vat-tu-ncc/period-lock.ts`) in delivery-service, ledger-service, payment-ledger-sync, and admin ledger patch; the same guard first applies the global cutover lock (ngày ≤ mốc chuyển đổi → `cutover_locked`). Differences post-signing must go through a `dieu_chinh` (adjustment) event dated after the period / after the cutover date. Unsign (`unsignReconciliation`) is admin-only and restricted to the latest signed period of the pair (preserves the carry-over chain). Kỳ có `importRunId` (marker "Kỳ chuyển đổi (khóa)", ký ngay khi import) không gỡ ký / sửa / xoá được. Trang chi tiết kỳ trả 404 khi `projectId` của URL khác kỳ.
+   - **Đường vào theo công trình** (2026-11-06): `/vat-tu-ncc/cong-trinh` → `/vat-tu-ncc/cong-trinh/[projectId]` (`lib/vat-tu-ncc/project-overview-service.ts`; cột nợ chỉ khi có quyền đọc `cong-no-vt`) → trang NCC `?projectId=`. Tab giữ `projectId` (`components/vat-tu-ncc/pair-project-picker.tsx`); thiếu tham số thì hiện bộ chọn công trình.
 4. **Kiểm tra khớp** (`/vat-tu-ncc/[supplierId]/kiem-tra-khop`, admin-only): `checkPeriodConsistency` (`lib/vat-tu-ncc/period-recon-check-service.ts`) FULL OUTER JOINs slips ↔ ledger events to surface mismatches.
 
 **Models:** `SupplierDeliveryDaily` (+`unitPrice`/`totalAmount`), `SupplierReconciliation` (now nullable totals + `signedSnapshotJson`), `LedgerTransaction` (+`deliveryId`, `paymentRoundItemId`, `qty`, `unitPriceSnapshot`), `Project.entityId` FK (source of Chủ Thể for slips without one directly).
 
 **ACL:** Module key `vat-tu-ncc` (dept-scoped, `UserDeptAccess`); `chot-ky` write actions require `edit` level; `kiem-tra-khop` additionally requires active admin.
 
-**Migrations:** `20260729160000_add_project_entity_and_delivery_pricing`, `20260729161000_link_ledger_to_payment_item`, `20260729162000_reconciliation_derived_snapshot`.
+**Migrations:** `20260729160000_add_project_entity_and_delivery_pricing`, `20260729161000_link_ledger_to_payment_item`, `20260729162000_reconciliation_derived_snapshot`, `20261106090000_vat_tu_pair_scope_and_import_review` (kỳ theo cặp, 3 CHECK bắt buộc công trình, cột review của `import_runs`; chạy sau `scripts/vat-tu-cutover-cleanup.sql`).
 
 ---
 
@@ -292,7 +292,7 @@ ngoquyyen-erp/
 | **StateObligationTxn** | **NEW: Obligation ledger** | id, typeId (FK), date, kind (phai_tra\|da_nop), amount, cashAccountId?, journalEntryId?, refNo, description, note, deletedAt |
 | AuditLog | Change tracking | id, action, userId, details, timestamp |
 | **SupplierDeliveryDaily** | **NEW: Daily material slip** | id, supplierId, projectId?, date, itemId, qty, unit, unitPrice?, totalAmount?, deletedAt |
-| **SupplierReconciliation** | **NEW: Derived reconciliation snapshot** | id, supplierId, periodFrom, periodTo, openingBalance?/totalIn?/totalPaid?/closingBalance? (null until signed), signedBySupplier, signedDate?, signedSnapshotJson? |
+| **SupplierReconciliation** | **NEW: Derived reconciliation snapshot (per NCC × công trình)** | id, supplierId, projectId (NOT NULL), periodFrom, periodTo, openingBalance?/totalIn?/totalPaid?/closingBalance? (null until signed), signedBySupplier, signedDate?, signedSnapshotJson?, importRunId? (marker chuyển đổi) |
 | **LedgerTransaction** | **NEW fields: ledger event** | id, ledgerType, date, transactionType (lay_hang\|thanh_toan\|dieu_chinh), entityId, partyId, projectId?, itemId?, amountTt/vatTt/totalTt, deliveryId? (FK, unique), paymentRoundItemId? (FK, unique), qty?, unitPriceSnapshot? |
 
 ### Postgres Constraints

@@ -282,6 +282,8 @@ model Project {
   userPermissions ProjectPermission[]
   paymentItems    PaymentRoundItem[]
 
+  supplierReconciliations SupplierReconciliation[]
+
   // Partial unique enforced via raw SQL: projects_code_active_unique WHERE "deletedAt" IS NULL
   @@index([code])
   @@index([entityId])
@@ -551,6 +553,7 @@ model ProjectSettings {
 model SupplierDeliveryDaily {
   id          Int       @id @default(autoincrement())
   supplierId  Int
+  // Bắt buộc bằng CHECK supplier_delivery_project_required (raw SQL) — mọi phiếu thuộc một cặp NCC × công trình.
   projectId   Int?
   date        DateTime
   itemId      Int
@@ -573,6 +576,7 @@ model SupplierDeliveryDaily {
 
   @@index([supplierId, date])
   @@index([supplierId, itemId])
+  @@index([projectId, date])
   @@index([importRunId])
   @@map("supplier_delivery_daily")
 }
@@ -595,18 +599,20 @@ model SupplierPriceQuote {
 }
 
 model SupplierReconciliation {
-  id         Int      @id @default(autoincrement())
-  supplierId Int
-  periodFrom DateTime
-  periodTo   DateTime
+  id                 Int       @id @default(autoincrement())
+  supplierId         Int
+  // Phạm vi đối chiếu = cặp NCC × công trình: biên kỳ, khoá kỳ, ký, snapshot đều theo cặp.
+  projectId          Int
+  periodFrom         DateTime
+  periodTo           DateTime
   // Số tổng chỉ được ghi khi NCC ký (snapshot denormalized cho list/sort).
   // Kỳ chưa ký: mọi hiển thị tính động từ sổ cái — 4 cột này để NULL.
-  openingBalance   Decimal?  @db.Decimal(18, 2)
-  totalIn          Decimal?  @db.Decimal(18, 2)
-  totalPaid        Decimal?  @db.Decimal(18, 2)
-  closingBalance   Decimal?  @db.Decimal(18, 2)
-  signedBySupplier Boolean   @default(false)
-  signedDate       DateTime?
+  openingBalance     Decimal?  @db.Decimal(18, 2)
+  totalIn            Decimal?  @db.Decimal(18, 2)
+  totalPaid          Decimal?  @db.Decimal(18, 2)
+  closingBalance     Decimal?  @db.Decimal(18, 2)
+  signedBySupplier   Boolean   @default(false)
+  signedDate         DateTime?
   // Bản đông cứng đầy đủ (dòng chi tiết + tổng phụ) tại thời điểm ký — nguồn in lại.
   signedSnapshotJson Json?
   note               String?
@@ -614,11 +620,14 @@ model SupplierReconciliation {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @default(now())
 
+  // importRunId khác NULL = marker kỳ chuyển đổi (ký ngay khi import) — UI không gỡ ký/sửa/xoá được.
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Restrict)
 
-  // Partial unique enforced via raw SQL: supplier_recon_period_unique WHERE "deletedAt" IS NULL
-  @@index([supplierId, periodFrom])
+  // Partial unique enforced via raw SQL:
+  //   supplier_recon_pair_period_unique (supplierId, projectId, periodFrom, periodTo) WHERE "deletedAt" IS NULL
+  @@index([supplierId, projectId, periodFrom])
   @@index([importRunId])
   @@map("supplier_reconciliations")
 }
@@ -697,7 +706,7 @@ model LedgerTransaction {
   transactionType String // "lay_hang" | "thanh_toan" | "dieu_chinh"
   entityId        Int // Chủ Thể
   partyId         Int // supplier_id (material) | contractor_id (labor)
-  projectId       Int?
+  projectId       Int? // sổ vật tư bắt buộc: CHECK ledger_material_project_required (raw SQL)
   itemId          Int? // null if paying total (không link item cụ thể)
 
   // Thực tế (TT)
@@ -749,7 +758,7 @@ model LedgerOpeningBalance {
   ledgerType  String // "material" | "labor"
   entityId    Int // Chủ Thể
   partyId     Int // supplier_id | contractor_id
-  projectId   Int?
+  projectId   Int? // số dư vật tư bắt buộc: CHECK ledger_opening_material_project_required (raw SQL)
   balanceTt   Decimal    @db.Decimal(18, 2)
   balanceHd   Decimal    @db.Decimal(18, 2)
   asOfDate    DateTime
@@ -915,19 +924,26 @@ model ExpenseCategory {
 // ─── Import Runs (Phase 9 — one-shot historical migration tracking) ──────────
 
 model ImportRun {
-  id           Int       @id @default(autoincrement())
-  fileName     String
-  fileHash     String // sha256 of uploaded file for idempotency check
-  adapter      String // "cong-no-vat-tu" | "du-an-xay-dung" | "tai-chinh-nq" | etc
-  status       String    @default("pending") // pending|preview|committed|failed
-  rowsTotal    Int       @default(0)
-  rowsImported Int       @default(0)
-  rowsSkipped  Int       @default(0)
-  errors       Json? // array of { row, message }
-  mapping      Json? // user-resolved conflict mappings { sourceKey: targetId }
-  createdBy    String
-  createdAt    DateTime  @default(now())
-  committedAt  DateTime?
+  id            Int       @id @default(autoincrement())
+  fileName      String
+  fileHash      String // sha256 of uploaded file for idempotency check
+  adapter       String // "cong-no-vat-tu" | "du-an-xay-dung" | "tai-chinh-nq" | etc
+  status        String    @default("pending") // pending|preview|committed|failed|rolled_back
+  rowsTotal     Int       @default(0)
+  rowsImported  Int       @default(0)
+  rowsSkipped   Int       @default(0)
+  errors        Json? // array of { row, message }
+  mapping       Json? // user-resolved conflict mappings { sourceKey: targetId }
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  committedAt   DateTime?
+  // Gói nguồn đã tải lên (commit đọc lại đúng gói đã xem trước); xoá khi hoàn tác.
+  sourceFile    Bytes?
+  // Kết quả review của adapter ({payload, blocking, requiredAcks, acks, expected?}).
+  reviewJson    Json?
+  // Tăng mỗi lần tính lại review; commit phải đúng phiên bản người dùng đã xem.
+  reviewVersion Int       @default(0)
+  rolledBackAt  DateTime?
 
   ledgerTransactions           LedgerTransaction[]
   ledgerOpeningBalances        LedgerOpeningBalance[]

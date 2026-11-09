@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { signReconciliation } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
+import { signReconciliationAction } from "@/lib/vat-tu-ncc/reconciliation-actions";
 
 export function SignReconButton({ reconciliationId }: { reconciliationId: number }) {
   const router = useRouter();
@@ -19,7 +19,12 @@ export function SignReconButton({ reconciliationId }: { reconciliationId: number
       return;
     startTransition(async () => {
       try {
-        await signReconciliation(reconciliationId);
+        // Action trả { ok, … }: thông điệp nghiệp vụ (phiếu chưa chốt, kỳ đã ký…) không bị ẩn ở production.
+        const result = await signReconciliationAction(reconciliationId);
+        if (!result.ok) {
+          toast.error("Lỗi: " + result.message);
+          return;
+        }
         toast.success("Đã ký và khóa kỳ");
         router.refresh();
       } catch (err) {

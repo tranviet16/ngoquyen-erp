@@ -21,7 +21,7 @@ export default async function ProjectsPage({ searchParams }: Props) {
   const displaySort = hasDisplayOrderSort(state, PROJECT_SPEC);
   const where = { ...args.where, deletedAt: null };
 
-  const [loadedRows, total] = await Promise.all([
+  const [loadedRows, total, entities] = await Promise.all([
     prisma.project.findMany({
       ...args,
       ...(displaySort ? { skip: undefined, take: undefined, orderBy: [{ id: "asc" as const }] } : {}),
@@ -29,6 +29,12 @@ export default async function ProjectsPage({ searchParams }: Props) {
       include: { _count: { select: { categories: { where: { deletedAt: null } } } } },
     }),
     prisma.project.count({ where }),
+    // Danh sách Chủ thể cho cột "Chủ thể" (sửa nhanh).
+    prisma.entity.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const rows = displaySort ? applyDisplayOrderPage(loadedRows, state, PROJECT_SPEC) : loadedRows;
 
@@ -36,6 +42,7 @@ export default async function ProjectsPage({ searchParams }: Props) {
     <Suspense>
       <ProjectsClient
         data={serializeDecimals(rows)}
+        entities={entities}
         total={total}
         page={state.page}
         pageSize={state.pageSize}

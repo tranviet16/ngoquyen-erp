@@ -49,14 +49,15 @@ async function seedRound() {
       soDuyet: 10_000_000,
     },
   });
-  return { entity, supplier, round, item };
+  return { entity, supplier, project, round, item };
 }
 
 /** Kỳ NCC đã ký 28/4→26/5/2026 (biên UTC 00:00 như chốt kỳ ghi). */
-async function signPeriod(supplierId: number) {
+async function signPeriod(supplierId: number, projectId: number) {
   return prisma.supplierReconciliation.create({
     data: {
       supplierId,
+      projectId,
       periodFrom: new Date("2026-04-28T00:00:00Z"),
       periodTo: new Date("2026-05-26T00:00:00Z"),
       signedBySupplier: true,
@@ -105,36 +106,36 @@ describe("ngày sổ cái theo ngày nghiệp vụ Bangkok (integration)", () =>
   });
 
   it("kỳ ký 28/4→26/5 cho phép 27/5 và từ chối 26/5 kể cả thời điểm có giờ", async () => {
-    const { supplier } = await seedRound();
-    await signPeriod(supplier.id);
+    const { supplier, project } = await seedRound();
+    await signPeriod(supplier.id, project.id);
 
     await expect(
-      assertPeriodOpen(supplier.id, new Date("2026-05-27T00:00:00Z")),
+      assertPeriodOpen(supplier.id, project.id, new Date("2026-05-27T00:00:00Z")),
     ).resolves.toBeUndefined();
     // 02:00 27/5 Bangkok -> ngày nghiệp vụ 27/5 -> nằm ngoài kỳ ký
     await expect(
-      assertPeriodOpen(supplier.id, new Date("2026-05-26T19:00:00Z")),
+      assertPeriodOpen(supplier.id, project.id, new Date("2026-05-26T19:00:00Z")),
     ).resolves.toBeUndefined();
 
     await expect(
-      assertPeriodOpen(supplier.id, new Date("2026-05-26T00:00:00Z")),
+      assertPeriodOpen(supplier.id, project.id, new Date("2026-05-26T00:00:00Z")),
     ).rejects.toThrow(/đã được NCC ký/);
     // 20:00 26/5 Bangkok (13:00Z) > periodTo 00:00Z nhưng vẫn là ngày 26/5 -> phải bị khoá
     await expect(
-      assertPeriodOpen(supplier.id, new Date("2026-05-26T13:00:00Z")),
+      assertPeriodOpen(supplier.id, project.id, new Date("2026-05-26T13:00:00Z")),
     ).rejects.toThrow(/đã được NCC ký/);
 
     expect(
-      await findSignedPeriodCovering(supplier.id, new Date("2026-05-26T13:00:00Z")),
+      await findSignedPeriodCovering(supplier.id, project.id, new Date("2026-05-26T13:00:00Z")),
     ).not.toBeNull();
     expect(
-      await findSignedPeriodCovering(supplier.id, new Date("2026-05-27T00:00:00Z")),
+      await findSignedPeriodCovering(supplier.id, project.id, new Date("2026-05-27T00:00:00Z")),
     ).toBeNull();
   });
 
   it("đóng đợt 20:00 26/5 Bangkok vào kỳ đã ký bị chặn, không sinh dòng sổ cái", async () => {
-    const { supplier, round, item } = await seedRound();
-    await signPeriod(supplier.id);
+    const { supplier, project, round, item } = await seedRound();
+    await signPeriod(supplier.id, project.id);
 
     await expect(
       syncClosedRoundToLedger(round.id, prisma, new Date("2026-05-26T13:00:00Z")),

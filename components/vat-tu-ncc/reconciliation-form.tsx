@@ -12,6 +12,8 @@ import { checkReconciliationRange } from "@/lib/vat-tu-ncc/reconciliation-servic
 
 interface Props {
   supplierId: number;
+  /** Công trình của cặp — kỳ đối chiếu theo NCC × công trình. */
+  projectId: number;
   defaultValues?: Partial<ReconciliationInput>;
   onSubmit: (d: ReconciliationInput) => Promise<void>;
 }
@@ -22,12 +24,13 @@ interface Props {
  * sớm với server (liền kề kỳ gần nhất, không chồng kỳ đã ký, sau mốc số dư ban đầu);
  * server vẫn kiểm lại khi lưu.
  */
-export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Props) {
+export function ReconciliationForm({ supplierId, projectId, defaultValues, onSubmit }: Props) {
   const form = useForm<ReconciliationInput>({
     resolver: zodResolver(reconciliationSchema),
     defaultValues: {
       supplierId,
       ...defaultValues,
+      projectId,
     },
   });
   const [periodFrom, periodTo] = useWatch({ control: form.control, name: ["periodFrom", "periodTo"] });
@@ -39,7 +42,7 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
   useEffect(() => {
     if (hasDefaultRange) return;
     let cancelled = false;
-    checkReconciliationRange(supplierId)
+    checkReconciliationRange(supplierId, projectId)
       .then(({ suggestedRange }) => {
         if (cancelled || form.getValues("periodFrom") || form.getValues("periodTo")) return;
         form.setValue("periodFrom", suggestedRange.from);
@@ -51,7 +54,7 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
     return () => {
       cancelled = true;
     };
-  }, [supplierId, hasDefaultRange, form]);
+  }, [supplierId, projectId, hasDefaultRange, form]);
 
   // Kiểm biên kỳ mỗi khi đủ hai ngày.
   useEffect(() => {
@@ -59,7 +62,7 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
     let cancelled = false;
     const timer = setTimeout(() => {
       setChecking(true);
-      checkReconciliationRange(supplierId, { from: periodFrom, to: periodTo })
+      checkReconciliationRange(supplierId, projectId, { from: periodFrom, to: periodTo })
         .then(({ error }) => {
           if (!cancelled) setBoundsError(error);
         })
@@ -74,7 +77,7 @@ export function ReconciliationForm({ supplierId, defaultValues, onSubmit }: Prop
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [supplierId, periodFrom, periodTo]);
+  }, [supplierId, projectId, periodFrom, periodTo]);
 
   async function handleSubmit(data: ReconciliationInput) {
     try {

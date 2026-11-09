@@ -22,6 +22,7 @@ export default async function CongNoVtPage() {
         { href: "/cong-no-vt/bao-cao-thang", label: "Báo cáo tháng" },
         { href: "/cong-no-vt/chi-tiet", label: "Công nợ lũy kế" },
         { href: "/cong-no-vt/tong-hop", label: "Tổng hợp NCC × Chủ thể" },
+        { href: "/cong-no-vt/tong-hop-cong-trinh", label: "Tổng hợp theo công trình" },
       ]}
       summary={summary}
       parties={parties}

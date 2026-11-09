@@ -6,8 +6,9 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { prisma } from "@/lib/prisma";
 import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
-import { assertPeriodOpen, collectSupplierIds, lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
-import { AUTO_GENERATED_GUARD, isPeriodLockedType } from "@/lib/ledger/transaction-classification";
+import { assertMaterialTypeWritable, collectSupplierIds, lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
+import { MISSING_PROJECT_MESSAGE, requireProjectId } from "@/lib/vat-tu-ncc/pair-scope";
+import { AUTO_GENERATED_GUARD } from "@/lib/ledger/transaction-classification";
 import { parseReportWindow, type ReportWindow } from "@/lib/ledger/report-period";
 import { transactionSchema, openingBalanceSchema } from "./schemas";
 import type { TransactionInput, OpeningBalanceInput } from "./schemas";
@@ -18,6 +19,22 @@ const service = new LedgerService("material");
 
 /** Giao dịch bulk chạm nhiều dòng + khoá advisory → cần thời gian dài hơn mặc định 5s. */
 const LONG_TX_OPTIONS = { timeout: 60_000, maxWait: 10_000 } as const;
+
+/**
+ * Sổ vật tư theo cặp NCC × công trình: chặn sớm (trước transaction) dòng bulk thiếu công trình —
+ * dòng mới không có `projectId`, hoặc dòng sửa đặt `projectId` về rỗng — bằng lỗi tiếng Việt
+ * chỉ rõ số dòng, thay vì lỗi zod/CHECK khó đọc.
+ */
+function assertBulkRowsHaveProject(rows: Array<Record<string, unknown> & { id?: number }>) {
+  rows.forEach((row, index) => {
+    const isUpdate = row.id != null && row.id > 0;
+    const projectId = row.projectId;
+    const missing = isUpdate
+      ? "projectId" in row && (projectId == null || projectId === "")
+      : projectId == null || projectId === "";
+    if (missing) throw new Error(`Dòng ${index + 1}: ${MISSING_PROJECT_MESSAGE}. Chọn công trình trước khi lưu.`);
+  });
+}
 
 function revalidateAll(partyIds: Iterable<number> = []) {
   for (const p of REVALIDATE_PATHS) revalidatePath(p);
@@ -84,7 +101,10 @@ async function patchMaterialTransactionInternal(
     transactionType: (patch.transactionType as TransactionInput["transactionType"]) ?? (current.transactionType as TransactionInput["transactionType"]),
     entityId: (patch.entityId as number | undefined) ?? current.entityId,
     partyId: (patch.partyId as number | undefined) ?? current.partyId,
-    projectId: "projectId" in patch ? (patch.projectId as number | null) : current.projectId,
+    projectId: requireProjectId(
+      "projectId" in patch ? (patch.projectId as number | null) : current.projectId,
+      `Giao dịch #${id}`,
+    ),
     itemId: "itemId" in patch ? (patch.itemId as number | null) : current.itemId,
     amountTt: "amountTt" in patch ? String(patch.amountTt ?? "0") : current.amountTt.toString(),
     vatPctTt: "vatPctTt" in patch ? String(patch.vatPctTt ?? "0") : current.vatPctTt.toString(),
@@ -121,7 +141,15 @@ export async function adminPatchMaterialTransaction(
   id: number,
   patch: Partial<{ vatTt: number | string; totalTt: number | string; vatHd: number | string; totalHd: number | string }>,
 ) {
-  const select = { ledgerType: true, transactionType: true, partyId: true, date: true, paymentRoundItemId: true, deliveryId: true } as const;
+  const select = {
+    ledgerType: true,
+    transactionType: true,
+    partyId: true,
+    projectId: true,
+    date: true,
+    paymentRoundItemId: true,
+    deliveryId: true,
+  } as const;
   const current = await prisma.ledgerTransaction.findUnique({ where: { id }, select });
   if (!current || current.ledgerType !== "material") throw new Error(`Giao dịch #${id} không tồn tại`);
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "read", scope: "module" });
@@ -140,10 +168,15 @@ export async function adminPatchMaterialTransaction(
     const locked = await client.ledgerTransaction.findUnique({ where: { id }, select });
     if (!locked || locked.ledgerType !== "material") throw new Error(`Giao dịch #${id} không tồn tại`);
     AUTO_GENERATED_GUARD.assertManualEditable(locked);
-    // Kỳ NCC đã ký là bất biến với cả admin — sửa số đi qua gỡ ký hoặc dieu_chinh
-    if (isPeriodLockedType(locked.transactionType)) {
-      await assertPeriodOpen(locked.partyId, locked.date, client);
-    }
+    // Kỳ đã ký của cặp là bất biến với cả admin — sửa số đi qua gỡ ký hoặc dieu_chinh; mọi loại
+    // (kể cả dieu_chinh) không sửa được nếu ngày thuộc giai đoạn đã chuyển đổi từ Excel.
+    await assertMaterialTypeWritable(
+      locked.transactionType,
+      locked.partyId,
+      requireProjectId(locked.projectId, `Giao dịch #${id}`),
+      locked.date,
+      client,
+    );
     return client.ledgerTransaction.update({ where: { id }, data });
   });
   revalidateAll([current.partyId]);
@@ -160,6 +193,7 @@ export async function bulkUpsertMaterialTransactions(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "edit", scope: "module" });
+  assertBulkRowsHaveProject(rows);
   const updateIds = rows.flatMap((row) => row.id != null && row.id > 0 ? [row.id] : []);
   const existing = updateIds.length === 0
     ? []
@@ -225,8 +259,10 @@ export async function deleteMaterialOpeningBalances(ids: number[]) {
 }
 
 /**
- * Patch single opening balance: read current, merge, validate, set.
- * setOpeningBalance handles update-or-create on (entityId, partyId, projectId).
+ * Patch single opening balance: read current (under the supplier lock), merge, validate, then
+ * update EXACTLY row `id` (`updateOpeningBalance` re-checks the old and the new pair). Never goes
+ * through setOpeningBalance — that upserts by (Chủ thể, NCC, công trình) and would create a second
+ * row when the project (or the stored Chủ thể) changes, counting the balance twice.
  */
 async function patchMaterialOpeningBalanceInternal(
   client: LedgerWriteClient,
@@ -234,19 +270,19 @@ async function patchMaterialOpeningBalanceInternal(
   patch: Record<string, unknown>,
 ) {
   const before = await client.ledgerOpeningBalance.findUnique({ where: { id }, select: { partyId: true } });
-  // Khoá NCC nguồn và đích cùng lúc (tăng dần) trước mọi thứ khác; đọc lại dòng dưới khoá.
+  // Khoá NCC nguồn và đích cùng lúc (tăng dần) trước mọi thứ khác; đọc lại dòng dưới khoá để gộp
+  // patch trên đúng trạng thái sẽ bị ghi đè. `client` luôn là client của transaction (caller bọc $transaction).
   await lockSuppliers(client, collectSupplierIds([before?.partyId], [patch.partyId]));
   const current = await client.ledgerOpeningBalance.findUnique({ where: { id } });
   if (!current || current.ledgerType !== "material") throw new Error(`Số dư #${id} không tồn tại`);
-  // Đổi NCC của một dòng số dư cũng phải kiểm tra NCC gốc (setOpeningBalance chỉ kiểm NCC đích).
-  // `client` luôn là client của transaction (caller bọc $transaction) nên khoá có hiệu lực tới lúc ghi.
-  await lockSuppliers(client, [current.partyId]); // tái nhập; bắt trường hợp NCC đổi giữa hai lần đọc
-  await service.assertSupplierOpeningEditable(current.partyId, client);
 
   const merged: OpeningBalanceInput = {
     entityId: (patch.entityId as number | undefined) ?? current.entityId,
     partyId: (patch.partyId as number | undefined) ?? current.partyId,
-    projectId: "projectId" in patch ? (patch.projectId as number | null) : current.projectId,
+    projectId: requireProjectId(
+      "projectId" in patch ? (patch.projectId as number | null) : current.projectId,
+      `Số dư #${id}`,
+    ),
     balanceTt: "balanceTt" in patch ? String(patch.balanceTt ?? "0") : current.balanceTt.toString(),
     balanceHd: "balanceHd" in patch ? String(patch.balanceHd ?? "0") : current.balanceHd.toString(),
     asOfDate: (patch.asOfDate as string | undefined) ?? current.asOfDate.toISOString().slice(0, 10),
@@ -254,7 +290,7 @@ async function patchMaterialOpeningBalanceInternal(
   };
 
   const validated = openingBalanceSchema.parse(merged);
-  return service.setOpeningBalance(validated, client);
+  return service.updateOpeningBalance(id, validated, client);
 }
 
 /** Server action: guard ACL rồi patch số dư ban đầu (không nhận client/authorized từ phía gọi). */
@@ -269,6 +305,7 @@ export async function bulkUpsertMaterialOpeningBalances(
   rows: Array<Record<string, unknown> & { id?: number }>,
 ) {
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "edit", scope: "module" });
+  assertBulkRowsHaveProject(rows);
   const updateIds = rows.flatMap((row) => row.id != null && row.id > 0 ? [row.id] : []);
   const existing = updateIds.length === 0
     ? []

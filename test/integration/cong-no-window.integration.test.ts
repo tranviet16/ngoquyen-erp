@@ -208,6 +208,10 @@ describe("cong-no window queries (integration)", () => {
 
   it("(h) getMaterialDebtMatrix: Chủ thể thứ hai cùng NCC, ô theo Chủ thể và tổng NCC", async () => {
     const entity2 = await prisma.entity.create({ data: { name: "Cty Thứ Hai", type: "company" } });
+    // Sổ vật tư bắt buộc có công trình; Chủ thể của dòng lấy theo công trình.
+    const project2 = await prisma.project.create({
+      data: { code: "P-WIN-2", name: "Dự án Thứ Hai", status: "active", entityId: entity2.id },
+    });
     await prisma.ledgerTransaction.create({
       data: {
         ledgerType: "material",
@@ -215,6 +219,7 @@ describe("cong-no window queries (integration)", () => {
         transactionType: "lay_hang",
         entityId: entity2.id,
         partyId: ctx.supplierId,
+        projectId: project2.id,
         totalTt: 1_000_000,
         totalHd: 0,
       },

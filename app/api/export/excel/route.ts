@@ -6,6 +6,8 @@
  * Supported templates:
  *   - cong-no-monthly: { ledgerType, entityId, period?, y?, q?, m?, w?, from?, to? | year, month }
  *   - cong-no-tong-hop: { from: ISO|null, to: ISO|null, entityIds?: number[] } (quyền đọc cong-no-vt)
+ *   - cong-no-cong-trinh: { from: ISO|null, to: ISO|null, groupBy: "ncc"|"cong-trinh", entityIds?: number[] }
+ *     (quyền đọc cong-no-vt)
  *   - doi-chieu: { ledgerType, entityId?, partyId?, projectId? }
  *   - du-toan: { projectId }
  *   - sl-dt: { year, month?, projectId? }
@@ -20,6 +22,8 @@ import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/rbac";
 import { buildCongNoMonthlyExcel } from "@/lib/export/templates/cong-no-monthly";
 import { buildCongNoTongHopExcel } from "@/lib/export/templates/cong-no-tong-hop";
+import { buildCongNoCongTrinhExcel } from "@/lib/export/templates/cong-no-cong-trinh";
+import { parseProjectDebtQuery } from "@/lib/cong-no-vt/project-debt-pivot";
 import { buildDoiChieuExcel } from "@/lib/export/templates/doi-chieu";
 import { buildDuToanExcel } from "@/lib/export/templates/du-toan";
 import { buildSlDtExcel } from "@/lib/export/templates/sl-dt";
@@ -52,6 +56,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const moduleByTemplate: Record<string, ModuleKey> = {
     "cong-no-monthly": String(params.ledgerType ?? "material") === "labor" ? "cong-no-nc" : "cong-no-vt",
     "cong-no-tong-hop": "cong-no-vt",
+    "cong-no-cong-trinh": "cong-no-vt",
     "doi-chieu": String(params.ledgerType ?? "material") === "labor" ? "cong-no-nc" : "cong-no-vt",
     "du-toan": "du-an",
     "sl-dt": "sl-dt",
@@ -129,6 +134,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         filename = `cong-no-tong-hop-${from ?? "toan-bo"}-${to ?? "den-nay"}.xlsx`;
         break;
       }
+      case "cong-no-cong-trinh": {
+        // Cửa sổ, kiểu nhóm và Chủ thể do client gửi: kiểm tra lại ở biên, trả lỗi chung chung.
+        const query = parseProjectDebtQuery(params);
+        if ("error" in query) {
+          return NextResponse.json({ error: "Tham số xuất không hợp lệ" }, { status: 400 });
+        }
+        buffer = await buildCongNoCongTrinhExcel(query);
+        filename = `cong-no-cong-trinh-${query.groupBy}-${query.from ?? "toan-bo"}-${query.to ?? "den-nay"}.xlsx`;
+        break;
+      }
       case "doi-chieu": {
         const ledgerType = String(params.ledgerType ?? "material") as LedgerType;
         buffer = await buildDoiChieuExcel(ledgerType, {
@@ -167,7 +182,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (err) {
     console.error("[export/excel] Error generating workbook:", err);
     // Template tổng hợp mở cho quyền đọc: không trả chi tiết lỗi nội bộ cho client.
-    if (template === "cong-no-tong-hop") {
+    if (template === "cong-no-tong-hop" || template === "cong-no-cong-trinh") {
       return NextResponse.json({ error: "Export failed" }, { status: 500 });
     }
     return NextResponse.json({ error: "Export failed", detail: String(err) }, { status: 500 });
