@@ -125,7 +125,8 @@ jobs:
     name: e2e-security
     needs: classify
     if: needs.classify.outputs.strict == 'true'
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.60 cannot install Chromium deps on ubuntu-latest (26.04).
+    runs-on: ubuntu-24.04
     env:
       CI: "true"
       BETTER_AUTH_URL: http://localhost:3333
