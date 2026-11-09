@@ -44,6 +44,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - Added controlled finance payable/receivable sync snapshots with admin override preservation, SL-DT receivable sync, payable exclusions, and clearer Excel export formatting.
 
 ### Fixed
+- Fixed the shared `DateInput` dropping a typed `dd/mm/yyyy` date when the field lost focus without Enter: react-hook-form's `field.onBlur` replaced the commit handler, so clicking "Lưu" or tabbing away silently kept the previous value (often today). It affected 16 date fields (daily slips, reconciliation, project contracts, acceptance, schedule, change orders, project transactions, 3-way cash flow, project master data). Typed dates now commit on blur, then the caller's `onBlur` still runs.
 - Prevented the shared Glide DataGrid selection callback from causing a React maximum-update-depth loop when callers recreate rows or columns; sorting and filtering now clear index-based selection before changing the visible row order.
 - Added `http://localhost:3001` and `http://127.0.0.1:3001` to the ERP 3001 container's trusted origins so loopback logins no longer fail with "Invalid origin"; tailnet origins are unchanged and the port remains bound to loopback only.
 - Active administrators now bypass the module development rollout gate across page/layout guards, actions and APIs, generic ACL checks, role-based write checks, and project visibility. Inactive administrators remain denied.
