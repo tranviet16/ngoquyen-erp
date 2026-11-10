@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { parseTableQuery, buildPrismaArgs, hasDisplayOrderSort, applyDisplayOrderPage } from "@/lib/table/query-params";
 import { PROJECT_SPEC } from "@/lib/master-data/projects/table-spec";
-import { serializeDecimals } from "@/lib/serialize";
+import { serializeDecimal } from "@/lib/utils/serialize-decimal";
 import { ProjectsClient } from "./projects-client";
 
 interface Props {
@@ -41,7 +41,8 @@ export default async function ProjectsPage({ searchParams }: Props) {
   return (
     <Suspense>
       <ProjectsClient
-        data={serializeDecimals(rows)}
+        // serializeDecimal đổi cả kiểu Decimal → number, để giá trị hợp đồng điền sẵn vào form Sửa.
+        data={serializeDecimal(rows)}
         entities={entities}
         total={total}
         page={state.page}

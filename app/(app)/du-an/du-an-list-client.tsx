@@ -5,7 +5,7 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate } from "@/lib/utils/format";
 import { DU_AN_SPEC, type DuAnRow } from "@/lib/master-data/du-an/table-spec";
-import { patchDuAn } from "@/lib/master-data/project-service";
+import { patchProjectAction } from "@/lib/master-data/project-service";
 
 const DU_AN_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   {
@@ -100,7 +100,9 @@ export function DuAnListClient({ data, total, page, pageSize, searchValue }: Pro
         resourceSpec={DU_AN_SPEC}
         onCellEdit={async (row, key, value) => {
           const duAn = row as unknown as DuAnRow;
-          return patchDuAn(duAn.id, { [key]: value }) as Promise<Record<string, unknown>>;
+          // Kết quả mang lý do từ chối (vd. trùng mã) để ô hiện đúng trên toast.
+          const result = await patchProjectAction(duAn.id, { [key]: value });
+          if (!result.ok) throw new Error(result.message);
         }}
         onRowClick={(row) => router.push(`/du-an/${(row as unknown as DuAnRow).id}`)}
         emptyText="Chưa có dự án nào"

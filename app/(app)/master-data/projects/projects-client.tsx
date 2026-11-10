@@ -8,19 +8,27 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-dialog";
 import { ProjectForm } from "@/components/master-data/project-form";
+import { toast } from "sonner";
 import {
-  createProject,
-  updateProject,
+  createProjectAction,
+  updateProjectAction,
   softDeleteProject,
-  patchProject,
-  patchProjectEntity,
+  patchProjectAction,
 } from "@/lib/master-data/project-service";
 import { type ProjectInput } from "@/lib/master-data/schemas";
 import { PROJECT_SPEC, type ProjectRow } from "@/lib/master-data/projects/table-spec";
 import { formatNumber } from "@/lib/utils/format";
 
 type EntityOption = { id: number; name: string };
-type ProjectListRow = ProjectRow & { entityId: number | null };
+type ProjectListRow = ProjectRow & {
+  entityId: number | null;
+  contractValue: number | null;
+  startDate: Date | string | null;
+  endDate: Date | string | null;
+};
+
+/** Ngày nghiệp vụ lưu 00:00 UTC → `YYYY-MM-DD` cho ô ngày của form. */
+const isoDay = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : "");
 
 /**
  * Cột "Chủ thể" (sửa nhanh bằng select). Chủ thể là nguồn suy Chủ thể cho công nợ vật tư; server
@@ -113,7 +121,7 @@ interface ProjectsClientProps {
 export function ProjectsClient({ data, entities, total, page, pageSize, searchValue }: ProjectsClientProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<ProjectRow | null>(null);
+  const [editTarget, setEditTarget] = useState<ProjectListRow | null>(null);
   const [, startTransition] = useTransition();
   // Chèn "Chủ thể" sau "Chủ đầu tư".
   const columns = useMemo(() => {
@@ -121,15 +129,25 @@ export function ProjectsClient({ data, entities, total, page, pageSize, searchVa
     return [...PROJECT_COLUMNS.slice(0, at), entityColumn(entities), ...PROJECT_COLUMNS.slice(at)];
   }, [entities]);
 
+  // Lỗi (vd. trùng mã) hiện trên toast và giữ hộp thoại mở để sửa tiếp.
   async function handleCreate(input: ProjectInput) {
-    await createProject(input);
+    const result = await createProjectAction(input);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
     setCreateOpen(false);
     startTransition(() => router.refresh());
   }
 
   async function handleEdit(input: ProjectInput) {
     if (!editTarget) return;
-    await updateProject(editTarget.id, input);
+    const result = await updateProjectAction(editTarget.id, input);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    toast.success("Đã lưu dự án");
     setEditTarget(null);
     startTransition(() => router.refresh());
   }
@@ -163,13 +181,10 @@ export function ProjectsClient({ data, entities, total, page, pageSize, searchVa
         resourceSpec={PROJECT_SPEC}
         onCellEdit={async (row, key, value) => {
           const project = row as unknown as ProjectListRow;
-          if (key === "entityId") {
-            // Trả kết quả để lý do từ chối (đã có dữ liệu vật tư) hiện đúng trên toast.
-            const result = await patchProjectEntity(project.id, typeof value === "number" ? value : null);
-            if (!result.ok) throw new Error(result.message);
-            return;
-          }
-          return patchProject(project.id, { [key]: value }) as Promise<Record<string, unknown>>;
+          const patchValue = key === "entityId" ? (typeof value === "number" ? value : null) : value;
+          // Kết quả mang lý do từ chối (trùng mã, đã có dữ liệu vật tư…) để ô hiện đúng trên toast.
+          const result = await patchProjectAction(project.id, { [key]: patchValue });
+          if (!result.ok) throw new Error(result.message);
         }}
         onRowClick={(row) => router.push(`/master-data/projects/${(row as unknown as ProjectRow).id}`)}
         actionColumn={(row) => {
@@ -179,7 +194,7 @@ export function ProjectsClient({ data, entities, total, page, pageSize, searchVa
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setEditTarget(project)}
+                onClick={() => setEditTarget(row as unknown as ProjectListRow)}
               >
                 Sửa
               </Button>
@@ -212,6 +227,10 @@ export function ProjectsClient({ data, entities, total, page, pageSize, searchVa
               code: editTarget.code,
               name: editTarget.name,
               ownerInvestor: editTarget.ownerInvestor ?? "",
+              // Điền đủ các trường còn lại: form gửi rỗng thì server ghi null, xoá mất số liệu cũ.
+              contractValue: editTarget.contractValue == null ? "" : String(editTarget.contractValue),
+              startDate: isoDay(editTarget.startDate),
+              endDate: isoDay(editTarget.endDate),
               status: editTarget.status as "active" | "completed" | "paused",
             }}
             onSubmit={handleEdit}
