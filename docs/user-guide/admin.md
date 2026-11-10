@@ -87,7 +87,13 @@ Admin quản lý tài khoản người dùng qua trang quản trị.
 1. Menu → **Dữ liệu nền tảng > Dự Án** (`/master-data/projects`)
 2. Click **Thêm** → nhập mã dự án, tên, đơn vị chủ đầu tư → **Lưu**
 3. Click vào dự án để xem chi tiết (hợp đồng, dự toán, tiến độ...)
-4. Cột **Chủ thể** (chọn nhanh trong bảng): Chủ thể sở hữu công trình. Mọi công nợ vật tư của công trình (phiếu, sổ, số dư, dòng vật tư của đợt thanh toán) ghi theo Chủ thể này.
+4. Đổi thông tin dự án:
+   - **Sửa nhanh trong bảng**: bấm vào ô **Mã DA**, **Tên dự án** hoặc **Trạng thái** (cả ở trang `/du-an`), sửa rồi Enter.
+   - **Nút Sửa** ở cuối dòng: mở form đầy đủ (mã, tên, chủ đầu tư, giá trị hợp đồng, ngày khởi công/hoàn thành, trạng thái). Form điền sẵn số liệu hiện có, chỉ đổi ô bạn sửa.
+   - Mã dự án không được trùng với dự án đang dùng khác; màn hình báo dự án đang giữ mã đó.
+   - Mọi công nợ, phiếu, đối chiếu gắn với dự án theo mã số nội bộ, nên đổi tên hay mã thì các trang khác hiện tên mới ngay. Riêng bảng đối chiếu **đã ký** giữ tên lúc ký.
+   - Nếu sau khi đổi tên/mã mà chạy lại các adapter import cũ (dự án xây dựng, bảng cân đối vật tư, công nợ nhân công…), adapter tìm dự án theo tên/mã cũ và có thể tạo trùng dự án. Import chuyển đổi vật tư dùng bảng ánh xạ nên không bị.
+5. Cột **Chủ thể** (chọn nhanh trong bảng): Chủ thể sở hữu công trình. Mọi công nợ vật tư của công trình (phiếu, sổ, số dư, dòng vật tư của đợt thanh toán) ghi theo Chủ thể này.
    - Công trình chưa gán Chủ thể thì không ghi được công nợ vật tư, và import chuyển đổi báo lỗi chặn.
    - Gán lần đầu (từ trống) luôn được.
    - Khi công trình đã có sổ, phiếu, số dư hoặc kỳ vật tư thì **không đổi sang Chủ thể khác hay bỏ gán được**; màn hình báo lý do.

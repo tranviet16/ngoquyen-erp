@@ -20,8 +20,8 @@ export const contractorSchema = z.object({
 });
 
 export const projectSchema = z.object({
-  code: z.string().min(1, "Mã dự án không được để trống"),
-  name: z.string().min(1, "Tên không được để trống"),
+  code: z.string().trim().min(1, "Mã dự án không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   ownerInvestor: z.string().optional(),
   contractValue: z
     .string()

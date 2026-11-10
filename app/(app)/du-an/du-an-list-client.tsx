@@ -5,7 +5,8 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate } from "@/lib/utils/format";
 import { DU_AN_SPEC, type DuAnRow } from "@/lib/master-data/du-an/table-spec";
-import { patchDuAn } from "@/lib/master-data/project-service";
+import { patchProjectAction } from "@/lib/master-data/project-service";
+import { ProjectEditButton } from "@/components/master-data/project-edit-button";
 
 const DU_AN_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
   {
@@ -71,13 +72,15 @@ const DU_AN_COLUMNS: ColumnDef<Record<string, unknown>>[] = [
 
 interface Props {
   data: DuAnRow[];
+  /** Admin: sửa nhanh ô (nhấn đúp) và nút "Sửa" mở form đầy đủ. */
+  canEdit: boolean;
   total: number;
   page: number;
   pageSize: number;
   searchValue: string;
 }
 
-export function DuAnListClient({ data, total, page, pageSize, searchValue }: Props) {
+export function DuAnListClient({ data, canEdit, total, page, pageSize, searchValue }: Props) {
   const router = useRouter();
 
   return (
@@ -98,10 +101,21 @@ export function DuAnListClient({ data, total, page, pageSize, searchValue }: Pro
         searchValue={searchValue}
         searchPlaceholder="Tìm theo mã hoặc tên dự án..."
         resourceSpec={DU_AN_SPEC}
-        onCellEdit={async (row, key, value) => {
-          const duAn = row as unknown as DuAnRow;
-          return patchDuAn(duAn.id, { [key]: value }) as Promise<Record<string, unknown>>;
-        }}
+        onCellEdit={
+          canEdit
+            ? async (row, key, value) => {
+                const duAn = row as unknown as DuAnRow;
+                // Kết quả mang lý do từ chối (vd. trùng mã) để ô hiện đúng trên toast.
+                const result = await patchProjectAction(duAn.id, { [key]: value });
+                if (!result.ok) throw new Error(result.message);
+              }
+            : undefined
+        }
+        actionColumn={
+          canEdit
+            ? (row) => <ProjectEditButton project={row as unknown as DuAnRow} label="Sửa" />
+            : undefined
+        }
         onRowClick={(row) => router.push(`/du-an/${(row as unknown as DuAnRow).id}`)}
         emptyText="Chưa có dự án nào"
         emptyDescription="Thêm dự án tại trang Dữ liệu nền tảng → Dự án."
