@@ -3,7 +3,8 @@
  * LH TT, Trả TT, Nợ TT, LH HĐ, Trả HĐ, Nợ HĐ. Dùng chung cho trang tổng hợp và Excel.
  * Module thuần: không import Prisma/Next.
  *
- * LH (lấy hàng luỹ kế) = Đầu kỳ + Phát sinh tăng; Nợ = Cuối kỳ; Nợ = LH − Trả.
+ * LH = Phát sinh tăng trong kỳ, Trả = đã trả trong kỳ (không cộng đầu kỳ); Nợ = Cuối kỳ, tức công nợ
+ * thực còn lại gồm cả số dư chuyển sang. Vì vậy Nợ = Đầu kỳ + LH − Trả, không phải LH − Trả.
  */
 
 import type { MatrixCell } from "./ledger-types";
@@ -28,10 +29,10 @@ export function emptyCongNoSheetCell(): CongNoSheetCell {
 /** Đổi ô ma trận 8 chỉ số sang 6 cột của sheet "Công Nợ". */
 export function toCongNoSheetCell(cell: MatrixCell): CongNoSheetCell {
   return {
-    lhTt: cell.openTt + cell.layTt,
+    lhTt: cell.layTt,
     traTt: cell.traTt,
     noTt: cell.closeTt,
-    lhHd: cell.openHd + cell.layHd,
+    lhHd: cell.layHd,
     traHd: cell.traHd,
     noHd: cell.closeHd,
   };

@@ -49,7 +49,7 @@ const fmt = (n: number) =>
 const cellCls = (n: number) =>
   `border p-1 text-right text-xs tabular-nums ${n < 0 ? "text-destructive" : ""}`;
 
-const LH_HINT = "LH = Đầu kỳ + Phát sinh tăng (gồm số dư đầu kỳ); Nợ = LH − Trả";
+const LH_HINT = "LH = Lấy hàng phát sinh trong kỳ (không gồm đầu kỳ); Nợ = công nợ còn lại đến cuối kỳ";
 
 const TOTAL_GROUP = "TỔNG CÔNG TY";
 
