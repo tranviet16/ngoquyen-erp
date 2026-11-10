@@ -66,6 +66,7 @@ describe("period close actions", () => {
     await expect(commitPeriodCloseAction(1, 2, { from: "2026-10-01", to: "2026-10-26" }, [])).resolves.toEqual({
       ok: false,
       message: "Ngày 20/10/2026 thuộc giai đoạn đã chuyển đổi từ Excel",
+      code: "cutover_locked",
     });
 
     mockClose.previewPeriodClose.mockRejectedValue(new Error("Kỳ mới phải bắt đầu ngay sau kỳ gần nhất."));

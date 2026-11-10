@@ -14,7 +14,12 @@ import { prisma } from "@/lib/prisma";
 import { parseIsoDateUtc, toBusinessDateUtc } from "@/lib/ledger/business-date";
 import { formatDmy } from "./period-bounds";
 
-export type MaterialScopeErrorCode = "missing_project" | "missing_entity" | "cutover_locked" | "cutover_invalid";
+export type MaterialScopeErrorCode =
+  | "missing_project"
+  | "missing_entity"
+  | "cutover_locked"
+  | "cutover_invalid"
+  | "signed_period";
 
 export class MaterialScopeError extends Error {
   constructor(
@@ -130,6 +135,12 @@ export interface MaterialWriteGuardOptions {
    * import không đi qua guard mốc (tiền tới mốc chỉ đến từ run này — bất biến I3).
    */
   cutoverImportRunId?: number;
+  /**
+   * Admin đã xác nhận sửa phiếu ngày nằm trong giai đoạn bị khoá (kỳ NCC đã ký hoặc trước mốc chuyển
+   * đổi): bỏ qua guard mốc và khoá kỳ đã ký. Chỉ `delivery-service` truyền, SAU `requireActiveAdmin`,
+   * và tự đông cứng lại các kỳ đã ký bị ảnh hưởng (`refreezeSignedPeriodsFrom`).
+   */
+  adminOverride?: true;
 }
 
 /** Ném `cutover_locked` khi `date` ≤ mốc chuyển đổi. Áp dụng cho mọi loại giao dịch, kể cả dieu_chinh. */
@@ -138,6 +149,7 @@ export async function assertAfterMaterialCutover(
   db: CutoverClient,
   opts?: MaterialWriteGuardOptions,
 ): Promise<void> {
+  if (opts?.adminOverride) return;
   if (opts?.cutoverImportRunId !== undefined) {
     if (!Number.isInteger(opts.cutoverImportRunId) || opts.cutoverImportRunId <= 0) {
       throw new Error(`Mã run import không hợp lệ: ${opts.cutoverImportRunId}`);

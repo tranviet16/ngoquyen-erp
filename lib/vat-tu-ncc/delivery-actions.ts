@@ -31,10 +31,18 @@ export async function createDeliveryAction(input: DeliveryInput): Promise<Delive
   }, GENERIC_MESSAGE);
 }
 
-export async function updateDeliveryAction(id: number, input: DeliveryInput): Promise<DeliverySaveResult> {
+/**
+ * `opts.overrideLocked`: admin đã xác nhận sửa phiếu trong kỳ đã ký / kỳ chuyển đổi (lần gọi thứ
+ * hai sau khi lần đầu trả `code: "signed_period" | "cutover_locked"`). Server tự kiểm admin.
+ */
+export async function updateDeliveryAction(
+  id: number,
+  input: DeliveryInput,
+  opts?: { overrideLocked?: boolean },
+): Promise<DeliverySaveResult> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    const { ledgerStatus } = await updateDelivery(id, input);
+    const { ledgerStatus } = await updateDelivery(id, input, { overrideLocked: opts?.overrideLocked === true });
     return { ledgerStatus };
   }, GENERIC_MESSAGE);
 }

@@ -55,8 +55,9 @@ interface DeliveryGridRow extends RowWithId {
   itemLabel: string;
   qty: number;
   unit: string;
-  unitPrice: number;
-  totalAmount: number;
+  /** null = phiếu chưa có đơn giá (ô để trống, không hiện "0 ₫"). */
+  unitPrice: number | null;
+  totalAmount: number | null;
   projectLabel: string;
   cbVatTu: string;
   chiHuyCt: string;
@@ -73,8 +74,31 @@ interface Props {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** Admin: được xác nhận để sửa phiếu trong kỳ đã ký / kỳ chuyển đổi (server kiểm lại). */
+  canOverrideLocked?: boolean;
   /** Trang đang xem một cặp (`?projectId=`): form tạo/sửa khoá sẵn công trình này. */
   lockedProjectId?: number;
+}
+
+/** Lỗi khoá kỳ mà admin được phép xác nhận để sửa vẫn sửa. */
+const isLockedRefusal = (r: DeliverySaveResult) =>
+  !r.ok && (r.code === "signed_period" || r.code === "cutover_locked");
+
+/**
+ * Lưu phiếu; phiếu thuộc kỳ đã ký / kỳ chuyển đổi thì admin được hỏi xác nhận rồi lưu lại với cờ
+ * `overrideLocked` (server kiểm admin, ghi thay đổi vào công nợ và đông cứng lại kỳ đã ký).
+ */
+async function saveWithLockConfirm(
+  save: (overrideLocked: boolean) => Promise<DeliverySaveResult>,
+  canOverrideLocked: boolean,
+): Promise<DeliverySaveResult> {
+  const first = await save(false);
+  if (!canOverrideLocked || !isLockedRefusal(first) || first.ok) return first;
+  const ok = window.confirm(
+    `${first.message}\n\nBạn là admin: vẫn sửa phiếu này? Công nợ, báo cáo và bảng đối chiếu đã ký ` +
+      `của kỳ này và các kỳ sau sẽ được cập nhật theo số mới (có ghi lại người sửa).`,
+  );
+  return ok ? save(true) : { ok: false, message: "Đã huỷ sửa phiếu trong kỳ đã ký." };
 }
 
 /**
@@ -100,6 +124,7 @@ export function DeliveryGrid({
   canCreate,
   canEdit,
   canDelete,
+  canOverrideLocked = false,
   lockedProjectId,
 }: Props) {
   const router = useRouter();
@@ -118,8 +143,8 @@ export function DeliveryGrid({
     itemLabel: itemMap[r.itemId] ?? String(r.itemId),
     qty: Number(r.qty),
     unit: r.unit,
-    unitPrice: r.unitPrice == null ? 0 : Number(r.unitPrice),
-    totalAmount: r.totalAmount == null ? 0 : Number(r.totalAmount),
+    unitPrice: r.unitPrice == null ? null : Number(r.unitPrice),
+    totalAmount: r.totalAmount == null ? null : Number(r.totalAmount),
     projectLabel: r.projectId ? (projectMap[r.projectId] ?? String(r.projectId)) : "",
     cbVatTu: r.cbVatTu ?? "",
     chiHuyCt: r.chiHuyCt ?? "",
@@ -132,8 +157,8 @@ export function DeliveryGrid({
     { id: "itemLabel", title: "Vật tư", kind: "text", width: 240, readonly: true },
     { id: "qty", title: "SL", kind: "number", width: 100 },
     { id: "unit", title: "ĐVT", kind: "text", width: 80, readonly: true },
-    { id: "unitPrice", title: "Đơn giá", kind: "number", width: 120 },
-    { id: "totalAmount", title: "Thành tiền", kind: "number", width: 130, readonly: true },
+    { id: "unitPrice", title: "Đơn giá", kind: "currency", width: 120 },
+    { id: "totalAmount", title: "Thành tiền", kind: "currency", width: 140, readonly: true },
     { id: "projectLabel", title: "Công trình", kind: "text", width: 100, readonly: true },
     { id: "cbVatTu", title: "Cán bộ VT", kind: "text", width: 140 },
     { id: "chiHuyCt", title: "Chỉ huy CT", kind: "text", width: 140 },
@@ -162,7 +187,7 @@ export function DeliveryGrid({
       keToan: typeof patch.keToan === "string" ? (patch.keToan || undefined) : (current.keToan ?? undefined),
       note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
     };
-    return updateDeliveryAction(id, merged);
+    return saveWithLockConfirm((overrideLocked) => updateDeliveryAction(id, merged, { overrideLocked }), canOverrideLocked);
   };
 
   const handlers: DataGridHandlers<DeliveryGridRow> = {
@@ -212,7 +237,11 @@ export function DeliveryGrid({
   async function handleEdit(data: DeliveryInput) {
     if (!editTarget) return;
     try {
-      toastSaved(await updateDeliveryAction(editTarget.id, data), "Đã lưu phiếu");
+      const targetId = editTarget.id;
+      toastSaved(
+        await saveWithLockConfirm((overrideLocked) => updateDeliveryAction(targetId, data, { overrideLocked }), canOverrideLocked),
+        "Đã lưu phiếu",
+      );
       setEditTarget(null);
       startTransition(() => router.refresh());
     } catch (err) {

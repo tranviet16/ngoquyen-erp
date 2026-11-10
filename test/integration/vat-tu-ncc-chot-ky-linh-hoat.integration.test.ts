@@ -312,6 +312,33 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     expect((await eventOf(priced.id))?.updatedAt).toEqual(before?.updatedAt);
   });
 
+  it("admin xác nhận sửa phiếu kỳ đã ký: dòng công nợ cập nhật, các kỳ đã ký từ đó đông cứng lại, chuỗi đầu kỳ giữ đúng", async () => {
+    const { supplier, project, item } = await seed();
+    await close(supplier.id, project.id, K1);
+    await close(supplier.id, project.id, K2);
+    await signReconciliation((await reconFor(supplier.id, project.id, K1.from)).id);
+    await signReconciliation((await reconFor(supplier.id, project.id, K2.from)).id);
+    const k1Before = await reconFor(supplier.id, project.id, K1.from);
+
+    // Phiếu 01/04 (K1 đã ký, 8.000 viên @1.900).
+    const apr1 = await prisma.supplierDeliveryDaily.findFirstOrThrow({
+      where: { supplierId: supplier.id, date: new Date("2026-04-01"), deletedAt: null },
+    });
+    const body = { supplierId: supplier.id, projectId: project.id, date: "2026-04-01", itemId: item.id, unit: "viên", unitPrice: 1900 };
+    await expect(updateDelivery(apr1.id, { ...body, qty: 8100 })).rejects.toMatchObject({ code: "signed_period" });
+
+    const edited = await updateDelivery(apr1.id, { ...body, qty: 8100 }, { overrideLocked: true });
+    expect(edited.ledgerStatus).toBe("posted");
+    const event = await prisma.ledgerTransaction.findFirstOrThrow({ where: { deliveryId: apr1.id, deletedAt: null } });
+    expect(Number(event.totalTt)).toBe(8100 * 1900);
+
+    const k1 = await reconFor(supplier.id, project.id, K1.from);
+    const k2 = await reconFor(supplier.id, project.id, K2.from);
+    expect(k1.closing).toBe(k1Before.closing + 100 * 1900);
+    expect(k2.opening).toBe(k1.closing);
+    expect(k1.signedDate).toBe(k1Before.signedDate);
+  });
+
   it("kỳ đã ký: sửa/xoá phiếu có event nằm trong kỳ bị chặn, kể cả khi ngày phiếu đã lệch khỏi event", async () => {
     const { supplier, project, item } = await seed();
     await close(supplier.id, project.id, K1);

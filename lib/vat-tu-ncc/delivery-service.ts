@@ -15,6 +15,8 @@ import { requireProjectId } from "./pair-scope";
 import { periodLabel } from "./period";
 import { toBusinessDateFromInput } from "@/lib/ledger/business-date";
 import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
+import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
+import { applyLockedDeliveryEdit, assertLockedEditScope, lockedKindOf } from "./locked-delivery-edit";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -193,11 +195,22 @@ function revalidateDeliveryViews(supplierId: number) {
   revalidatePath("/cong-no-vt", "layout");
 }
 
-export async function updateDelivery(id: number, input: DeliveryInput) {
+export interface UpdateDeliveryOptions {
+  /**
+   * Admin đã xác nhận cảnh báo "kỳ đã ký / kỳ chuyển đổi" và vẫn muốn sửa: bỏ qua khoá kỳ, ghi thay
+   * đổi tiền vào công nợ và đông cứng lại các kỳ đã ký (locked-delivery-edit.ts). Kiểm admin ở server.
+   */
+  overrideLocked?: boolean;
+}
+
+export async function updateDelivery(id: number, input: DeliveryInput, opts: UpdateDeliveryOptions = {}) {
   const data = deliverySchema.parse(input);
   const existing = await prisma.supplierDeliveryDaily.findUnique({ where: { id }, select: { supplierId: true } });
   if (!existing || existing.supplierId !== data.supplierId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
+  // Không tin cờ từ client: chỉ admin còn hoạt động mới được sửa trong kỳ khoá.
+  const adminUserId = opts.overrideLocked ? await requireActiveAdmin() : null;
+  const guard = adminUserId ? ({ adminOverride: true } as const) : undefined;
   const newDate = toBusinessDateFromInput(data.date);
   const record = await prisma.$transaction(async (tx) => {
     await lockSuppliers(tx, [existing.supplierId]);
@@ -209,9 +222,11 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
     });
     if (!current) throw new Error("Forbidden");
     const currentProjectId = requireProjectId(current.projectId, `Phiếu #${id}`);
+    const lockedKind = adminUserId ? await lockedKindOf(tx, existing.supplierId, currentProjectId, current.date) : null;
+    if (lockedKind) assertLockedEditScope(current, { date: newDate, projectId: data.projectId, itemId: data.itemId });
     if (data.projectId !== currentProjectId) await assertProjectActive(tx, data.projectId);
-    await assertPeriodOpen(existing.supplierId, currentProjectId, current.date, tx);
-    await assertPeriodOpen(existing.supplierId, data.projectId, newDate, tx);
+    await assertPeriodOpen(existing.supplierId, currentProjectId, current.date, tx, guard);
+    await assertPeriodOpen(existing.supplierId, data.projectId, newDate, tx, guard);
     // Chỉ các trường quyết định số tiền/kỳ/cặp mới làm event lệch; sửa CB vật tư, CHCT, KT,
     // ghi chú, ĐVT không cần chốt lại.
     const affectsLedger =
@@ -230,7 +245,7 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
       select: { id: true, date: true, partyId: true, projectId: true },
     });
     if (event) {
-      await assertPeriodOpen(event.partyId, requireProjectId(event.projectId, `Sự kiện #${event.id}`), event.date, tx);
+      await assertPeriodOpen(event.partyId, requireProjectId(event.projectId, `Sự kiện #${event.id}`), event.date, tx, guard);
     }
     const updated = await tx.supplierDeliveryDaily.update({
       where: { id, supplierId: existing.supplierId },
@@ -248,6 +263,13 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
         updatedAt: new Date(),
       },
     });
+    if (lockedKind && adminUserId) {
+      // Kỳ khoá: thay đổi tiền vào công nợ + đông cứng lại các kỳ đã ký (sửa chữ thì không đổi tiền).
+      if (affectsLedger) {
+        await applyLockedDeliveryEdit(tx, lockedKind, { id, supplierId: existing.supplierId, ...current }, updated, adminUserId);
+      }
+      return { ...updated, ledgerStatus: "posted" as DeliveryLedgerStatus };
+    }
     // Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi tiền → giữ nguyên event; còn lại (hoặc phiếu
     // chưa có event) thì đồng bộ sổ công nợ theo phiếu mới.
     const ledgerStatus: DeliveryLedgerStatus =

@@ -81,8 +81,12 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
 ### 3.4 Sửa & Xóa phiếu giao nhận
 
 1. Tìm phiếu trong tab **Vật tư ngày**
-2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu**
-   - Phiếu trong kỳ đã ký → từ chối
+2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu** (Đơn giá, Thành tiền hiển thị dạng số tiền)
+   - Phiếu trong kỳ đã ký hoặc trước mốc chuyển đổi → từ chối với người dùng thường
+   - **Admin**: hiện cảnh báo «kỳ đã ký»; bấm OK để vẫn sửa. Chỉ sửa được số lượng, đơn giá và các ô chữ (không đổi ngày, công trình, vật tư). Sau khi lưu:
+     - Kỳ NCC đã ký: dòng công nợ của phiếu cập nhật theo số mới.
+     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): phần chênh tiền của phiếu (mới − cũ) được ghi thành dòng **điều chỉnh** đúng ngày phiếu.
+     - Bảng đối chiếu đã ký của kỳ đó và các kỳ sau được tính lại số, giữ ngày ký; hệ thống ghi lại người sửa và số trước / sau.
    - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)
 3. Xóa: Click icon thùng rác → xác nhận
    - Chỉ xóa được phiếu chưa chốt kỳ / chưa thanh toán

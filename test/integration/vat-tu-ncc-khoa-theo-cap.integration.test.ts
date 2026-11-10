@@ -36,7 +36,7 @@ import {
   unsignReconciliation,
 } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
 import { softDeleteReconciliation, updateReconciliation } from "@/lib/vat-tu-ncc/reconciliation-service";
-import { createDelivery } from "@/lib/vat-tu-ncc/delivery-service";
+import { createDelivery, updateDelivery } from "@/lib/vat-tu-ncc/delivery-service";
 import { lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
 import { freezeReconciliationSnapshot } from "@/lib/vat-tu-ncc/reconciliation-compute";
 import { MATERIAL_CUTOVER_ADAPTER } from "@/lib/vat-tu-ncc/pair-scope";
@@ -356,5 +356,81 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
         amountHd: "0",
       }),
     ).resolves.toMatchObject({ projectId: projectW.id });
+  });
+
+  it("(i) admin xác nhận sửa phiếu kỳ chuyển đổi: chênh tiền vào công nợ đúng ngày phiếu, marker đông cứng lại", async () => {
+    const { entity, concrete } = await seed();
+    await prisma.importRun.create({
+      data: {
+        fileName: "Quản Lý Công Nợ",
+        fileHash: "pair-cutover-edit",
+        adapter: MATERIAL_CUTOVER_ADAPTER,
+        status: "committed",
+        committedAt: new Date("2026-11-01T02:00:00Z"),
+        createdBy: ADMIN_ID,
+        reviewJson: { expected: { cutoverDate: "2026-10-26" } },
+      },
+    });
+    const run = await prisma.importRun.findFirstOrThrow({ where: { fileHash: "pair-cutover-edit" } });
+    const supplier = await prisma.supplier.create({ data: { name: "NCC kỳ chuyển đổi" } });
+    const project = await prisma.project.create({
+      data: { code: "CV", name: "Công trình chuyển đổi", status: "active", entityId: entity.id },
+    });
+    // Phiếu lịch sử (chỉ là bản ghi khối lượng) + marker kỳ chuyển đổi đã ký của cặp.
+    const slip = await prisma.supplierDeliveryDaily.create({
+      data: {
+        supplierId: supplier.id, projectId: project.id, date: new Date("2026-10-20"), itemId: concrete.id,
+        qty: 10, unit: "m3", unitPrice: 1000, totalAmount: 10_000,
+      },
+    });
+    const marker = await prisma.supplierReconciliation.create({
+      data: {
+        supplierId: supplier.id, projectId: project.id, importRunId: run.id,
+        periodFrom: new Date("2026-09-27"), periodTo: new Date("2026-10-26"),
+      },
+    });
+    await prisma.$transaction(async (tx) => {
+      await lockSuppliers(tx, [supplier.id]);
+      await freezeReconciliationSnapshot(tx, marker.id);
+    });
+    const signedBefore = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
+    const body = { supplierId: supplier.id, projectId: project.id, date: "2026-10-20", itemId: concrete.id, unit: "m3", unitPrice: 1000 };
+
+    // Không xác nhận → vẫn bị khoá như cũ.
+    await expect(updateDelivery(slip.id, { ...body, qty: 12 })).rejects.toMatchObject({ code: "cutover_locked" });
+
+    // Admin xác nhận: chênh 2 m3 × 1.000 = 2.000 vào công nợ bằng dòng điều chỉnh ngày 20/10.
+    const edited = await updateDelivery(slip.id, { ...body, qty: 12 }, { overrideLocked: true });
+    expect(edited.ledgerStatus).toBe("posted");
+    const adjust = await prisma.ledgerTransaction.findMany({
+      where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+    });
+    expect(adjust).toHaveLength(1);
+    expect(Number(adjust[0].totalTt)).toBe(2000);
+    expect(adjust[0].date.toISOString().slice(0, 10)).toBe("2026-10-20");
+    expect(adjust[0].entityId).toBe(entity.id);
+
+    // Marker được đông cứng lại theo số mới, giữ ngày ký, có audit.
+    const signedAfter = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
+    expect(Number(signedAfter.closingBalance)).toBe(Number(signedBefore.closingBalance) + 2000);
+    expect(signedAfter.signedDate).toEqual(signedBefore.signedDate);
+    const audit = await prisma.auditLog.findFirst({
+      where: { tableName: "SupplierReconciliation", recordId: String(marker.id) },
+      orderBy: { id: "desc" },
+    });
+    expect((audit?.afterJson as { event?: string }).event).toBe("refrozen_after_admin_edit");
+
+    // Giảm lại về 10 m3 → thêm dòng −2.000, tổng chênh về 0.
+    await updateDelivery(slip.id, { ...body, qty: 10 }, { overrideLocked: true });
+    const total = await prisma.ledgerTransaction.aggregate({
+      where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+      _sum: { totalTt: true },
+    });
+    expect(Number(total._sum.totalTt)).toBe(0);
+
+    // Kỳ khoá chỉ cho sửa số lượng / giá / chữ — không đổi ngày.
+    await expect(
+      updateDelivery(slip.id, { ...body, qty: 10, date: "2026-10-21" }, { overrideLocked: true }),
+    ).rejects.toThrow(/chỉ sửa được số lượng, đơn giá và ghi chú/);
   });
 });

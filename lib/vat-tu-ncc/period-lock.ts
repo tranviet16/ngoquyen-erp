@@ -27,7 +27,12 @@ import {
   type PeriodBoundsContext,
   type PeriodRangeDates,
 } from "./period-bounds";
-import { assertAfterMaterialCutover, requireProjectId, type MaterialWriteGuardOptions } from "./pair-scope";
+import {
+  assertAfterMaterialCutover,
+  MaterialScopeError,
+  requireProjectId,
+  type MaterialWriteGuardOptions,
+} from "./pair-scope";
 
 export { getMaterialCutoverDate } from "./pair-scope";
 
@@ -104,10 +109,14 @@ export async function assertPeriodOpen(
   opts?: MaterialWriteGuardOptions,
 ) {
   requireProjectId(projectId);
+  // Admin đã xác nhận sửa trong kỳ khoá (xem MaterialWriteGuardOptions.adminOverride).
+  if (opts?.adminOverride) return;
   await assertAfterMaterialCutover(date, client, opts);
   const signed = await findSignedPeriodCovering(supplierId, projectId, date, client);
   if (signed) {
-    throw new Error(
+    // Mã `signed_period` để lưới phiếu biết mà hỏi admin có muốn sửa vẫn sửa không.
+    throw new MaterialScopeError(
+      "signed_period",
       `Kỳ ${periodLabel(signed.periodFrom, signed.periodTo)} đã được NCC ký xác nhận — không thể ghi/sửa. ` +
         `Chênh lệch xử lý bằng bút toán điều chỉnh kỳ sau.`,
     );
