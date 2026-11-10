@@ -18,7 +18,9 @@ export default async function TongHopPage({ searchParams }: PageProps) {
   await requireModuleAccess("cong-no-vt", { minLevel: "read", scope: "module" });
 
   const sp = await searchParams;
-  const options = { defaultPreset: "all", legacyMode: "cutoff", today: new Date() } as const;
+  // Mặc định xem theo năm hiện tại, khớp sheet "Công Nợ" của Excel: ở "Toàn bộ", cột LH / Trả cộng cả
+  // dòng "Lũy kế chuyển đổi" trước 2026 nên lớn hơn Excel nhiều lần dù Còn nợ bằng nhau.
+  const options = { defaultPreset: "year", legacyMode: "cutoff", today: new Date() } as const;
   const requested = resolveReportPeriod(sp, options);
   const periodError = "error" in requested ? requested.error : null;
   const period = "error" in requested ? resolveReportPeriod({}, options) : requested;

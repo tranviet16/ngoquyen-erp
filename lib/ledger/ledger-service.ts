@@ -427,6 +427,19 @@ export class LedgerService {
     return ob?.entityId ?? null;
   }
 
+  /** Ngày nghiệp vụ mới nhất có dòng sổ, không sau `notAfter` (UTC 00:00); null khi sổ chưa có dòng nào. */
+  async latestActivityDate(notAfter: Date): Promise<Date | null> {
+    const r = await prisma.ledgerTransaction.aggregate({
+      where: {
+        ledgerType: this.ledgerType,
+        deletedAt: null,
+        date: { lt: new Date(notAfter.getTime() + 86_400_000) },
+      },
+      _max: { date: true },
+    });
+    return r._max.date ?? null;
+  }
+
   async currentBalance(
     entityId: number,
     partyId: number,
