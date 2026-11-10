@@ -1,0 +1,125 @@
+entity	Lê Văn Huyên	2
+supplier	Cty Nhôm Kính HK	"new:Nhôm Kính HK"
+entity	Công Ty Quản Lý	1
+supplier	Quang Minh	5
+supplier	Lộc Tài	4
+supplier	Nam Hương	1
+supplier	Anh Thư	3
+entity	Lưu Minh Xuân	3
+supplier	Thương Hiệu Trần	"new:Thương Hiệu Trần"
+supplier	Đại Ngàn	"new:Đại Ngàn"
+supplier	Vận tải Hải Đạt	"new"
+supplier	Bê tông Hải Phòng	6
+supplier	Phương Minh	2
+supplier	Quang Minh (chống thấm)	"new:Quang Minh (chống thấm)"
+supplier	Thí nghiệm 912	"new"
+supplier	Cty Phương Vũ camera	"new:Phương Vũ camera"
+supplier	MCT Đại Dương	"new"
+supplier	Công ty Kim Khí	"new:Kim Khí"
+supplier	Thiết bị điện Việt Đức	"new:Thiết bị điện Việt Đức HP"
+supplier	Hùng Chi gạch ốp lát	"new:Hùng Chi gạch ốp lát"
+supplier	Đá Việt Hà	"new:Đá Việt Hà"
+supplier	Đất Việt Phát	"new:Đất Việt Phát"
+supplier	Cty sơn Sobek	"new:Sơn Sobek"
+supplier	Đồng Yên	"new:Đồng Yên"
+supplier	Cty điện cơ	"new"
+supplier	Công ty Hoàng Yến	"new"
+supplier	Cty Kế Hằng	"new"
+supplier	Khánh Đức	"new:Khánh Đức"
+supplier	Tiên Lãng Petro	"new"
+supplier	Bê tông Tân Lộc	"new"
+supplier	Xây lắp Đoàn Kết	"new"
+supplier	Điện HUNACO	"new"
+supplier	Thuỷ lợi Hải Dương	"new"
+supplier	Ông Lưu ( nhân công)	"new"
+supplier	Ông Mạnh ( nhân công)	"new"
+supplier	Ông Phương ( nhân công)	"new"
+supplier	Ô Phương ( Máy lu)	"new"
+supplier	Ông Sơn ( Vôi thầu)	"new"
+supplier	Ông Trọng(vôi thầu, bây)	"new"
+supplier	Bà Hậu ( Cọc bạch đàn)	"new"
+supplier	Anh Hải ( máy san)	"new"
+supplier	Công ty TNHH Nam Hương	auto 1
+supplier	Công ty Đại Ngàn	"new:Đại Ngàn"
+supplier	Công ty CP bê tông Hải Phòng	6
+supplier	Cty (Anh Công)	"new:Khánh Đức"
+supplier	Công ty Lộc Tài HT	4
+supplier	Cty Hiệu Trần (Anh Hiếu)	"new:Thương Hiệu Trần"
+supplier	Cty CPTM Kim khí TT (Ô Hiếu)	"new:Kim Khí"
+supplier	Cty Phương Minh (Cô Dinh)	2
+supplier	Cty Quang Minh (Ô Hoà)	5
+supplier	Công ty Anh thư	3
+supplier	Cty Khang Trang Phát	"new"
+supplier	Công ty Đất Việt Phát	"new:Đất Việt Phát"
+supplier	Công ty Thiết bị điện Việt Đức HP	"new:Thiết bị điện Việt Đức HP"
+supplier	Cty Quang Minh chống thấm	"new:Quang Minh (chống thấm)"
+supplier	Công ty Nhật Nguyệt	"new"
+supplier	Công ty Đá Việt Hà	"new:Đá Việt Hà"
+supplier	Công ty nhôm kính HK	"new:Nhôm Kính HK"
+supplier	Công ty Phương Vũ	"new:Phương Vũ camera"
+supplier	Gạch ốp lát Hùng Chi	"new:Hùng Chi gạch ốp lát"
+supplier	Công ty Đồng Yên	"new:Đồng Yên"
+supplier	Công ty Sơn Sobek	"new:Sơn Sobek"
+supplier	Gạch Nam Hương	1
+supplier	Máy xúc Lộc Tài HT	4
+supplier	Tùng Lâm	"new"
+supplier	Vận Chuyển Gia Bảo	"new"
+supplier	Xi măng Phương Minh	2
+supplier	Cát xây Quang Minh	5
+supplier	Gạch lát Hùng Chi	"new:Hùng Chi gạch ốp lát"
+supplier	Thiết bị điện Việt Đức HP	"new:Thiết bị điện Việt Đức HP"
+supplier	Xi măng Anh Thư	3
+supplier	Quang Minh cát,gạch	5
+supplier	Thép Hiệu Trần	"new:Thương Hiệu Trần"
+project	Mầm non Trại chuối @ Lê Văn Huyên	4
+project	Trại Chuối @ Công Ty Quản Lý	auto 1
+project	Xây dựng Dải cây xanh @ Lê Văn Huyên	"new:Xây dựng Dải cây xanh"
+project	Cống hộp - Tiên lãng @ Lưu Minh Xuân	"new:Tiên Lãng (Việt Úc)"
+project	Cống hộp - Tiên lãng @ Lê Văn Huyên	"new:Tiên Lãng (SH)"
+project	Mầm non GĐ2 @ Lê Văn Huyên	"new:Mầm non GĐ2"
+project	CDC @ Công Ty Quản Lý	auto "split"
+project	326 - Lô 34 @ Công Ty Quản Lý	"new:326 - Lô 34"
+project	Quán Toan @ Công Ty Quản Lý	"new:Quán Toan"
+project	Phí khác( các dự án) @ Công Ty Quản Lý	"new:Phí khác (các dự án)"
+project	Trụ sở 149 Hai Bà Trưng @ Công Ty Quản Lý	"new:Trụ sở 149 Hai Bà Trưng"
+project-csv	Tân lộc CDC	auto 2
+project-csv	ĐVP -CDC	3
+project-csv	Ngô quyền Trại chuối	1
+project-csv	Ngô quyền Quán toan	"new:Quán Toan"
+project-csv	Lô 34 - Dự án 326	"new:326 - Lô 34"
+project-csv	MN trại chuối	4
+project-csv	346 Cát Dài	"new:346 Cát Dài"
+project-csv	ĐVP -149 HBT	"new:Trụ sở 149 Hai Bà Trưng"
+project-csv	Ngô quyền 346 Cát Dài	"new:346 Cát Dài"
+project-csv	Dải cây xanh	"new:Xây dựng Dải cây xanh"
+project-csv	ĐVP CDC	3
+project-csv	Lô 34- 326	"new:326 - Lô 34"
+project-csv	Trại chuối(khánh đức	1
+project-csv	T/chuối gạch cty đại cương	1
+project-csv	MN GĐ2	"new:Mầm non GĐ2"
+project-csv	Tiên Lãng S/h	"new:Tiên Lãng (SH)"
+project-csv	Tiên Lãng ( Việt Úc )	"new:Tiên Lãng (Việt Úc)"
+project-csv	Tiên Lãng (SH )	"new:Tiên Lãng (SH)"
+project-csv	Trại Chuối	auto 1
+project-folder	Dải Cây Xanh	"new:Xây dựng Dải cây xanh"
+project-label	Trại Chuối	auto 1
+project-label	Dải cây xanh	"new:Xây dựng Dải cây xanh"
+project-folder	Mầm Non TC1	4
+project-folder	Mầm Non TC2	"new:Mầm non GĐ2"
+project-folder	Trại Chuối	auto 1
+project-label	Tân Lộc CDC	auto 2
+project-label	ĐVP - CDC	auto 3
+project-label	Mầm non	4
+project-label	Tiên Lãng SH	"new:Tiên Lãng (SH)"
+project-label	TC Quán Toan	"new:Quán Toan"
+project-label	Ngô Quyền Quán Toan	"new:Quán Toan"
+project-label	346 Cát Dài	"new:346 Cát Dài"
+date	Máy xúc Lộc Tài HT - DCX.xlsx B27 "11/10/26"	2026-10-11
+date	Máy xúc Lộc Tài HT - DCX.xlsx B28 "12/10/26"	2026-10-12
+date	Gạch Nam Hương.xlsx B255 "12/10/26"	2026-10-12
+date	Gạch Nam Hương.xlsx B256 "12/10/26"	2026-10-12
+date	Quang Minh cát,gạch đến 26.5.26.xlsx B295 "11/10/26"	2026-10-11
+date	Quang Minh cát,gạch đến 26.5.26.xlsx B296 "12/10/26"	2026-10-12
+date	Xi măng Phương Minh.xlsx B206 "11/10/26"	2026-10-11
+date	Cát xây Quang Minh (MN).xlsx B20 "3,4,5/4/2026"	2026-04-03
+date	Thiết bị điện Việt Đức HP( MN).xlsx B116 ""	2026-06-27

@@ -6,7 +6,9 @@
 - Người tham gia: **người chạy lệnh** (admin kỹ thuật, có tài khoản admin ERP đang hoạt động) và **người duyệt** (kế toán phụ trách công nợ vật tư). Thời lượng go-live: khoảng 3 giờ.
 - Mốc chuyển đổi: **hết 26/10/2026**. Tiền tới mốc chỉ đến từ lần import chuyển đổi; sau khi import, mọi ghi vật tư có ngày ≤ 26/10/2026 bị chặn.
 
-> **Lưu ý về phase 7.** Adapter `vat-tu-chuyen-doi` đang được làm song song khi runbook này được viết. Các chi tiết ghi "(theo kế hoạch)" lấy từ [phase-07-cutover-adapter.md](../phase-07-cutover-adapter.md), chưa kiểm được trên code. Lần chạy thử (Phần A) phải xác nhận lại từng chi tiết đó và sửa runbook nếu lệch.
+> **Lưu ý về phase 7.** Adapter `vat-tu-chuyen-doi` đang được làm song song khi runbook này được viết. Các chi tiết ghi "(theo kế hoạch)" lấy từ [phase-07-cutover-adapter.md](../phase-07-cutover-adapter.md).
+>
+> **Chạy thử 09/11/2026 đã xác nhận các chi tiết này** trên bản sao DB thật. Kết quả và các điểm người duyệt phải quyết ở [dry-run-result.md](dry-run-result.md). Bảng đề xuất ánh xạ ở [dry-run-mapping-proposal.tsv](dry-run-mapping-proposal.tsv).
 
 ---
 
@@ -108,6 +110,10 @@ Hai quy tắc dưới đây do runbook suy ra, **người duyệt cần xác nh�
 ## Phần A — Chạy thử trên DB tên riêng (trước ngày go-live)
 
 Mục tiêu: chạy bước 3–11 trên bản sao DB thật. Ghi kết quả vào `reports/dry-run-result.md`.
+
+> Lần chạy thử 09/11 làm theo hai cách khác với các bước dưới đây ([dry-run-result.md](dry-run-result.md) mục 1). Cả hai cách đều dùng được:
+> - Chạy trên một máy khác máy có DB thật: khôi phục từ bản export `pg_dump` đã kiểm SHA-256 vào container Postgres riêng.
+> - Thay `pnpm dev` bằng bản production (`npm run build`, rồi `npm run start` với `DATABASE_URL` và `PORT` riêng). Lý do: repo nằm trong OneDrive, OneDrive khóa tệp `.next`, nên chế độ dev biên dịch route lỗi `EPERM`.
 
 1. **Sao lưu DB thật** như bước 3 của Phần B. App vẫn chạy; `pg_dump` lấy một snapshot nhất quán.
 2. **Tạo DB chạy thử** từ bản sao lưu. Lệnh `dropdb` chỉ được gõ với tên `ngoquyyen_erp_dryrun`:
@@ -279,10 +285,14 @@ Invoke-CutoverSql ngoquyyen_erp vat-tu-cutover-inventory.sql inventory-3.txt $gi
 
 Ở **Dữ liệu nền tảng** (`/master-data`):
 1. **Chủ Thể** (`/master-data/entities`): có đủ "Công Ty Quản Lý", "Lê Văn Huyên", "Lưu Minh Xuân". Thiếu thì tạo.
+   - DB thật hiện chỉ có «Công ty CP Xây dựng Ngô Quyền». Lần chạy thử coi «Công Ty Quản Lý» chính là Chủ thể này; người duyệt xác nhận.
+   - Phải tạo «Lê Văn Huyên» **trước khi import** để gán cho «Mầm Non Trại Chuối GĐ1». Lý do: import chặn khi công trình đã có mà chưa có Chủ thể.
+   - Tạo luôn «Lưu Minh Xuân».
 2. **Dự Án** (`/master-data/projects`). Kiểm tên đang có trước để không tạo trùng; pilot đã dùng "Tân Lộc CDC" và "ĐVP-CDC".
    - Tạo nếu chưa có: "Tiên Lãng (Việt Úc)" (Chủ thể Lưu Minh Xuân), "Tiên Lãng (SH)" (Lê Văn Huyên), "Tân Lộc CDC", "ĐVP-CDC" (Chủ thể theo dòng "CDC" trong Số Dư; mặc định Công Ty Quản Lý).
    - Gán cột **Chủ thể** cho **mọi** công trình sẽ được ánh xạ, kể cả công trình đã xong: Trại Chuối, Mầm non Trại chuối, Mầm non GĐ2, Xây dựng Dải cây xanh, Quán Toan, 326 - Lô 34, Trụ sở 149 Hai Bà Trưng, Phí khác (các dự án)… Chủ thể lấy theo cột "Chủ Thể" của Số Dư / Nhập Liệu.
    - Gán đúng Chủ thể cho các công trình trong danh sách "công trình chưa có Chủ thể" của `cleanup-commit.txt`.
+   - Tạo «346 Cát Dài» (Chủ thể Ngô Quyền). Công trình này chỉ có trong CSV, không có dòng Nhập Liệu hay Số Dư nào để import tự lấy Chủ thể.
    - Chủ thể gán lần đầu (từ trống) được, **trừ khi** công trình đã có dòng sổ / số dư vật tư mang Chủ thể khác (app báo "Không thể gán Chủ thể #…") — gán đúng Chủ thể trong danh sách của `cleanup-commit.txt`. Khi công trình đã có sổ, phiếu, số dư hoặc kỳ vật tư thì không đổi sang Chủ thể khác được nữa.
 3. Kiểm trong psql: `SELECT id, code, name FROM projects WHERE "deletedAt" IS NULL AND "entityId" IS NULL ORDER BY name;` không còn công trình nào sẽ được ánh xạ. Theo kế hoạch, import báo lỗi chặn nếu công trình đã có mà chưa gán Chủ thể.
 4. Tuỳ chọn: pilot đã đổi vật tư `CA-MX` từ `machine` sang `material`. Nay báo giá nhận cả ca máy (commit `df1e1e7`), nên có thể đổi lại `machine` ở **Vật Tư / Hạng Mục**.
