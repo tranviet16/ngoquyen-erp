@@ -81,6 +81,7 @@ export type DuAnRow = {
   code: string;
   name: string;
   ownerInvestor: string | null;
+  contractValue: number | null;
   status: string;
   startDate: Date | null;
   endDate: Date | null;

@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/rbac";
 import { queryProjectById } from "@/lib/master-data/project-query";
 import { requireModuleAccess } from "@/lib/acl/guards";
+import { ProjectEditButton } from "@/components/master-data/project-edit-button";
 
 const TABS = [
   { href: "", label: "Dashboard" },
@@ -37,20 +41,39 @@ export default async function ProjectLayout({ params, children }: Props) {
 
   const project = await queryProjectById(projectId);
   if (!project) notFound();
+  // Sửa thông tin dự án là quyền admin (server kiểm lại khi lưu); người khác không thấy nút.
+  const session = await auth.api.getSession({ headers: await headers() });
+  const canEdit = isAdmin(session?.user?.role);
 
   const basePath = `/du-an/${projectId}`;
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-          <Link href="/du-an" className="hover:underline">Dự án</Link>
-          <span>/</span>
-          <span>{project.code}</span>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <Link href="/du-an" className="hover:underline">Dự án</Link>
+            <span>/</span>
+            <span>{project.code}</span>
+          </div>
+          <h1 className="text-xl font-bold">{project.name}</h1>
+          {project.ownerInvestor && (
+            <p className="text-sm text-muted-foreground">CĐT: {project.ownerInvestor}</p>
+          )}
         </div>
-        <h1 className="text-xl font-bold">{project.name}</h1>
-        {project.ownerInvestor && (
-          <p className="text-sm text-muted-foreground">CĐT: {project.ownerInvestor}</p>
+        {canEdit && (
+          <ProjectEditButton
+            project={{
+              id: project.id,
+              code: project.code,
+              name: project.name,
+              ownerInvestor: project.ownerInvestor,
+              contractValue: project.contractValue,
+              startDate: project.startDate,
+              endDate: project.endDate,
+              status: project.status,
+            }}
+          />
         )}
       </div>
 

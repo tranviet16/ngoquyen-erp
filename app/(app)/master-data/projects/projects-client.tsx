@@ -11,24 +11,16 @@ import { ProjectForm } from "@/components/master-data/project-form";
 import { toast } from "sonner";
 import {
   createProjectAction,
-  updateProjectAction,
   softDeleteProject,
   patchProjectAction,
 } from "@/lib/master-data/project-service";
+import { projectFormDefaults, saveProjectEdit, type EditableProject } from "@/components/master-data/project-edit-button";
 import { type ProjectInput } from "@/lib/master-data/schemas";
 import { PROJECT_SPEC, type ProjectRow } from "@/lib/master-data/projects/table-spec";
 import { formatNumber } from "@/lib/utils/format";
 
 type EntityOption = { id: number; name: string };
-type ProjectListRow = ProjectRow & {
-  entityId: number | null;
-  contractValue: number | null;
-  startDate: Date | string | null;
-  endDate: Date | string | null;
-};
-
-/** Ngày nghiệp vụ lưu 00:00 UTC → `YYYY-MM-DD` cho ô ngày của form. */
-const isoDay = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : "");
+type ProjectListRow = ProjectRow & EditableProject & { entityId: number | null };
 
 /**
  * Cột "Chủ thể" (sửa nhanh bằng select). Chủ thể là nguồn suy Chủ thể cho công nợ vật tư; server
@@ -142,12 +134,7 @@ export function ProjectsClient({ data, entities, total, page, pageSize, searchVa
 
   async function handleEdit(input: ProjectInput) {
     if (!editTarget) return;
-    const result = await updateProjectAction(editTarget.id, input);
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
-    }
-    toast.success("Đã lưu dự án");
+    if (!(await saveProjectEdit(editTarget.id, input))) return;
     setEditTarget(null);
     startTransition(() => router.refresh());
   }
@@ -222,19 +209,7 @@ export function ProjectsClient({ data, entities, total, page, pageSize, searchVa
         onOpenChange={(o) => !o && setEditTarget(null)}
       >
         {editTarget && (
-          <ProjectForm
-            defaultValues={{
-              code: editTarget.code,
-              name: editTarget.name,
-              ownerInvestor: editTarget.ownerInvestor ?? "",
-              // Điền đủ các trường còn lại: form gửi rỗng thì server ghi null, xoá mất số liệu cũ.
-              contractValue: editTarget.contractValue == null ? "" : String(editTarget.contractValue),
-              startDate: isoDay(editTarget.startDate),
-              endDate: isoDay(editTarget.endDate),
-              status: editTarget.status as "active" | "completed" | "paused",
-            }}
-            onSubmit={handleEdit}
-          />
+          <ProjectForm defaultValues={projectFormDefaults(editTarget)} onSubmit={handleEdit} />
         )}
       </CrudDialog>
     </div>
