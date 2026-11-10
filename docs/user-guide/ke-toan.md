@@ -121,6 +121,7 @@ Lưới hiện 200 dòng mỗi trang, mới nhất trước; dùng nút **Trư�
      - LH HĐ (lấy hàng thuế hoá đơn)
      - Trả HĐ (đã trả HĐ)
      - Nợ HĐ (còn nợ HĐ)
+   - LH và Trả chỉ là phát sinh trong kỳ xem, **không cộng đầu kỳ**. Nợ là công nợ còn lại đến cuối kỳ (gồm cả số dư chuyển sang), nên Nợ = Đầu kỳ + LH − Trả
    - **TỔNG CÔNG TY**: cộng tất cả chủ thể
 4. Click **Xuất Excel** → `cong-no-tong-hop-<mốc>.xlsx` (header 2 hàng gộp ô)
    - Mở cho quyền **đọc** `cong-no-vt`

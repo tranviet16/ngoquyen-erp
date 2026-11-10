@@ -12,21 +12,23 @@ const cell = (p: Partial<MatrixCell>): MatrixCell => ({
 });
 
 describe("toCongNoSheetCell", () => {
-  it("maps the Nam Hương window: LH = đầu kỳ + lấy hàng, Nợ = cuối kỳ", () => {
+  it("maps the Nam Hương window: LH = lấy hàng trong kỳ, Nợ = cuối kỳ", () => {
     const c = toCongNoSheetCell(
       cell({ openTt: 310_605_120, layTt: 44_400_000, traTt: 100_000_000, closeTt: 255_005_120 })
     );
-    expect(c.lhTt).toBe(355_005_120);
+    expect(c.lhTt).toBe(44_400_000);
     expect(c.traTt).toBe(100_000_000);
     expect(c.noTt).toBe(255_005_120);
   });
 
-  it("keeps Nợ = LH - Trả for both TT and HĐ", () => {
+  it("leaves the opening balance out of LH but keeps it in Nợ, for both TT and HĐ", () => {
     const c = toCongNoSheetCell(
       cell({ openTt: 10, layTt: 5, traTt: 3, closeTt: 12, openHd: 7, layHd: 2, traHd: 4, closeHd: 5 })
     );
-    expect(c.noTt).toBe(c.lhTt - c.traTt);
-    expect(c.noHd).toBe(c.lhHd - c.traHd);
+    expect(c.lhTt).toBe(5);
+    expect(c.lhHd).toBe(2);
+    expect(c.noTt).toBe(10 + c.lhTt - c.traTt);
+    expect(c.noHd).toBe(7 + c.lhHd - c.traHd);
   });
 
   it("exposes six columns in sheet order", () => {

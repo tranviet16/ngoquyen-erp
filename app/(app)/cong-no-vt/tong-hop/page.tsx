@@ -64,7 +64,8 @@ export default async function TongHopPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-2xl font-bold">Tổng hợp công nợ vật tư – NCC × Chủ thể</h1>
           <p className="text-sm text-muted-foreground">
-            Kỳ xem: {period.label}. LH = Đầu kỳ + Phát sinh tăng; Nợ = LH − Trả (TT = thực tế, HĐ = hợp đồng).
+            Kỳ xem: {period.label}. LH, Trả = phát sinh trong kỳ (không gồm đầu kỳ); Nợ = công nợ còn lại
+            đến cuối kỳ (TT = thực tế, HĐ = hợp đồng).
           </p>
         </div>
         <div className="flex gap-2">
