@@ -12,9 +12,78 @@ import { Prisma } from "@prisma/client";
 import { deliverySchema, type DeliveryInput } from "./schemas";
 import { assertPeriodOpen, lockSuppliers } from "./period-lock";
 import { requireProjectId } from "./pair-scope";
+import { periodLabel } from "./period";
 import { toBusinessDateFromInput } from "@/lib/ledger/business-date";
+import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Trạng thái công nợ của phiếu sau khi ghi:
+ *  - `posted`: phiếu thuộc kỳ đã chốt (chưa ký) của cặp và có đơn giá → dòng lấy hàng trên sổ công
+ *    nợ đã được ghi / cập nhật ngay theo phiếu;
+ *  - `awaiting_close`: phiếu thuộc kỳ chưa chốt → vào công nợ khi kế toán chốt kỳ;
+ *  - `missing_price`: phiếu thuộc kỳ đã chốt nhưng chưa có đơn giá → chưa vào công nợ (nhập đơn giá
+ *    hoặc chốt lại kỳ).
+ */
+export type DeliveryLedgerStatus = "posted" | "awaiting_close" | "missing_price";
+
+// Structural Pick thay vì Prisma.TransactionClient vì client đã $extends.
+type DeliveryTx = LedgerWriteClient;
+
+interface SyncableDelivery {
+  id: number;
+  supplierId: number;
+  projectId: number | null;
+  date: Date;
+  itemId: number;
+  qty: Prisma.Decimal;
+  unitPrice: Prisma.Decimal | null;
+}
+
+/**
+ * Giữ sổ công nợ khớp phiếu ngay khi phiếu được thêm / sửa, thay vì bắt chốt lại kỳ:
+ * phiếu nằm trong kỳ đã chốt (marker chưa ký) của cặp và có đơn giá thì ghi / cập nhật event
+ * lay_hang (idempotent theo deliveryId, như chốt kỳ lại cho riêng phiếu này). Phiếu ngoài kỳ đã chốt
+ * (hoặc chưa có giá) không được có event: event cũ (nếu có) bị gỡ để phiếu chờ chốt kỳ.
+ * Kỳ đã ký không tới được đây — caller đã kiểm khoá kỳ cho cả ngày / cặp cũ lẫn mới.
+ */
+async function syncDeliveryLedger(tx: DeliveryTx, d: SyncableDelivery): Promise<DeliveryLedgerStatus> {
+  const projectId = requireProjectId(d.projectId, `Phiếu #${d.id}`);
+  const closed = await tx.supplierReconciliation.findFirst({
+    where: {
+      supplierId: d.supplierId,
+      projectId,
+      deletedAt: null,
+      signedBySupplier: false,
+      periodFrom: { lte: d.date },
+      periodTo: { gte: d.date },
+    },
+    select: { periodFrom: true, periodTo: true },
+  });
+  if (closed && d.unitPrice != null) {
+    await new LedgerService("material").upsertFromDelivery(
+      {
+        deliveryId: d.id,
+        date: d.date,
+        partyId: d.supplierId,
+        projectId,
+        itemId: d.itemId,
+        qty: d.qty,
+        unitPrice: d.unitPrice,
+        content: `Chốt kỳ ${periodLabel(closed.periodFrom, closed.periodTo)} — phiếu ngày #${d.id}`,
+      },
+      tx,
+    );
+    return "posted";
+  }
+  const event = await tx.ledgerTransaction.findFirst({
+    where: { deliveryId: d.id, deletedAt: null },
+    select: { id: true },
+  });
+  if (event) await tx.ledgerTransaction.update({ where: { id: event.id }, data: { deletedAt: new Date() } });
+  return closed ? "missing_price" : "awaiting_close";
+}
 
 export interface DeliveryListOptions {
   /** Có thì chỉ trả phiếu của cặp (NCC, công trình); không có thì mọi công trình của NCC. */
@@ -94,7 +163,7 @@ export async function createDelivery(input: DeliveryInput) {
     await lockSuppliers(tx, [data.supplierId]);
     await assertProjectActive(tx, data.projectId);
     await assertPeriodOpen(data.supplierId, data.projectId, date, tx);
-    return tx.supplierDeliveryDaily.create({
+    const created = await tx.supplierDeliveryDaily.create({
       data: {
         supplierId: data.supplierId,
         projectId: data.projectId,
@@ -109,10 +178,19 @@ export async function createDelivery(input: DeliveryInput) {
         note: data.note ?? null,
       },
     });
+    // Phiếu thêm vào kỳ đã chốt vào công nợ ngay (nếu có đơn giá), không phải chốt lại kỳ.
+    return { ...created, ledgerStatus: await syncDeliveryLedger(tx, created) };
   });
-  revalidatePath(`/vat-tu-ncc/${data.supplierId}/ngay`);
-  revalidatePath(`/vat-tu-ncc/${data.supplierId}/thang`);
+  revalidateDeliveryViews(data.supplierId);
   return record;
+}
+
+/** Phiếu đổi thì sổ công nợ, đối chiếu và báo cáo công nợ vật tư có thể đổi theo. */
+function revalidateDeliveryViews(supplierId: number) {
+  revalidatePath(`/vat-tu-ncc/${supplierId}/ngay`);
+  revalidatePath(`/vat-tu-ncc/${supplierId}/thang`);
+  revalidatePath(`/vat-tu-ncc/${supplierId}/doi-chieu`);
+  revalidatePath("/cong-no-vt", "layout");
 }
 
 export async function updateDelivery(id: number, input: DeliveryInput) {
@@ -143,21 +221,18 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
       !new Prisma.Decimal(data.qty).equals(current.qty) ||
       (data.unitPrice !== undefined &&
         (current.unitPrice == null || !new Prisma.Decimal(data.unitPrice).equals(current.unitPrice)));
-    // Phiếu đã chốt có event lay_hang đối ứng (ngày/qty/giá đã chụp lúc chốt). Sửa phiếu làm event
-    // lệch nên: kiểm khoá kỳ theo NGÀY + CẶP CỦA EVENT (event có thể nằm trong kỳ đã ký dù phiếu đã
-    // dời ngày) rồi xoá mềm event cùng transaction — phiếu thành "chưa chốt", phải chốt lại kỳ; số
-    // lượng/đơn giá cũ không bao giờ được ký đông cứng.
+    // Phiếu đã chốt có event lay_hang đối ứng (ngày/qty/giá đã chụp lúc chốt). Kiểm khoá kỳ theo NGÀY
+    // + CẶP CỦA EVENT (event có thể nằm trong kỳ đã ký dù phiếu đã dời ngày) trước khi đụng tới nó;
+    // sau khi ghi phiếu, event được đồng bộ theo phiếu mới (syncDeliveryLedger) — số lượng / đơn giá
+    // cũ không bao giờ được ký đông cứng.
     const event = await tx.ledgerTransaction.findFirst({
       where: { deliveryId: id, deletedAt: null },
       select: { id: true, date: true, partyId: true, projectId: true },
     });
     if (event) {
       await assertPeriodOpen(event.partyId, requireProjectId(event.projectId, `Sự kiện #${event.id}`), event.date, tx);
-      if (affectsLedger) {
-        await tx.ledgerTransaction.update({ where: { id: event.id }, data: { deletedAt: new Date() } });
-      }
     }
-    return tx.supplierDeliveryDaily.update({
+    const updated = await tx.supplierDeliveryDaily.update({
       where: { id, supplierId: existing.supplierId },
       data: {
         projectId: data.projectId,
@@ -173,9 +248,13 @@ export async function updateDelivery(id: number, input: DeliveryInput) {
         updatedAt: new Date(),
       },
     });
+    // Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi tiền → giữ nguyên event; còn lại (hoặc phiếu
+    // chưa có event) thì đồng bộ sổ công nợ theo phiếu mới.
+    const ledgerStatus: DeliveryLedgerStatus =
+      affectsLedger || !event ? await syncDeliveryLedger(tx, updated) : "posted";
+    return { ...updated, ledgerStatus };
   });
-  revalidatePath(`/vat-tu-ncc/${data.supplierId}/ngay`);
-  revalidatePath(`/vat-tu-ncc/${data.supplierId}/thang`);
+  revalidateDeliveryViews(data.supplierId);
   return record;
 }
 
@@ -213,7 +292,6 @@ export async function softDeleteDelivery(id: number, supplierId: number) {
     }
     return updated;
   });
-  revalidatePath(`/vat-tu-ncc/${supplierId}/ngay`);
-  revalidatePath(`/vat-tu-ncc/${supplierId}/thang`);
+  revalidateDeliveryViews(supplierId);
   return record;
 }

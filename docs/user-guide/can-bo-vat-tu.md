@@ -86,6 +86,12 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
    - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)
 3. Xóa: Click icon thùng rác → xác nhận
    - Chỉ xóa được phiếu chưa chốt kỳ / chưa thanh toán
+4. Phiếu vào công nợ lúc nào (thông báo sau khi lưu nói rõ):
+   - **Kỳ đã chốt, chưa ký** và phiếu có đơn giá: thêm hoặc sửa phiếu (ngày, công trình, vật tư, số lượng, đơn giá) thì công nợ, bảng đối chiếu và báo cáo công nợ cập nhật **ngay**, không phải chốt lại kỳ.
+   - **Kỳ đã chốt nhưng phiếu chưa có đơn giá**: chưa vào công nợ; nhập đơn giá cho phiếu (hoặc chốt lại kỳ) để vào.
+   - **Kỳ chưa chốt**: phiếu vào công nợ khi kế toán chốt kỳ (gán giá hàng loạt).
+   - Dời phiếu sang kỳ chưa chốt thì phiếu rời công nợ, chờ chốt kỳ mới.
+   - Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi công nợ.
 
 ---
 

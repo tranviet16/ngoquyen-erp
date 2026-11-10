@@ -42,13 +42,13 @@ beforeEach(() => {
 });
 
 describe("delivery actions", () => {
-  it("trả ok khi ghi thành công, guard đúng cấp quyền", async () => {
-    mockService.createDelivery.mockResolvedValue({ id: 1 });
-    await expect(createDeliveryAction(INPUT)).resolves.toEqual({ ok: true });
+  it("trả ok kèm trạng thái công nợ của phiếu khi ghi thành công, guard đúng cấp quyền", async () => {
+    mockService.createDelivery.mockResolvedValue({ id: 1, ledgerStatus: "posted" });
+    await expect(createDeliveryAction(INPUT)).resolves.toEqual({ ok: true, ledgerStatus: "posted" });
     expect(mockRequest).toHaveBeenCalledWith("vat-tu-ncc", { minLevel: "create", scope: "module" });
 
-    mockService.updateDelivery.mockResolvedValue({ id: 1 });
-    await expect(updateDeliveryAction(1, INPUT)).resolves.toEqual({ ok: true });
+    mockService.updateDelivery.mockResolvedValue({ id: 1, ledgerStatus: "awaiting_close" });
+    await expect(updateDeliveryAction(1, INPUT)).resolves.toEqual({ ok: true, ledgerStatus: "awaiting_close" });
     expect(mockRequest).toHaveBeenLastCalledWith("vat-tu-ncc", { minLevel: "edit", scope: "module" });
     expect(mockService.updateDelivery).toHaveBeenCalledWith(1, INPUT);
   });

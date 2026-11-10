@@ -271,6 +271,47 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     expect(k3.opening).toBe(signedK2.closing);
   });
 
+  it("phiếu trong kỳ đã chốt (chưa ký) vào công nợ ngay khi thêm / sửa; kỳ chưa chốt hoặc thiếu giá thì chưa", async () => {
+    const { supplier, project, item } = await seed();
+    await close(supplier.id, project.id, K1);
+    await close(supplier.id, project.id, K2);
+    const eventOf = (deliveryId: number) =>
+      prisma.ledgerTransaction.findFirst({ where: { deliveryId, deletedAt: null } });
+    const body = { supplierId: supplier.id, projectId: project.id, itemId: item.id, unit: "viên" };
+
+    // Phiếu 09/05 (đã chốt trong K2 @1.850): sửa số lượng → dòng công nợ cập nhật ngay, không bị gỡ.
+    const may9 = await prisma.supplierDeliveryDaily.findFirstOrThrow({
+      where: { supplierId: supplier.id, date: new Date("2026-05-09"), deletedAt: null },
+    });
+    const edited = await updateDelivery(may9.id, { ...body, date: "2026-05-09", qty: 9000 });
+    expect(edited.ledgerStatus).toBe("posted");
+    expect(Number((await eventOf(may9.id))?.totalTt)).toBe(9000 * 1850);
+    expect((await reconFor(supplier.id, project.id, K2.from)).totalIn).toBe(44_400_000 + 1000 * 1850);
+
+    // Đổi đơn giá cũng đi thẳng vào công nợ.
+    await updateDelivery(may9.id, { ...body, date: "2026-05-09", qty: 9000, unitPrice: 2000 });
+    expect(Number((await eventOf(may9.id))?.totalTt)).toBe(18_000_000);
+
+    // Thêm phiếu có giá vào K2 (đã chốt) → vào công nợ ngay; không giá → chờ nhập giá.
+    const priced = await createDelivery({ ...body, date: "2026-05-20", qty: 100, unitPrice: 1850 });
+    expect(priced.ledgerStatus).toBe("posted");
+    expect(Number((await eventOf(priced.id))?.totalTt)).toBe(185_000);
+    const unpriced = await createDelivery({ ...body, date: "2026-05-21", qty: 100 });
+    expect(unpriced.ledgerStatus).toBe("missing_price");
+    expect(await eventOf(unpriced.id)).toBeNull();
+
+    // Kỳ chưa chốt (K3): phiếu có giá vẫn chờ chốt kỳ.
+    const later = await createDelivery({ ...body, date: "2026-06-10", qty: 100, unitPrice: 1850 });
+    expect(later.ledgerStatus).toBe("awaiting_close");
+    expect(await eventOf(later.id)).toBeNull();
+
+    // Sửa ghi chú không đổi tiền → giữ nguyên dòng công nợ.
+    const before = await eventOf(priced.id);
+    const noted = await updateDelivery(priced.id, { ...body, date: "2026-05-20", qty: 100, unitPrice: 1850, note: "ghi chú" });
+    expect(noted.ledgerStatus).toBe("posted");
+    expect((await eventOf(priced.id))?.updatedAt).toEqual(before?.updatedAt);
+  });
+
   it("kỳ đã ký: sửa/xoá phiếu có event nằm trong kỳ bị chặn, kể cả khi ngày phiếu đã lệch khỏi event", async () => {
     const { supplier, project, item } = await seed();
     await close(supplier.id, project.id, K1);

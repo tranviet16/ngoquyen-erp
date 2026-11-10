@@ -12,7 +12,7 @@ import {
   createDeliveryAction,
   deleteDeliveryAction,
   updateDeliveryAction,
-  type DeliveryActionResult,
+  type DeliverySaveResult,
 } from "@/lib/vat-tu-ncc/delivery-actions";
 import { type DeliveryInput } from "@/lib/vat-tu-ncc/schemas";
 import { DeliveryForm } from "./delivery-form";
@@ -77,9 +77,16 @@ interface Props {
   lockedProjectId?: number;
 }
 
-/** Ném lỗi khi server action trả `ok: false` — thông điệp nghiệp vụ đi nguyên văn lên toast. */
-function unwrap(result: DeliveryActionResult): void {
+/**
+ * Ném lỗi khi server action trả `ok: false` (thông điệp nghiệp vụ đi nguyên văn lên toast); lưu được
+ * thì báo phiếu đã vào công nợ chưa (xem DeliveryLedgerStatus).
+ */
+function toastSaved(result: DeliverySaveResult, savedText: string) {
   if (!result.ok) throw new Error(result.message);
+  if (result.ledgerStatus === "posted") toast.success(`${savedText} — công nợ đã cập nhật`);
+  else if (result.ledgerStatus === "missing_price") {
+    toast.warning(`${savedText}. Phiếu thuộc kỳ đã chốt nhưng chưa có đơn giá nên chưa vào công nợ — nhập đơn giá.`);
+  } else toast.success(`${savedText}. Phiếu vào công nợ khi chốt kỳ.`);
 }
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -155,14 +162,13 @@ export function DeliveryGrid({
       keToan: typeof patch.keToan === "string" ? (patch.keToan || undefined) : (current.keToan ?? undefined),
       note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
     };
-    unwrap(await updateDeliveryAction(id, merged));
+    return updateDeliveryAction(id, merged);
   };
 
   const handlers: DataGridHandlers<DeliveryGridRow> = {
     ...(canEdit ? { onCellEdit: async (id: number, col: string, value: unknown) => {
       try {
-        await patchDelivery(id, { [col]: value } as Partial<DeliveryGridRow>);
-        toast.success("Đã lưu");
+        toastSaved(await patchDelivery(id, { [col]: value } as Partial<DeliveryGridRow>), "Đã lưu");
         startTransition(() => router.refresh());
       } catch (err) {
         toast.error("Lưu thất bại: " + errorMessage(err));
@@ -195,8 +201,7 @@ export function DeliveryGrid({
 
   async function handleCreate(data: DeliveryInput) {
     try {
-      unwrap(await createDeliveryAction(data));
-      toast.success("Đã thêm phiếu nhập");
+      toastSaved(await createDeliveryAction(data), "Đã thêm phiếu nhập");
       setCreateOpen(false);
       startTransition(() => router.refresh());
     } catch (err) {
@@ -207,8 +212,7 @@ export function DeliveryGrid({
   async function handleEdit(data: DeliveryInput) {
     if (!editTarget) return;
     try {
-      unwrap(await updateDeliveryAction(editTarget.id, data));
-      toast.success("Đã lưu phiếu");
+      toastSaved(await updateDeliveryAction(editTarget.id, data), "Đã lưu phiếu");
       setEditTarget(null);
       startTransition(() => router.refresh());
     } catch (err) {

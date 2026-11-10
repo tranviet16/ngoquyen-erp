@@ -12,42 +12,37 @@
  */
 
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { createDelivery, updateDelivery, softDeleteDelivery } from "./delivery-service";
+import { createDelivery, updateDelivery, softDeleteDelivery, type DeliveryLedgerStatus } from "./delivery-service";
 import { runAction, type ActionResult } from "./action-result";
 import type { DeliveryInput } from "./schemas";
 
 export type DeliveryActionResult = ActionResult;
+/** Thêm / sửa phiếu còn trả phiếu đã vào công nợ chưa, để lưới báo cho người nhập. */
+export type DeliverySaveResult = ActionResult<{ ledgerStatus: DeliveryLedgerStatus }>;
 
 const GENERIC_MESSAGE = "Lỗi hệ thống khi lưu phiếu — thử lại hoặc liên hệ admin.";
+const LOG_TAG = "vat-tu-ncc.delivery-actions";
 
-function run(action: () => Promise<unknown>): Promise<DeliveryActionResult> {
-  return runAction(
-    "vat-tu-ncc.delivery-actions",
-    async () => {
-      await action();
-      return {};
-    },
-    GENERIC_MESSAGE,
-  );
-}
-
-export async function createDeliveryAction(input: DeliveryInput): Promise<DeliveryActionResult> {
-  return run(async () => {
+export async function createDeliveryAction(input: DeliveryInput): Promise<DeliverySaveResult> {
+  return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
-    await createDelivery(input);
-  });
+    const { ledgerStatus } = await createDelivery(input);
+    return { ledgerStatus };
+  }, GENERIC_MESSAGE);
 }
 
-export async function updateDeliveryAction(id: number, input: DeliveryInput): Promise<DeliveryActionResult> {
-  return run(async () => {
+export async function updateDeliveryAction(id: number, input: DeliveryInput): Promise<DeliverySaveResult> {
+  return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    await updateDelivery(id, input);
-  });
+    const { ledgerStatus } = await updateDelivery(id, input);
+    return { ledgerStatus };
+  }, GENERIC_MESSAGE);
 }
 
 export async function deleteDeliveryAction(id: number, supplierId: number): Promise<DeliveryActionResult> {
-  return run(async () => {
+  return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
     await softDeleteDelivery(id, supplierId);
-  });
+    return {};
+  }, GENERIC_MESSAGE);
 }
