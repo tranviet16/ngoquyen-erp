@@ -50,6 +50,8 @@ export async function updatePriceQuote(id: number, input: PriceQuoteInput) {
       unitPrice: new Prisma.Decimal(data.unitPrice),
       effectiveFrom: new Date(data.effectiveFrom),
       note: data.note ?? null,
+      // Sửa tay báo giá tự tạo từ phiếu → thôi đi theo phiếu (sửa / xoá phiếu không còn đụng tới nó).
+      sourceDeliveryId: null,
       updatedAt: new Date(),
     },
   });

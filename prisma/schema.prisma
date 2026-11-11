@@ -590,11 +590,14 @@ model SupplierPriceQuote {
   unitPrice     Decimal   @db.Decimal(18, 2)
   effectiveFrom DateTime
   note          String?
+  /// Báo giá tự tạo từ đơn giá của một phiếu ngày (đi theo phiếu); null = nhập tay ở trang Báo giá.
+  sourceDeliveryId Int?
   deletedAt     DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now())
 
   @@index([supplierId, itemId, effectiveFrom])
+  @@index([sourceDeliveryId])
   @@map("supplier_price_quotes")
 }
 
