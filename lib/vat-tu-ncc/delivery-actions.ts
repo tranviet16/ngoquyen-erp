@@ -15,10 +15,14 @@ import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request"
 import { createDelivery, updateDelivery, softDeleteDelivery, type DeliveryLedgerStatus } from "./delivery-service";
 import { runAction, type ActionResult } from "./action-result";
 import type { DeliveryInput } from "./schemas";
+import type { AutoQuoteChange } from "./auto-quote-sync";
 
 export type DeliveryActionResult = ActionResult;
-/** Thêm / sửa phiếu còn trả phiếu đã vào công nợ chưa, để lưới báo cho người nhập. */
-export type DeliverySaveResult = ActionResult<{ ledgerStatus: DeliveryLedgerStatus }>;
+/**
+ * Thêm / sửa phiếu còn trả phiếu đã vào công nợ chưa và báo giá tự tạo có đổi không, để lưới báo
+ * cho người nhập.
+ */
+export type DeliverySaveResult = ActionResult<{ ledgerStatus: DeliveryLedgerStatus; quoteChange: AutoQuoteChange }>;
 
 const GENERIC_MESSAGE = "Lỗi hệ thống khi lưu phiếu — thử lại hoặc liên hệ admin.";
 const LOG_TAG = "vat-tu-ncc.delivery-actions";
@@ -34,8 +38,8 @@ export async function createDeliveryAction(
 ): Promise<DeliverySaveResult> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
-    const { ledgerStatus } = await createDelivery(input, { overrideLocked: opts?.overrideLocked === true });
-    return { ledgerStatus };
+    const { ledgerStatus, quoteChange } = await createDelivery(input, { overrideLocked: opts?.overrideLocked === true });
+    return { ledgerStatus, quoteChange };
   }, GENERIC_MESSAGE);
 }
 
@@ -46,8 +50,8 @@ export async function updateDeliveryAction(
 ): Promise<DeliverySaveResult> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    const { ledgerStatus } = await updateDelivery(id, input, { overrideLocked: opts?.overrideLocked === true });
-    return { ledgerStatus };
+    const { ledgerStatus, quoteChange } = await updateDelivery(id, input, { overrideLocked: opts?.overrideLocked === true });
+    return { ledgerStatus, quoteChange };
   }, GENERIC_MESSAGE);
 }
 
