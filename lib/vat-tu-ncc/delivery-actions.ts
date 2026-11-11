@@ -23,18 +23,22 @@ export type DeliverySaveResult = ActionResult<{ ledgerStatus: DeliveryLedgerStat
 const GENERIC_MESSAGE = "Lỗi hệ thống khi lưu phiếu — thử lại hoặc liên hệ admin.";
 const LOG_TAG = "vat-tu-ncc.delivery-actions";
 
-export async function createDeliveryAction(input: DeliveryInput): Promise<DeliverySaveResult> {
+/**
+ * `opts.overrideLocked` (thêm / sửa / xoá): admin đã xác nhận thao tác trên phiếu trong kỳ đã ký /
+ * kỳ chuyển đổi (lần gọi thứ hai sau khi lần đầu trả `code: "signed_period" | "cutover_locked"`).
+ * Server tự kiểm admin.
+ */
+export async function createDeliveryAction(
+  input: DeliveryInput,
+  opts?: { overrideLocked?: boolean },
+): Promise<DeliverySaveResult> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
-    const { ledgerStatus } = await createDelivery(input);
+    const { ledgerStatus } = await createDelivery(input, { overrideLocked: opts?.overrideLocked === true });
     return { ledgerStatus };
   }, GENERIC_MESSAGE);
 }
 
-/**
- * `opts.overrideLocked`: admin đã xác nhận sửa phiếu trong kỳ đã ký / kỳ chuyển đổi (lần gọi thứ
- * hai sau khi lần đầu trả `code: "signed_period" | "cutover_locked"`). Server tự kiểm admin.
- */
 export async function updateDeliveryAction(
   id: number,
   input: DeliveryInput,
@@ -47,10 +51,14 @@ export async function updateDeliveryAction(
   }, GENERIC_MESSAGE);
 }
 
-export async function deleteDeliveryAction(id: number, supplierId: number): Promise<DeliveryActionResult> {
+export async function deleteDeliveryAction(
+  id: number,
+  supplierId: number,
+  opts?: { overrideLocked?: boolean },
+): Promise<DeliveryActionResult> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    await softDeleteDelivery(id, supplierId);
+    await softDeleteDelivery(id, supplierId, { overrideLocked: opts?.overrideLocked === true });
     return {};
   }, GENERIC_MESSAGE);
 }

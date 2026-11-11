@@ -337,6 +337,28 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     expect(k1.closing).toBe(k1Before.closing + 100 * 1900);
     expect(k2.opening).toBe(k1.closing);
     expect(k1.signedDate).toBe(k1Before.signedDate);
+
+    // Dời phiếu sang ngày trong K2 (cũng đã ký): dòng công nợ đi theo, tiền rời K1 vào K2,
+    // số cuối K2 giữ nguyên, đầu K2 vẫn = cuối K1.
+    const amount = 8100 * 1900;
+    await expect(updateDelivery(apr1.id, { ...body, qty: 8100, date: "2026-05-13" })).rejects.toMatchObject({
+      code: "signed_period",
+    });
+    await updateDelivery(apr1.id, { ...body, qty: 8100, date: "2026-05-13" }, { overrideLocked: true });
+    const moved = await prisma.ledgerTransaction.findFirstOrThrow({ where: { deliveryId: apr1.id, deletedAt: null } });
+    expect(moved.date.toISOString().slice(0, 10)).toBe("2026-05-13");
+    const k1Moved = await reconFor(supplier.id, project.id, K1.from);
+    const k2Moved = await reconFor(supplier.id, project.id, K2.from);
+    expect(k1Moved.closing).toBe(k1.closing - amount);
+    expect(k2Moved.opening).toBe(k1Moved.closing);
+    expect(k2Moved.closing).toBe(k2.closing);
+
+    // Admin xoá phiếu kỳ đã ký: dòng công nợ bị gỡ, cuối K2 giảm đúng số tiền phiếu.
+    await expect(softDeleteDelivery(apr1.id, supplier.id)).rejects.toMatchObject({ code: "signed_period" });
+    await softDeleteDelivery(apr1.id, supplier.id, { overrideLocked: true });
+    expect(await prisma.ledgerTransaction.count({ where: { deliveryId: apr1.id, deletedAt: null } })).toBe(0);
+    const k2Deleted = await reconFor(supplier.id, project.id, K2.from);
+    expect(k2Deleted.closing).toBe(k2.closing - amount);
   });
 
   it("kỳ đã ký: sửa/xoá phiếu có event nằm trong kỳ bị chặn, kể cả khi ngày phiếu đã lệch khỏi event", async () => {

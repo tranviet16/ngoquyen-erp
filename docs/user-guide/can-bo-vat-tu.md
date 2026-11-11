@@ -82,14 +82,15 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
 
 1. Tìm phiếu trong tab **Vật tư ngày**
 2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu** (Đơn giá, Thành tiền hiển thị dạng số tiền)
-   - Phiếu trong kỳ đã ký hoặc trước mốc chuyển đổi → từ chối với người dùng thường
-   - **Admin**: hiện cảnh báo «kỳ đã ký»; bấm OK để vẫn sửa. Chỉ sửa được số lượng, đơn giá và các ô chữ (không đổi ngày, công trình, vật tư). Sau khi lưu:
-     - Kỳ NCC đã ký: dòng công nợ của phiếu cập nhật theo số mới.
-     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): phần chênh tiền của phiếu (mới − cũ) được ghi thành dòng **điều chỉnh** đúng ngày phiếu.
-     - Bảng đối chiếu đã ký của kỳ đó và các kỳ sau được tính lại số, giữ ngày ký; hệ thống ghi lại người sửa và số trước / sau.
+   - Phiếu trong kỳ đã ký hoặc trước mốc chuyển đổi → từ chối với người dùng thường (thêm, sửa, xoá)
+   - **Admin**: hiện cảnh báo kỳ khoá; bấm OK để vẫn **thêm, sửa (mọi ô, kể cả ngày, công trình, vật tư) hoặc xoá** phiếu. Hệ thống gỡ tiền của phiếu ở chỗ cũ và ghi vào chỗ mới:
+     - Kỳ NCC đã ký: dòng công nợ của phiếu đi theo phiếu (ngày, công trình, số tiền mới); xoá phiếu thì gỡ dòng đó. Phiếu trong kỳ đã ký phải có đơn giá.
+     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): tiền của phiếu đi qua dòng **điều chỉnh** — trừ tiền cũ ở ngày / công trình cũ, cộng tiền mới ở ngày / công trình mới (cùng chỗ thì chỉ ghi phần chênh).
+     - Dời phiếu ra kỳ chưa chốt: phiếu chờ chốt kỳ như phiếu thường; dời vào kỳ đã chốt chưa ký: vào công nợ ngay.
+     - Bảng đối chiếu đã ký của công trình cũ và công trình mới, từ kỳ bị đụng tới trở đi, được tính lại số, giữ ngày ký; hệ thống ghi lại người sửa và nội dung thay đổi.
    - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)
 3. Xóa: Click icon thùng rác → xác nhận
-   - Chỉ xóa được phiếu chưa chốt kỳ / chưa thanh toán
+   - Người dùng thường chỉ xóa được phiếu ngoài kỳ đã ký / trước mốc chuyển đổi; admin xoá được sau khi xác nhận (như trên)
 4. Phiếu vào công nợ lúc nào (thông báo sau khi lưu nói rõ):
    - **Kỳ đã chốt, chưa ký** và phiếu có đơn giá: thêm hoặc sửa phiếu (ngày, công trình, vật tư, số lượng, đơn giá) thì công nợ, bảng đối chiếu và báo cáo công nợ cập nhật **ngay**, không phải chốt lại kỳ.
    - **Kỳ đã chốt nhưng phiếu chưa có đơn giá**: chưa vào công nợ; nhập đơn giá cho phiếu (hoặc chốt lại kỳ) để vào.

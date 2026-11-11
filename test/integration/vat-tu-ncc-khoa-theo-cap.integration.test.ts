@@ -36,7 +36,7 @@ import {
   unsignReconciliation,
 } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
 import { softDeleteReconciliation, updateReconciliation } from "@/lib/vat-tu-ncc/reconciliation-service";
-import { createDelivery, updateDelivery } from "@/lib/vat-tu-ncc/delivery-service";
+import { createDelivery, softDeleteDelivery, updateDelivery } from "@/lib/vat-tu-ncc/delivery-service";
 import { lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
 import { freezeReconciliationSnapshot } from "@/lib/vat-tu-ncc/reconciliation-compute";
 import { MATERIAL_CUTOVER_ADAPTER } from "@/lib/vat-tu-ncc/pair-scope";
@@ -428,9 +428,71 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
     });
     expect(Number(total._sum.totalTt)).toBe(0);
 
-    // Kỳ khoá chỉ cho sửa số lượng / giá / chữ — không đổi ngày.
-    await expect(
-      updateDelivery(slip.id, { ...body, qty: 10, date: "2026-10-21" }, { overrideLocked: true }),
-    ).rejects.toThrow(/chỉ sửa được số lượng, đơn giá và ghi chú/);
+    // Đổi ngày trong kỳ chuyển đổi: −10.000 ngày cũ, +10.000 ngày mới; số cuối kỳ của marker giữ nguyên.
+    await updateDelivery(slip.id, { ...body, qty: 10, date: "2026-10-21" }, { overrideLocked: true });
+    const byDate = async () => {
+      const rows = await prisma.ledgerTransaction.groupBy({
+        by: ["date"],
+        where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+        _sum: { totalTt: true },
+      });
+      return Object.fromEntries(rows.map((r) => [r.date.toISOString().slice(0, 10), Number(r._sum.totalTt)]));
+    };
+    expect(await byDate()).toEqual({ "2026-10-20": -10_000, "2026-10-21": 10_000 });
+    const afterMove = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
+    expect(Number(afterMove.closingBalance)).toBe(Number(signedBefore.closingBalance));
+
+    // Dời ra sau mốc (kỳ chưa chốt): tiền rời kỳ chuyển đổi, phiếu chờ chốt kỳ, không có dòng lay_hang.
+    const moved = await updateDelivery(slip.id, { ...body, qty: 10, date: "2026-10-30" }, { overrideLocked: true });
+    expect(moved.ledgerStatus).toBe("awaiting_close");
+    expect(await byDate()).toEqual({ "2026-10-20": -10_000, "2026-10-21": 0 });
+    expect(await prisma.ledgerTransaction.count({ where: { deliveryId: slip.id, deletedAt: null } })).toBe(0);
+    const afterOut = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
+    expect(Number(afterOut.closingBalance)).toBe(Number(signedBefore.closingBalance) - 10_000);
+  });
+
+  it("(j) admin xác nhận thêm / xoá phiếu kỳ chuyển đổi: tiền vào / ra công nợ bằng dòng điều chỉnh", async () => {
+    const { entity, concrete } = await seed();
+    await prisma.importRun.create({
+      data: {
+        fileName: "Quản Lý Công Nợ",
+        fileHash: "pair-cutover-add",
+        adapter: MATERIAL_CUTOVER_ADAPTER,
+        status: "committed",
+        committedAt: new Date("2026-11-01T02:00:00Z"),
+        createdBy: ADMIN_ID,
+        reviewJson: { expected: { cutoverDate: "2026-10-26" } },
+      },
+    });
+    const supplier = await prisma.supplier.create({ data: { name: "NCC thêm phiếu cũ" } });
+    const project = await prisma.project.create({
+      data: { code: "CVA", name: "Công trình thêm phiếu", status: "active", entityId: entity.id },
+    });
+    const body = {
+      supplierId: supplier.id, projectId: project.id, date: "2026-10-15", itemId: concrete.id,
+      qty: 3, unit: "m3", unitPrice: 2000,
+    };
+    const adjustSum = async () =>
+      Number(
+        (
+          await prisma.ledgerTransaction.aggregate({
+            where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+            _sum: { totalTt: true },
+          })
+        )._sum.totalTt ?? 0,
+      );
+
+    // Không xác nhận → bị khoá; admin xác nhận → phiếu vào công nợ +6.000 ngày 15/10.
+    await expect(createDelivery(body)).rejects.toMatchObject({ code: "cutover_locked" });
+    const created = await createDelivery(body, { overrideLocked: true });
+    expect(created.ledgerStatus).toBe("posted");
+    expect(await adjustSum()).toBe(6000);
+
+    // Xoá: không xác nhận → bị khoá; xác nhận → −6.000, tổng về 0.
+    await expect(softDeleteDelivery(created.id, supplier.id)).rejects.toMatchObject({ code: "cutover_locked" });
+    await softDeleteDelivery(created.id, supplier.id, { overrideLocked: true });
+    expect(await adjustSum()).toBe(0);
+    const slip = await prisma.supplierDeliveryDaily.findUniqueOrThrow({ where: { id: created.id } });
+    expect(slip.deletedAt).not.toBeNull();
   });
 });

@@ -16,7 +16,7 @@ import { periodLabel } from "./period";
 import { toBusinessDateFromInput } from "@/lib/ledger/business-date";
 import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
-import { applyLockedDeliveryEdit, assertLockedEditScope, lockedKindOf } from "./locked-delivery-edit";
+import { applyAdminSlipChange, lockedKindOf, type LockedEditTx } from "./locked-delivery-edit";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -156,15 +156,40 @@ async function assertProjectActive(client: Pick<typeof prisma, "project">, proje
   if (!project) throw new Error(`Công trình #${projectId} không tồn tại`);
 }
 
-export async function createDelivery(input: DeliveryInput) {
+/**
+ * Admin đã xác nhận cảnh báo "kỳ đã ký / kỳ chuyển đổi" và vẫn muốn thêm / sửa / xoá: bỏ qua khoá kỳ,
+ * ghi thay đổi tiền vào công nợ và đông cứng lại các kỳ đã ký (locked-delivery-edit.ts). Server tự
+ * kiểm admin — không tin cờ từ client.
+ */
+export interface LockedOverrideOptions {
+  overrideLocked?: boolean;
+}
+
+/** Admin còn hoạt động khi client xin bỏ qua khoá kỳ; null khi không xin. */
+async function overrideAdmin(opts: LockedOverrideOptions) {
+  const adminUserId = opts.overrideLocked ? await requireActiveAdmin() : null;
+  return { adminUserId, guard: adminUserId ? ({ adminOverride: true } as const) : undefined };
+}
+
+/** Có (cặp, ngày) nào trong số này nằm trong kỳ đã ký / giai đoạn chuyển đổi không. */
+async function anyLocked(tx: LockedEditTx, supplierId: number, places: { projectId: number; date: Date }[]) {
+  for (const p of places) {
+    if (await lockedKindOf(tx, supplierId, p.projectId, p.date)) return true;
+  }
+  return false;
+}
+
+export async function createDelivery(input: DeliveryInput, opts: LockedOverrideOptions = {}) {
   await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
   const data = deliverySchema.parse(input);
+  const { adminUserId, guard } = await overrideAdmin(opts);
   const date = toBusinessDateFromInput(data.date);
   const record = await prisma.$transaction(async (tx) => {
     // Khoá NCC rồi kiểm khoá kỳ của cặp trong cùng transaction — không đua với ký kỳ.
     await lockSuppliers(tx, [data.supplierId]);
     await assertProjectActive(tx, data.projectId);
-    await assertPeriodOpen(data.supplierId, data.projectId, date, tx);
+    await assertPeriodOpen(data.supplierId, data.projectId, date, tx, guard);
+    const locked = adminUserId != null && (await anyLocked(tx, data.supplierId, [{ projectId: data.projectId, date }]));
     const created = await tx.supplierDeliveryDaily.create({
       data: {
         supplierId: data.supplierId,
@@ -180,8 +205,12 @@ export async function createDelivery(input: DeliveryInput) {
         note: data.note ?? null,
       },
     });
-    // Phiếu thêm vào kỳ đã chốt vào công nợ ngay (nếu có đơn giá), không phải chốt lại kỳ.
-    return { ...created, ledgerStatus: await syncDeliveryLedger(tx, created) };
+    // Kỳ khoá (admin): tiền vào công nợ + đông cứng lại kỳ đã ký. Còn lại: phiếu thêm vào kỳ đã chốt
+    // vào công nợ ngay (nếu có đơn giá), không phải chốt lại kỳ.
+    const ledgerStatus = locked
+      ? await applyAdminSlipChange(tx, null, created, adminUserId!)
+      : await syncDeliveryLedger(tx, created);
+    return { ...created, ledgerStatus };
   });
   revalidateDeliveryViews(data.supplierId);
   return record;
@@ -195,22 +224,12 @@ function revalidateDeliveryViews(supplierId: number) {
   revalidatePath("/cong-no-vt", "layout");
 }
 
-export interface UpdateDeliveryOptions {
-  /**
-   * Admin đã xác nhận cảnh báo "kỳ đã ký / kỳ chuyển đổi" và vẫn muốn sửa: bỏ qua khoá kỳ, ghi thay
-   * đổi tiền vào công nợ và đông cứng lại các kỳ đã ký (locked-delivery-edit.ts). Kiểm admin ở server.
-   */
-  overrideLocked?: boolean;
-}
-
-export async function updateDelivery(id: number, input: DeliveryInput, opts: UpdateDeliveryOptions = {}) {
+export async function updateDelivery(id: number, input: DeliveryInput, opts: LockedOverrideOptions = {}) {
   const data = deliverySchema.parse(input);
   const existing = await prisma.supplierDeliveryDaily.findUnique({ where: { id }, select: { supplierId: true } });
   if (!existing || existing.supplierId !== data.supplierId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-  // Không tin cờ từ client: chỉ admin còn hoạt động mới được sửa trong kỳ khoá.
-  const adminUserId = opts.overrideLocked ? await requireActiveAdmin() : null;
-  const guard = adminUserId ? ({ adminOverride: true } as const) : undefined;
+  const { adminUserId, guard } = await overrideAdmin(opts);
   const newDate = toBusinessDateFromInput(data.date);
   const record = await prisma.$transaction(async (tx) => {
     await lockSuppliers(tx, [existing.supplierId]);
@@ -222,8 +241,6 @@ export async function updateDelivery(id: number, input: DeliveryInput, opts: Upd
     });
     if (!current) throw new Error("Forbidden");
     const currentProjectId = requireProjectId(current.projectId, `Phiếu #${id}`);
-    const lockedKind = adminUserId ? await lockedKindOf(tx, existing.supplierId, currentProjectId, current.date) : null;
-    if (lockedKind) assertLockedEditScope(current, { date: newDate, projectId: data.projectId, itemId: data.itemId });
     if (data.projectId !== currentProjectId) await assertProjectActive(tx, data.projectId);
     await assertPeriodOpen(existing.supplierId, currentProjectId, current.date, tx, guard);
     await assertPeriodOpen(existing.supplierId, data.projectId, newDate, tx, guard);
@@ -244,9 +261,16 @@ export async function updateDelivery(id: number, input: DeliveryInput, opts: Upd
       where: { deliveryId: id, deletedAt: null },
       select: { id: true, date: true, partyId: true, projectId: true },
     });
-    if (event) {
-      await assertPeriodOpen(event.partyId, requireProjectId(event.projectId, `Sự kiện #${event.id}`), event.date, tx, guard);
-    }
+    const eventProjectId = event ? requireProjectId(event.projectId, `Sự kiện #${event.id}`) : null;
+    if (event) await assertPeriodOpen(event.partyId, eventProjectId!, event.date, tx, guard);
+    // Admin đã xác nhận: chỗ cũ, chỗ mới hoặc dòng công nợ của phiếu nằm trong kỳ khoá → đi đường admin.
+    const locked =
+      adminUserId != null &&
+      (await anyLocked(tx, existing.supplierId, [
+        { projectId: currentProjectId, date: current.date },
+        { projectId: data.projectId, date: newDate },
+        ...(event ? [{ projectId: eventProjectId!, date: event.date }] : []),
+      ]));
     const updated = await tx.supplierDeliveryDaily.update({
       where: { id, supplierId: existing.supplierId },
       data: {
@@ -263,12 +287,12 @@ export async function updateDelivery(id: number, input: DeliveryInput, opts: Upd
         updatedAt: new Date(),
       },
     });
-    if (lockedKind && adminUserId) {
-      // Kỳ khoá: thay đổi tiền vào công nợ + đông cứng lại các kỳ đã ký (sửa chữ thì không đổi tiền).
-      if (affectsLedger) {
-        await applyLockedDeliveryEdit(tx, lockedKind, { id, supplierId: existing.supplierId, ...current }, updated, adminUserId);
-      }
-      return { ...updated, ledgerStatus: "posted" as DeliveryLedgerStatus };
+    if (locked) {
+      // Kỳ khoá: gỡ tiền ở chỗ cũ, ghi ở chỗ mới, đông cứng lại các kỳ đã ký (sửa chữ thì không đổi tiền).
+      const ledgerStatus: DeliveryLedgerStatus = affectsLedger
+        ? await applyAdminSlipChange(tx, { id, supplierId: existing.supplierId, ...current }, updated, adminUserId!)
+        : "posted";
+      return { ...updated, ledgerStatus };
     }
     // Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi tiền → giữ nguyên event; còn lại (hoặc phiếu
     // chưa có event) thì đồng bộ sổ công nợ theo phiếu mới.
@@ -280,18 +304,20 @@ export async function updateDelivery(id: number, input: DeliveryInput, opts: Upd
   return record;
 }
 
-export async function softDeleteDelivery(id: number, supplierId: number) {
+export async function softDeleteDelivery(id: number, supplierId: number, opts: LockedOverrideOptions = {}) {
   const existing = await prisma.supplierDeliveryDaily.findUnique({ where: { id }, select: { supplierId: true } });
   if (!existing || existing.supplierId !== supplierId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
+  const { adminUserId, guard } = await overrideAdmin(opts);
   const record = await prisma.$transaction(async (tx) => {
     await lockSuppliers(tx, [existing.supplierId]);
     const current = await tx.supplierDeliveryDaily.findUnique({
       where: { id },
-      select: { date: true, projectId: true },
+      select: { date: true, projectId: true, itemId: true, qty: true, unitPrice: true },
     });
     if (!current) throw new Error("Forbidden");
-    await assertPeriodOpen(existing.supplierId, requireProjectId(current.projectId, `Phiếu #${id}`), current.date, tx);
+    const currentProjectId = requireProjectId(current.projectId, `Phiếu #${id}`);
+    await assertPeriodOpen(existing.supplierId, currentProjectId, current.date, tx, guard);
     // Phiếu đã chốt kỳ (chưa ký) có tối đa 1 event lay_hang đối ứng (deliveryId
     // unique) — gỡ cùng lúc để sổ cái khớp. Event có thể mang ngày khác phiếu (phiếu đã dời
     // ngày sau khi chốt) nên kiểm khoá kỳ theo ngày + cặp của event trước khi xoá.
@@ -299,14 +325,22 @@ export async function softDeleteDelivery(id: number, supplierId: number) {
       where: { deliveryId: id, deletedAt: null },
       select: { id: true, date: true, partyId: true, projectId: true },
     });
-    if (event) {
-      await assertPeriodOpen(event.partyId, requireProjectId(event.projectId, `Sự kiện #${event.id}`), event.date, tx);
-    }
+    const eventProjectId = event ? requireProjectId(event.projectId, `Sự kiện #${event.id}`) : null;
+    if (event) await assertPeriodOpen(event.partyId, eventProjectId!, event.date, tx, guard);
+    const locked =
+      adminUserId != null &&
+      (await anyLocked(tx, existing.supplierId, [
+        { projectId: currentProjectId, date: current.date },
+        ...(event ? [{ projectId: eventProjectId!, date: event.date }] : []),
+      ]));
     const updated = await tx.supplierDeliveryDaily.update({
       where: { id, supplierId: existing.supplierId },
       data: { deletedAt: new Date() },
     });
-    if (event) {
+    if (locked) {
+      // Kỳ khoá (admin): gỡ tiền của phiếu (điều chỉnh âm / gỡ dòng công nợ) + đông cứng lại kỳ đã ký.
+      await applyAdminSlipChange(tx, { id, supplierId: existing.supplierId, ...current }, null, adminUserId!);
+    } else if (event) {
       await tx.ledgerTransaction.update({
         where: { id: event.id },
         data: { deletedAt: new Date() },
