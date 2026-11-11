@@ -85,7 +85,7 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
    - Phiếu trong kỳ đã ký hoặc trước mốc chuyển đổi → từ chối với người dùng thường (thêm, sửa, xoá)
    - **Admin**: hiện cảnh báo kỳ khoá; bấm OK để vẫn **thêm, sửa (mọi ô, kể cả ngày, công trình, vật tư) hoặc xoá** phiếu. Hệ thống gỡ tiền của phiếu ở chỗ cũ và ghi vào chỗ mới:
      - Kỳ NCC đã ký: dòng công nợ của phiếu đi theo phiếu (ngày, công trình, số tiền mới); xoá phiếu thì gỡ dòng đó. Phiếu trong kỳ đã ký phải có đơn giá.
-     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): tiền của phiếu đi qua dòng **điều chỉnh** — trừ tiền cũ ở ngày / công trình cũ, cộng tiền mới ở ngày / công trình mới (cùng chỗ thì chỉ ghi phần chênh).
+     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): tiền của phiếu đi qua dòng **lấy hàng chênh lệch** (có thể âm, nội dung «Chênh lệch do admin sửa phiếu ngày #…») — trừ tiền cũ ở ngày / công trình cũ, cộng tiền mới ở ngày / công trình mới (cùng chỗ thì chỉ ghi phần chênh). Số này nằm ở cột **Cộng P/S** của bảng đối chiếu và cột lấy hàng của báo cáo, không vào cột Thuế/ĐC.
      - Dời phiếu ra kỳ chưa chốt: phiếu chờ chốt kỳ như phiếu thường; dời vào kỳ đã chốt chưa ký: vào công nợ ngay.
      - Bảng đối chiếu đã ký của công trình cũ và công trình mới, từ kỳ bị đụng tới trở đi, được tính lại số, giữ ngày ký; hệ thống ghi lại người sửa và nội dung thay đổi.
    - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)

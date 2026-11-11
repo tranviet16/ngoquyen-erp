@@ -399,11 +399,12 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
     // Không xác nhận → vẫn bị khoá như cũ.
     await expect(updateDelivery(slip.id, { ...body, qty: 12 })).rejects.toMatchObject({ code: "cutover_locked" });
 
-    // Admin xác nhận: chênh 2 m3 × 1.000 = 2.000 vào công nợ bằng dòng điều chỉnh ngày 20/10.
+    // Admin xác nhận: chênh 2 m3 × 1.000 = 2.000 vào công nợ bằng dòng lấy hàng chênh lệch ngày 20/10
+    // (vào "Cộng P/S", không vào cột Thuế/ĐC).
     const edited = await updateDelivery(slip.id, { ...body, qty: 12 }, { overrideLocked: true });
     expect(edited.ledgerStatus).toBe("posted");
     const adjust = await prisma.ledgerTransaction.findMany({
-      where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+      where: { partyId: supplier.id, projectId: project.id, transactionType: "lay_hang", deliveryId: null, deletedAt: null },
     });
     expect(adjust).toHaveLength(1);
     expect(Number(adjust[0].totalTt)).toBe(2000);
@@ -413,6 +414,10 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
     // Marker được đông cứng lại theo số mới, giữ ngày ký, có audit.
     const signedAfter = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
     expect(Number(signedAfter.closingBalance)).toBe(Number(signedBefore.closingBalance) + 2000);
+    // Chênh lệch nằm ở "Cộng P/S" (totalIn), không ở cột Thuế/ĐC.
+    expect(Number(signedAfter.totalIn)).toBe(Number(signedBefore.totalIn) + 2000);
+    const snapshot = signedAfter.signedSnapshotJson as { totalAdjust?: number } | null;
+    expect(snapshot?.totalAdjust ?? 0).toBe(0);
     expect(signedAfter.signedDate).toEqual(signedBefore.signedDate);
     const audit = await prisma.auditLog.findFirst({
       where: { tableName: "SupplierReconciliation", recordId: String(marker.id) },
@@ -423,7 +428,7 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
     // Giảm lại về 10 m3 → thêm dòng −2.000, tổng chênh về 0.
     await updateDelivery(slip.id, { ...body, qty: 10 }, { overrideLocked: true });
     const total = await prisma.ledgerTransaction.aggregate({
-      where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+      where: { partyId: supplier.id, projectId: project.id, transactionType: "lay_hang", deliveryId: null, deletedAt: null },
       _sum: { totalTt: true },
     });
     expect(Number(total._sum.totalTt)).toBe(0);
@@ -433,7 +438,7 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
     const byDate = async () => {
       const rows = await prisma.ledgerTransaction.groupBy({
         by: ["date"],
-        where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+        where: { partyId: supplier.id, projectId: project.id, transactionType: "lay_hang", deliveryId: null, deletedAt: null },
         _sum: { totalTt: true },
       });
       return Object.fromEntries(rows.map((r) => [r.date.toISOString().slice(0, 10), Number(r._sum.totalTt)]));
@@ -476,7 +481,7 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
       Number(
         (
           await prisma.ledgerTransaction.aggregate({
-            where: { partyId: supplier.id, projectId: project.id, transactionType: "dieu_chinh", deletedAt: null },
+            where: { partyId: supplier.id, projectId: project.id, transactionType: "lay_hang", deliveryId: null, deletedAt: null },
             _sum: { totalTt: true },
           })
         )._sum.totalTt ?? 0,

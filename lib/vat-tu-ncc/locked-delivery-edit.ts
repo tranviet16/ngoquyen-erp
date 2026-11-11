@@ -3,8 +3,10 @@
  * "kỳ đã ký / kỳ chuyển đổi". Mỗi thao tác = gỡ phần tiền của phiếu ở chỗ cũ (nếu có) + ghi phần tiền
  * mới vào chỗ mới (nếu có); "chỗ" là (cặp NCC × công trình, ngày):
  *  - Giai đoạn chuyển đổi từ Excel (ngày ≤ mốc): tiền tới mốc đến từ dòng Nhập Liệu, phiếu không có
- *    dòng công nợ riêng (bất biến I4) → tiền của phiếu đi qua dòng ĐIỀU CHỈNH: −tiền cũ ở chỗ cũ,
- *    +tiền mới ở chỗ mới (cùng chỗ thì gộp thành một dòng chênh lệch).
+ *    dòng công nợ riêng (bất biến I4) → tiền của phiếu đi qua dòng LẤY HÀNG không gắn phiếu (có thể
+ *    âm): −tiền cũ ở chỗ cũ, +tiền mới ở chỗ mới (cùng chỗ thì gộp thành một dòng chênh lệch). Là lấy
+ *    hàng chứ không phải điều chỉnh, để số đổi nằm ở "Cộng P/S" / cột LH như phiếu, không lẫn vào
+ *    cột Thuế/ĐC hay (khi âm) cột Đã trả.
  *  - Sau mốc: phiếu có tối đa một dòng lay_hang (deliveryId). Dòng đó đi theo phiếu: kỳ đã ký → ghi
  *    (bắt buộc có đơn giá); kỳ đã chốt chưa ký + có giá → ghi; còn lại → gỡ, chờ chốt kỳ.
  * Sau đó mọi kỳ đã ký của cặp cũ và cặp mới, từ ngày sớm nhất bị đụng tới, được đông cứng lại (số đầu
@@ -33,6 +35,9 @@ export interface LockedSlipState {
 }
 
 export type LockedKind = "signed" | "cutover";
+
+/** Đầu nội dung dòng lấy hàng chênh lệch do admin thêm / sửa / xoá phiếu kỳ chuyển đổi. */
+export const CUTOVER_SLIP_EDIT_PREFIX = "Chênh lệch do admin sửa phiếu ngày #";
 
 /** Trạng thái công nợ của phiếu sau thao tác (cùng nghĩa với DeliveryLedgerStatus). */
 export type AdminSlipLedgerStatus = "posted" | "awaiting_close" | "missing_price";
@@ -84,7 +89,7 @@ export async function applyAdminSlipChange(
   const cutover = await getMaterialCutoverDate(tx);
   const inCutover = (s: LockedSlipState) => cutover != null && s.date.getTime() <= cutover.getTime();
 
-  // 1. Giai đoạn chuyển đổi: tiền qua dòng điều chỉnh, gộp theo (cặp, ngày).
+  // 1. Giai đoạn chuyển đổi: tiền qua dòng lấy hàng chênh lệch, gộp theo (cặp, ngày).
   const entries = new Map<string, CutoverEntry>();
   const addEntry = (s: LockedSlipState, sign: 1 | -1) => {
     if (!inCutover(s)) return;
@@ -110,7 +115,7 @@ export async function applyAdminSlipChange(
       data: {
         ledgerType: "material",
         date: e.date,
-        transactionType: "dieu_chinh",
+        transactionType: "lay_hang",
         entityId,
         partyId: e.supplierId,
         projectId: e.projectId,
@@ -123,7 +128,7 @@ export async function applyAdminSlipChange(
         vatPctHd: zero,
         vatHd: zero,
         totalHd: zero,
-        content: `Điều chỉnh do admin sửa phiếu ngày #${slipId} (kỳ chuyển đổi): ${change}`,
+        content: `${CUTOVER_SLIP_EDIT_PREFIX}${slipId} (kỳ chuyển đổi): ${change}`,
         status: "approved",
       },
     });
@@ -195,7 +200,7 @@ async function placeSlipEvent(tx: LockedEditTx, s: LockedSlipState, change: stri
   return "posted";
 }
 
-/** Gỡ dòng lay_hang của phiếu (nếu có). Tiền giai đoạn chuyển đổi đã đi qua dòng điều chỉnh. */
+/** Gỡ dòng lay_hang của phiếu (nếu có). Tiền giai đoạn chuyển đổi đi qua dòng chênh lệch riêng. */
 async function removeSlipEvent(tx: LockedEditTx, deliveryId: number): Promise<AdminSlipLedgerStatus> {
   const event = await tx.ledgerTransaction.findFirst({ where: { deliveryId, deletedAt: null }, select: { id: true } });
   if (event) await tx.ledgerTransaction.update({ where: { id: event.id }, data: { deletedAt: new Date() } });
