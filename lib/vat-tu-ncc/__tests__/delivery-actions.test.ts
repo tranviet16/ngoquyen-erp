@@ -42,15 +42,19 @@ beforeEach(() => {
 });
 
 describe("delivery actions", () => {
-  it("trả ok khi ghi thành công, guard đúng cấp quyền", async () => {
-    mockService.createDelivery.mockResolvedValue({ id: 1 });
-    await expect(createDeliveryAction(INPUT)).resolves.toEqual({ ok: true });
+  it("trả ok kèm trạng thái công nợ của phiếu khi ghi thành công, guard đúng cấp quyền", async () => {
+    mockService.createDelivery.mockResolvedValue({ id: 1, ledgerStatus: "posted" });
+    await expect(createDeliveryAction(INPUT)).resolves.toEqual({ ok: true, ledgerStatus: "posted" });
     expect(mockRequest).toHaveBeenCalledWith("vat-tu-ncc", { minLevel: "create", scope: "module" });
 
-    mockService.updateDelivery.mockResolvedValue({ id: 1 });
-    await expect(updateDeliveryAction(1, INPUT)).resolves.toEqual({ ok: true });
+    mockService.updateDelivery.mockResolvedValue({ id: 1, ledgerStatus: "awaiting_close" });
+    await expect(updateDeliveryAction(1, INPUT)).resolves.toEqual({ ok: true, ledgerStatus: "awaiting_close" });
     expect(mockRequest).toHaveBeenLastCalledWith("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    expect(mockService.updateDelivery).toHaveBeenCalledWith(1, INPUT);
+    expect(mockService.updateDelivery).toHaveBeenCalledWith(1, INPUT, { overrideLocked: false });
+
+    // Lần gọi lại sau khi admin xác nhận sửa trong kỳ khoá.
+    await updateDeliveryAction(1, INPUT, { overrideLocked: true });
+    expect(mockService.updateDelivery).toHaveBeenLastCalledWith(1, INPUT, { overrideLocked: true });
   });
 
   it("lỗi khoá kỳ (Error thuần) được trả nguyên văn", async () => {
@@ -65,7 +69,19 @@ describe("delivery actions", () => {
 
   it("MaterialScopeError (mốc chuyển đổi) và lỗi quyền được trả nguyên văn", async () => {
     mockService.softDeleteDelivery.mockRejectedValue(new MaterialScopeError("cutover_locked", "Ngày 15/10/2026 thuộc giai đoạn đã chuyển đổi"));
-    await expect(deleteDeliveryAction(5, 1)).resolves.toEqual({ ok: false, message: "Ngày 15/10/2026 thuộc giai đoạn đã chuyển đổi" });
+    await expect(deleteDeliveryAction(5, 1)).resolves.toEqual({
+      ok: false,
+      message: "Ngày 15/10/2026 thuộc giai đoạn đã chuyển đổi",
+      code: "cutover_locked",
+    });
+
+    // Kỳ đã ký mang mã riêng để lưới hỏi admin có muốn sửa vẫn sửa không.
+    mockService.updateDelivery.mockRejectedValue(new MaterialScopeError("signed_period", "Kỳ … đã được NCC ký xác nhận"));
+    await expect(updateDeliveryAction(5, INPUT)).resolves.toEqual({
+      ok: false,
+      message: "Kỳ … đã được NCC ký xác nhận",
+      code: "signed_period",
+    });
 
     mockRequest.mockRejectedValue(new ModuleRequestError("Forbidden"));
     await expect(deleteDeliveryAction(5, 1)).resolves.toEqual({ ok: false, message: "Forbidden" });

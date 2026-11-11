@@ -126,6 +126,7 @@ describe("material ledger actions — lỗi", () => {
     await expect(bulkUpsertMaterialOpeningBalancesAction([{ partyId: 3 }])).resolves.toEqual({
       ok: false,
       message: "Công trình chưa gán Chủ thể — gán ở Master data > Công trình",
+      code: "missing_entity",
     });
     expect(console.error).not.toHaveBeenCalled();
   });
