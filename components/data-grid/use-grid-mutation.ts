@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { DataGridHandlers, RowWithId } from "./types";
 
@@ -23,6 +23,18 @@ export function useGridMutation<T extends RowWithId>(
   const pending = useRef<Map<string, PendingEdit<T>>>(new Map());
   const inflight = useRef(0);
   const [dirty, setDirty] = useState(0);
+
+  // Nhận dữ liệu mới của server (sau router.refresh: sửa qua form, thêm phiếu, cột tính lại như
+  // Thành tiền…). So theo NỘI DUNG vì nhiều trang tạo lại mảng dòng mỗi lần render; chỉ thay khi không
+  // còn ô chờ lưu / đang lưu để không ghi đè giá trị người dùng vừa gõ (dirty về 0 sẽ chạy lại effect).
+  const sourceKey = useMemo(() => JSON.stringify(initialRows), [initialRows]);
+  const syncedKey = useRef(sourceKey);
+  useEffect(() => {
+    if (dirty > 0 || sourceKey === syncedKey.current) return;
+    syncedKey.current = sourceKey;
+    onRowsWillChange?.();
+    setRows(initialRows);
+  }, [sourceKey, dirty, initialRows, onRowsWillChange]);
 
   const recomputeDirty = useCallback(() => {
     setDirty(pending.current.size + inflight.current);
