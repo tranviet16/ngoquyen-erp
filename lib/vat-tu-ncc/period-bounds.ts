@@ -9,6 +9,8 @@
  *   4. Không chồng lấn kỳ chưa ký; liền kề: kỳ mới bắt đầu đúng ngày sau marker gần
  *      nhất, hoặc trùng khít một marker chưa ký (chốt lại idempotent). Marker đã có
  *      (selfId) phải bắt đầu ngay sau marker liền trước nó.
+ *   5. Theo tháng (mặc định): kỳ kết thúc ngày 26 và không dài quá một kỳ 27→26; bắt đầu ngày 27,
+ *      trừ kỳ đầu tiên ngay sau mốc số dư ban đầu / sau marker cũ lệch tháng (kỳ lẻ tới ngày 26).
  */
 
 export interface PeriodMarker {
@@ -64,6 +66,21 @@ export function standardPeriodContaining(d: Date): PeriodRangeDates {
   return { from, to: nextDay26(from) };
 }
 
+/**
+ * Chia khoảng [from, to] thành các tháng 27→26 (tháng đầu / cuối có thể lẻ theo biên khoảng).
+ * Kỳ đúng một tháng → một phần tử.
+ */
+export function monthlySlices(from: Date, to: Date): PeriodRangeDates[] {
+  const out: PeriodRangeDates[] = [];
+  let cur = from;
+  while (cur.getTime() <= to.getTime()) {
+    const end = new Date(Math.min(nextDay26(cur).getTime(), to.getTime()));
+    out.push({ from: cur, to: end });
+    cur = addDays(end, 1);
+  }
+  return out;
+}
+
 /** Marker có periodTo muộn nhất (ký hoặc chưa ký). */
 export function latestMarkerOf<T extends PeriodMarker>(markers: T[]): T | null {
   let latest: T | null = null;
@@ -78,6 +95,31 @@ const sameRange = (a: PeriodRangeDates, b: PeriodRangeDates) =>
   a.from.getTime() === b.from.getTime() && a.to.getTime() === b.to.getTime();
 
 /**
+ * Kỳ theo tháng: kết thúc đúng ngày 26 đầu tiên ≥ `from` (không dài quá một kỳ 27→26) và bắt đầu
+ * ngày 27 — trừ khi bắt đầu đúng ngày sau mốc số dư ban đầu hoặc ngày sau một marker có sẵn (kỳ lẻ
+ * đầu tiên, vd. sau số dư ngày 31/12 thì kỳ 01/01 – 26/01).
+ */
+export function monthlyPeriodError(range: PeriodRangeDates, ctx: PeriodBoundsContext): string | null {
+  const { from, to } = range;
+  const std = standardPeriodContaining(from);
+  const allowedOddStarts = [
+    ...(ctx.openingAsOf ? [addDays(ctx.openingAsOf, 1)] : []),
+    ...ctx.markers.map((m) => addDays(m.to, 1)),
+  ];
+  const startsOk = from.getUTCDate() === 27 || allowedOddStarts.some((d) => d.getTime() === from.getTime());
+  if (startsOk && to.getTime() === nextDay26(from).getTime()) return null;
+  return (
+    `Kỳ chốt phải theo tháng: từ ngày 27 tháng trước đến ngày 26 tháng sau ` +
+    `(vd. ${rangeLabel(std.from, std.to)}).`
+  );
+}
+
+export interface PeriodBoundsOptions {
+  /** Bắt buộc kỳ theo tháng 27→26 (mặc định true). Ký marker cũ lệch tháng thì tắt. */
+  requireMonthly?: boolean;
+}
+
+/**
  * Kiểm tra biên kỳ. Trả về thông báo lỗi tiếng Việt hoặc null khi hợp lệ.
  * `selfId`: marker đang được sửa/ký (bỏ khỏi so sánh chồng lấn).
  */
@@ -85,10 +127,18 @@ export function validatePeriodBounds(
   range: PeriodRangeDates,
   ctx: PeriodBoundsContext,
   selfId?: number,
+  opts: PeriodBoundsOptions = {},
 ): string | null {
   const { from, to } = range;
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return "Ngày kỳ không hợp lệ.";
   if (from.getTime() > to.getTime()) return "Từ ngày phải nhỏ hơn hoặc bằng đến ngày.";
+  if (opts.requireMonthly !== false) {
+    const monthly = monthlyPeriodError(range, {
+      ...ctx,
+      markers: ctx.markers.filter((m) => m.id !== selfId),
+    });
+    if (monthly) return monthly;
+  }
 
   // Kỳ mới trùng khít một marker chưa ký = chốt lại marker đó.
   let effectiveSelfId = selfId;
@@ -153,7 +203,8 @@ export function validatePeriodBounds(
  * Gợi ý kỳ tiếp theo.
  * - Có marker: `from` = ngày sau marker gần nhất (bắt buộc bởi quy tắc liền kề; không nhảy
  *   tới phiếu sớm nhất vì sẽ vi phạm liền kề), nâng lên ngày sau mốc số dư ban đầu nếu muộn hơn.
- * - Chưa có marker: `from` = max(ngày sau mốc số dư ban đầu, phiếu sớm nhất chưa có event).
+ * - Chưa có marker: `from` = max(ngày sau mốc số dư ban đầu, ngày 27 mở đầu kỳ tháng chứa phiếu
+ *   sớm nhất chưa có event) — kỳ theo tháng 27→26.
  * `to` = ngày 26 đầu tiên ≥ `from`. Trả null khi không có căn cứ nào.
  */
 export function suggestNextPeriod(input: {
@@ -164,7 +215,7 @@ export function suggestNextPeriod(input: {
   const candidates: Date[] = [];
   if (input.openingAsOf) candidates.push(addDays(input.openingAsOf, 1));
   if (input.latestMarkerTo) candidates.push(addDays(input.latestMarkerTo, 1));
-  else if (input.earliestOpenDeliveryDate) candidates.push(input.earliestOpenDeliveryDate);
+  else if (input.earliestOpenDeliveryDate) candidates.push(standardPeriodContaining(input.earliestOpenDeliveryDate).from);
   if (candidates.length === 0) return null;
   const from = new Date(Math.max(...candidates.map((d) => d.getTime())));
   return { from, to: nextDay26(from) };
