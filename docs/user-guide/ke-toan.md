@@ -67,6 +67,8 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
    - Số hoá đơn (bắt buộc khi loại Thuế hoá đơn)
 5. Click **Lưu**
 
+**Ghi trong giai đoạn khoá (chỉ admin)**: ở tab **Thanh toán** của NCC, admin ghi / sửa / xoá được chuyển khoản hoặc thuế hoá đơn có ngày ≤ 26/10/2026 hoặc rơi vào kỳ đã ký. Hệ thống hiện thông báo khoá kèm câu hỏi xác nhận; bấm OK thì dòng được ghi đúng ngày nhập, các bảng đối chiếu đã ký của cặp từ ngày đó trở đi được tính lại số (giữ ngày ký, ghi lại người sửa). Dòng sinh từ đợt thanh toán vẫn không sửa tay được; lưới Nhập liệu vẫn từ chối các ngày này.
+
 **Kế hoạch thanh toán** (`/thanh-toan/ke-hoach`): dòng loại vật tư phải chọn **công trình** trước. Chủ thể tự điền theo công trình và bị khoá. Đợt đóng sẽ ghi "Trả tiền" vào sổ của đúng cặp, với ngày là ngày đóng đợt.
 
 ### 3.4 Số dư ban đầu — theo cặp, khoá khi cặp có kỳ ký

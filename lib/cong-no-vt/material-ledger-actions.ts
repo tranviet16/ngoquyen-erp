@@ -20,6 +20,7 @@ import {
   patchMaterialTransaction,
   softDeleteMaterialTransaction,
   softDeleteMaterialTransactions,
+  type LockedLedgerOverride,
 } from "./material-ledger-service";
 import type { TransactionInput } from "./schemas";
 
@@ -31,10 +32,15 @@ type OpeningRow = Awaited<ReturnType<typeof patchMaterialOpeningBalance>>;
 
 // ── Sổ (ledger_transactions) ──────────────────────────────────────────────────
 
-export async function createMaterialTransactionAction(input: TransactionInput): Promise<ActionResult<{ id: number }>> {
+// `opts.overrideLocked`: admin đã xác nhận ghi trong kỳ đã ký / giai đoạn chuyển đổi (service kiểm admin).
+
+export async function createMaterialTransactionAction(
+  input: TransactionInput,
+  opts: LockedLedgerOverride = {},
+): Promise<ActionResult<{ id: number }>> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("cong-no-vt", { minLevel: "create", scope: "module" });
-    const row = await createMaterialTransaction(input);
+    const row = await createMaterialTransaction(input, opts);
     return { id: row.id };
   });
 }
@@ -42,10 +48,11 @@ export async function createMaterialTransactionAction(input: TransactionInput): 
 export async function patchMaterialTransactionAction(
   id: number,
   patch: Record<string, unknown>,
+  opts: LockedLedgerOverride = {},
 ): Promise<ActionResult<{ row: TransactionRow }>> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("cong-no-vt", { minLevel: "edit", scope: "module" });
-    return { row: await patchMaterialTransaction(id, patch) };
+    return { row: await patchMaterialTransaction(id, patch, opts) };
   });
 }
 
@@ -66,10 +73,10 @@ export async function bulkUpsertMaterialTransactionsAction(rows: BulkRows): Prom
   });
 }
 
-export async function softDeleteMaterialTransactionAction(id: number): Promise<ActionResult> {
+export async function softDeleteMaterialTransactionAction(id: number, opts: LockedLedgerOverride = {}): Promise<ActionResult> {
   return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("cong-no-vt", { minLevel: "edit", scope: "module" });
-    await softDeleteMaterialTransaction(id);
+    await softDeleteMaterialTransaction(id, opts);
     return {};
   });
 }

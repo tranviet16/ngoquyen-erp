@@ -74,7 +74,31 @@ describe("material ledger actions — kết quả thành công", () => {
     expect(mockRequest).toHaveBeenLastCalledWith("cong-no-vt", { minLevel: "edit", scope: "module" });
 
     await expect(softDeleteMaterialTransactionAction(7)).resolves.toEqual({ ok: true });
-    expect(mockService.softDeleteMaterialTransaction).toHaveBeenCalledWith(7);
+    expect(mockService.softDeleteMaterialTransaction).toHaveBeenCalledWith(7, {});
+  });
+
+  it("chuyển cờ overrideLocked của admin xuống service (service tự kiểm admin)", async () => {
+    mockService.createMaterialTransaction.mockResolvedValue({ id: 7, partyId: 3 });
+    await createMaterialTransactionAction(TX_INPUT, { overrideLocked: true });
+    expect(mockService.createMaterialTransaction).toHaveBeenCalledWith(TX_INPUT, { overrideLocked: true });
+
+    mockService.patchMaterialTransaction.mockResolvedValue({ id: 7 });
+    await patchMaterialTransactionAction(7, { amountTt: "1" }, { overrideLocked: true });
+    expect(mockService.patchMaterialTransaction).toHaveBeenCalledWith(7, { amountTt: "1" }, { overrideLocked: true });
+
+    await softDeleteMaterialTransactionAction(7, { overrideLocked: true });
+    expect(mockService.softDeleteMaterialTransaction).toHaveBeenCalledWith(7, { overrideLocked: true });
+  });
+
+  it("lỗi khoá kỳ trả kèm mã để client hỏi admin", async () => {
+    mockService.createMaterialTransaction.mockRejectedValue(
+      new MaterialScopeError("cutover_locked", "Ngày 24/10/2026 thuộc giai đoạn đã chuyển đổi từ Excel"),
+    );
+    await expect(createMaterialTransactionAction(TX_INPUT)).resolves.toEqual({
+      ok: false,
+      message: "Ngày 24/10/2026 thuộc giai đoạn đã chuyển đổi từ Excel",
+      code: "cutover_locked",
+    });
   });
 
   it("lưới sổ: patch admin trả row, bulk trả rows, xoá nhiều trả ok", async () => {

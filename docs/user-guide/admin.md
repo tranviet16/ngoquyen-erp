@@ -181,7 +181,7 @@ Mọi thao tác tạo/sửa/xóa được ghi vào Audit Log tự động, bao g
 | Không đăng nhập được | Kiểm tra email/mật khẩu. Liên hệ admin đặt lại mật khẩu |
 | Import báo lỗi "Unknown supplier" | Vào Danh Mục > Nhà Cung Cấp, thêm NCC trước khi import |
 | "Công trình chưa gán Chủ thể" khi ghi công nợ vật tư / import | Gán Chủ thể ở Dữ liệu nền tảng > Dự Án (cột Chủ thể) rồi thử lại / **Lưu & tính lại** |
-| Ghi vật tư ngày ≤ 26/10/2026 bị từ chối | Đúng thiết kế sau import chuyển đổi; chênh lệch ghi bằng điều chỉnh có ngày sau 26/10/2026 |
+| Ghi vật tư ngày ≤ 26/10/2026 bị từ chối | Đúng thiết kế sau import chuyển đổi; chênh lệch ghi bằng điều chỉnh có ngày sau 26/10/2026. Admin vẫn ghi được phiếu ngày và chuyển khoản / thuế HĐ (tab Thanh toán của NCC) sau khi xác nhận — bảng đối chiếu đã ký được tính lại |
 | Dữ liệu không hiện sau khi lưu | Tải lại trang (F5). Nếu vẫn không hiện liên hệ admin |
 | Lỗi 403 Forbidden | Tài khoản không đủ quyền. Liên hệ admin nâng cấp vai trò |
 | Xuất Excel không tải được | Kiểm tra browser popup blocker. Cho phép download từ domain |

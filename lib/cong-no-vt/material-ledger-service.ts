@@ -8,7 +8,10 @@ import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-servi
 import type { MonthlyByPartyRow } from "@/lib/ledger/ledger-types";
 import { assertMaterialTypeWritable, collectSupplierIds, lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
 import { MISSING_PROJECT_MESSAGE, requireProjectId } from "@/lib/vat-tu-ncc/pair-scope";
-import { AUTO_GENERATED_GUARD } from "@/lib/ledger/transaction-classification";
+import { refreezeSignedPeriodsFrom, type LockedEditTx } from "@/lib/vat-tu-ncc/locked-delivery-edit";
+import { formatDmy } from "@/lib/vat-tu-ncc/period-bounds";
+import { toBusinessDateUtc } from "@/lib/ledger/business-date";
+import { AUTO_GENERATED_GUARD, TRANSACTION_TYPE_LABELS } from "@/lib/ledger/transaction-classification";
 import { parseReportWindow, type ReportWindow } from "@/lib/ledger/report-period";
 import { transactionSchema, openingBalanceSchema } from "./schemas";
 import type { TransactionInput, OpeningBalanceInput } from "./schemas";
@@ -16,6 +19,8 @@ import type { TransactionInput, OpeningBalanceInput } from "./schemas";
 const REVALIDATE_PATHS = ["/cong-no-vt", "/cong-no-vt/nhap-lieu", "/cong-no-vt/so-du-ban-dau", "/cong-no-vt/bao-cao-thang", "/cong-no-vt/chi-tiet", "/cong-no-vt/tong-hop"];
 
 const service = new LedgerService("material");
+/** Chỉ dùng sau `requireActiveAdmin` + xác nhận của admin (xem LockedLedgerOverride). */
+const adminOverrideService = new LedgerService("material", { adminOverride: true });
 
 /** Giao dịch bulk chạm nhiều dòng + khoá advisory → cần thời gian dài hơn mặc định 5s. */
 const LONG_TX_OPTIONS = { timeout: 60_000, maxWait: 10_000 } as const;
@@ -49,10 +54,54 @@ export async function listMaterialTransactions(filter?: Parameters<typeof servic
   return service.list(filter);
 }
 
-export async function createMaterialTransaction(input: TransactionInput) {
+/**
+ * Admin đã xác nhận cảnh báo "kỳ đã ký / giai đoạn chuyển đổi từ Excel" và vẫn muốn ghi / sửa / xoá
+ * dòng sổ (tab Thanh toán của NCC): bỏ qua khoá kỳ, ghi đúng ngày nghiệp vụ, rồi đông cứng lại các kỳ
+ * đã ký của cặp từ ngày sớm nhất bị đụng tới (số đầu kỳ của kỳ sau lấy từ kỳ trước). Server tự kiểm
+ * admin — không tin cờ từ client. Dòng sinh từ đợt thanh toán / phiếu vẫn không sửa tay được.
+ */
+export interface LockedLedgerOverride {
+  overrideLocked?: boolean;
+}
+
+type LedgerPlace = { partyId: number; projectId: number | null; date: Date; transactionType: string };
+
+const placeSelect = { partyId: true, projectId: true, date: true, transactionType: true } as const;
+
+/** Đông cứng lại kỳ đã ký của mọi cặp bị đụng (chỗ cũ + chỗ mới), mỗi cặp từ ngày sớm nhất. */
+async function refreezeTouchedPairs(client: LockedEditTx, places: LedgerPlace[], reason: string, adminUserId: string) {
+  const fromByPair = new Map<string, { supplierId: number; projectId: number; date: Date }>();
+  for (const p of places) {
+    const projectId = requireProjectId(p.projectId);
+    const key = `${p.partyId}|${projectId}`;
+    const prev = fromByPair.get(key);
+    if (!prev || p.date < prev.date) fromByPair.set(key, { supplierId: p.partyId, projectId, date: p.date });
+  }
+  for (const p of fromByPair.values()) {
+    await refreezeSignedPeriodsFrom(client, p.supplierId, p.projectId, p.date, { reason, adminUserId });
+  }
+}
+
+/** Lý do đông cứng lại (ghi vào audit của bảng đối chiếu). */
+function describeAdminLedgerWrite(verb: string, place: LedgerPlace, id: number) {
+  const label = TRANSACTION_TYPE_LABELS[place.transactionType as keyof typeof TRANSACTION_TYPE_LABELS] ?? place.transactionType;
+  return `Admin ${verb} ${label} ngày ${formatDmy(toBusinessDateUtc(place.date))} (#${id}) trong giai đoạn khoá`;
+}
+
+export async function createMaterialTransaction(input: TransactionInput, opts: LockedLedgerOverride = {}) {
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "create", scope: "module" });
   const data = transactionSchema.parse(input);
-  const tx = await service.create(data);
+  if (!opts.overrideLocked) {
+    const tx = await service.create(data);
+    revalidateAll([tx.partyId]);
+    return tx;
+  }
+  const adminUserId = await requireActiveAdmin();
+  const tx = await prisma.$transaction(async (client) => {
+    const row = await adminOverrideService.create(data, client);
+    await refreezeTouchedPairs(client, [row], describeAdminLedgerWrite("ghi", row, row.id), adminUserId);
+    return row;
+  }, LONG_TX_OPTIONS);
   revalidateAll([tx.partyId]);
   return tx;
 }
@@ -67,11 +116,25 @@ export async function updateMaterialTransaction(id: number, input: TransactionIn
   return tx;
 }
 
-export async function softDeleteMaterialTransaction(id: number) {
+export async function softDeleteMaterialTransaction(id: number, opts: LockedLedgerOverride = {}) {
   const current = await prisma.ledgerTransaction.findUnique({ where: { id }, select: { ledgerType: true, partyId: true } });
   if (!current || current.ledgerType !== "material") throw new Error(`Giao dịch #${id} không tồn tại`);
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "edit", scope: "module" });
-  await service.softDelete(id);
+  if (!opts.overrideLocked) {
+    await service.softDelete(id);
+    revalidateAll([current.partyId]);
+    return;
+  }
+  const adminUserId = await requireActiveAdmin();
+  await prisma.$transaction(async (client) => {
+    // Khoá NCC rồi đọc lại: chỗ được đông cứng lại là chỗ của dòng đúng lúc xoá.
+    await lockSuppliers(client, [current.partyId]);
+    const before = await client.ledgerTransaction.findUnique({ where: { id }, select: placeSelect });
+    if (!before) throw new Error(`Giao dịch #${id} không tồn tại`);
+    await lockSuppliers(client, [before.partyId]);
+    await adminOverrideService.softDelete(id, client);
+    await refreezeTouchedPairs(client, [before], describeAdminLedgerWrite("xoá", before, id), adminUserId);
+  }, LONG_TX_OPTIONS);
   revalidateAll([current.partyId]);
 }
 
@@ -92,6 +155,7 @@ async function patchMaterialTransactionInternal(
   client: LedgerWriteClient,
   id: number,
   patch: Record<string, unknown>,
+  ledger: LedgerService = service,
 ) {
   const current = await client.ledgerTransaction.findUnique({ where: { id } });
   if (!current || current.ledgerType !== "material" || current.deletedAt) throw new Error(`Giao dịch #${id} không tồn tại`);
@@ -120,18 +184,34 @@ async function patchMaterialTransactionInternal(
   };
 
   const validated = transactionSchema.parse(merged);
-  return service.update(id, validated, client);
+  return ledger.update(id, validated, client);
 }
 
 /**
  * Server action: guard ACL rồi patch. Không nhận tham số client/authorized từ phía gọi —
  * đường bỏ qua kiểm quyền chỉ tồn tại trong hàm nội bộ (không export) cho bulk upsert.
+ * `opts.overrideLocked`: xem LockedLedgerOverride (server kiểm admin).
  */
-export async function patchMaterialTransaction(id: number, patch: Record<string, unknown>) {
+export async function patchMaterialTransaction(id: number, patch: Record<string, unknown>, opts: LockedLedgerOverride = {}) {
   await requireReleasedModuleRequest("cong-no-vt", { minLevel: "edit", scope: "module" });
-  const tx = await patchMaterialTransactionInternal(prisma, id, patch);
-  revalidateAll([tx.partyId]);
-  return tx;
+  if (!opts.overrideLocked) {
+    const tx = await patchMaterialTransactionInternal(prisma, id, patch);
+    revalidateAll([tx.partyId]);
+    return tx;
+  }
+  const adminUserId = await requireActiveAdmin();
+  const { before, after } = await prisma.$transaction(async (client) => {
+    // Khoá NCC cũ (và mới nếu đổi) rồi đọc lại chỗ cũ dưới khoá; update của service khoá lại (tái nhập).
+    const peek = await client.ledgerTransaction.findUnique({ where: { id }, select: { partyId: true } });
+    await lockSuppliers(client, collectSupplierIds([peek?.partyId], [patch.partyId]));
+    const old = await client.ledgerTransaction.findUnique({ where: { id }, select: placeSelect });
+    if (!old) throw new Error(`Giao dịch #${id} không tồn tại`);
+    const row = await patchMaterialTransactionInternal(client, id, patch, adminOverrideService);
+    await refreezeTouchedPairs(client, [old, row], describeAdminLedgerWrite("sửa", row, id), adminUserId);
+    return { before: old, after: row };
+  }, LONG_TX_OPTIONS);
+  revalidateAll([before.partyId, after.partyId]);
+  return after;
 }
 
 /**
