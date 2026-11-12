@@ -109,10 +109,8 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
         }}
       />
 
-      {periodError ? (
+      {periodError && (
         <p role="alert" className="text-sm text-destructive">{periodError}. Đang hiển thị toàn bộ.</p>
-      ) : (
-        <p className="text-sm text-muted-foreground">Kỳ xem: {period.label}</p>
       )}
 
       <DetailReportTable rows={rows} subtotals={subtotals} partyLabel="NCC" />

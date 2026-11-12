@@ -31,7 +31,7 @@ export function BaoCaoThangFilterNc({ currentYear, currentMonth, currentEntityId
   }
 
   return (
-    <div className="flex gap-4 items-end flex-wrap">
+    <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
       <div className="flex flex-col gap-1.5">
         <Label>Tháng / Năm</Label>
         <MonthYearPicker
@@ -43,14 +43,14 @@ export function BaoCaoThangFilterNc({ currentYear, currentMonth, currentEntityId
       <div className="flex flex-col gap-1.5">
         <Label>Chủ thể</Label>
         <select
-          className="h-10 rounded-md border border-input bg-background text-foreground px-3 text-sm"
+          className="h-9 rounded-md border border-input bg-background text-foreground px-3 text-sm shadow-sm"
           value={entityId}
           onChange={(e) => setEntityId(e.target.value)}
         >
           {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
       </div>
-      <Button onClick={handleFilter}>Xem</Button>
+      <Button size="lg" onClick={handleFilter}>Xem</Button>
     </div>
   );
 }

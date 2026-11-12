@@ -25,7 +25,7 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
           <h1 className="text-2xl font-bold">Báo cáo Sản lượng</h1>
           <p className="text-sm text-muted-foreground">Tháng {month}/{year} — SL nghiệm thu nội bộ theo lô</p>
         </div>
-        <div className="no-print flex flex-wrap gap-2">
+        <div className="no-print flex flex-wrap items-center gap-2">
           <ExcelExportButton
             template="sl-dt"
             params={{ year, month }}
@@ -39,7 +39,7 @@ export default async function BaoCaoSlPage({ searchParams }: Props) {
       <form className="flex gap-2 items-center flex-wrap">
         <label className="text-sm text-muted-foreground">Kỳ:</label>
         <MonthYearPicker year={year} month={month} yearOptions={yearOptions} />
-        <button type="submit" className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Xem</button>
+        <button type="submit" className="h-9 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Xem</button>
       </form>
 
       <SortableSanLuongReportTable rows={rows} year={year} month={month} />

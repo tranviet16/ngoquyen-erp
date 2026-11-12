@@ -80,7 +80,7 @@ export function MonthYearPicker({
           setOpen((o) => !o);
         }}
         className={cn(
-          "inline-flex items-center gap-2 h-10 px-3 rounded-md border border-input bg-background text-sm font-medium",
+          "inline-flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-background text-sm font-medium shadow-sm",
           "hover:bg-accent hover:text-accent-foreground transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
           open && "ring-2 ring-ring ring-offset-1"

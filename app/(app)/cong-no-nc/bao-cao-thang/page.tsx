@@ -42,12 +42,12 @@ export default async function BaoCaoThangNcPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Báo cáo tháng - Nhân công</h1>
           <p className="text-sm text-muted-foreground">Phải Trả Đầu Kỳ / PS / Phải Trả Cuối Kỳ theo đội thi công</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExcelExportButton
             template="cong-no-monthly"
             params={{ ledgerType: "labor", year, month, entityId }}
