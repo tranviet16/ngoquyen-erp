@@ -55,7 +55,7 @@ export function ExcelExportButton({ template, params, label = "Xuất Excel", fi
     <button
       onClick={handleExport}
       disabled={loading}
-      className="no-print px-3 py-1.5 text-sm border rounded hover:bg-muted disabled:opacity-50 flex items-center gap-1.5"
+      className="no-print inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-3 text-sm hover:bg-muted disabled:opacity-50"
     >
       <span>{loading ? "Đang xuất..." : label}</span>
     </button>
@@ -114,15 +114,15 @@ export function PrintButton({ label = "Xuất PDF (In)" }: { label?: string }) {
         <option value="landscape">Ngang</option>
         <option value="portrait">Dọc</option>
       </select>
-      <label className="flex h-8 items-center gap-1 rounded border px-2 text-xs">
+      <label className="flex h-8 items-center gap-1 whitespace-nowrap rounded border px-2 text-xs">
         <input type="checkbox" checked={fitWidth} onChange={(e) => setFitWidth(e.target.checked)} />
         Vừa ngang
       </label>
-      <label className="flex h-8 items-center gap-1 rounded border px-2 text-xs">
+      <label className="flex h-8 items-center gap-1 whitespace-nowrap rounded border px-2 text-xs">
         <input type="checkbox" checked={compact} onChange={(e) => setCompact(e.target.checked)} />
         Gọn
       </label>
-      <button onClick={handlePrint} className="px-3 py-1.5 text-sm border rounded hover:bg-muted">
+      <button onClick={handlePrint} className="inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded border px-3 text-sm hover:bg-muted">
         {label}
       </button>
     </div>

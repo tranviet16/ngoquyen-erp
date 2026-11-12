@@ -63,15 +63,16 @@ export default async function TongHopCongTrinhPage({ searchParams }: PageProps) 
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Tổng hợp công nợ vật tư theo công trình</h1>
           <p className="text-sm text-muted-foreground">
-            Kỳ xem: {period.label} · Nhóm {PIVOT_GROUP_LABELS[groupBy].title} (TT = thực tế, HĐ = hóa đơn).
+            {/* Kỳ xem đã hiện ở bộ lọc; chỉ in ra khi xuất PDF (bộ lọc không in). */}
+            <span className="hidden print:inline">Kỳ xem: {period.label} · </span>Nhóm {PIVOT_GROUP_LABELS[groupBy].title} (TT = thực tế, HĐ = hóa đơn).
           </p>
         </div>
         {!paramError && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ExcelExportButton
               template="cong-no-cong-trinh"
               params={{ from, to, groupBy, entityIds }}

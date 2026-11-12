@@ -32,7 +32,9 @@ const PRESET_LABELS: Record<ReportPeriodPreset, string> = {
 };
 
 const SELECT_CLS =
-  "h-10 rounded-md border border-input bg-background text-foreground px-3 text-sm";
+  "h-9 rounded-md border border-input bg-background text-foreground px-3 text-sm shadow-sm";
+/** Ô ngày cao bằng các ô chọn khác của bộ lọc (DateInput mặc định h-8). */
+const DATE_CLS = "w-40 [&_input]:h-9";
 
 interface Props {
   value: ReportPeriodValue;
@@ -109,9 +111,11 @@ export function ReportPeriodSelector({ value, onChange, presets = REPORT_PERIOD_
     );
   }
 
+  // `contents`: các ô chọn nằm thẳng trong hàng flex của bộ lọc cha (cùng đáy với ô bên cạnh);
+  // dòng "Kỳ xem" chiếm trọn một dòng riêng ở cuối hàng (basis-full + order-last).
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-end gap-3">
+    <div className="contents">
+      <div className="contents">
         <div className="flex flex-col gap-1.5">
           <Label>Mốc thời gian</Label>
           <select
@@ -185,20 +189,20 @@ export function ReportPeriodSelector({ value, onChange, presets = REPORT_PERIOD_
           <>
             <div className="flex flex-col gap-1.5">
               <Label>Từ ngày</Label>
-              <DateInput value={value.from ?? ""} onChange={(iso) => set({ from: iso })} />
+              <DateInput className={DATE_CLS} value={value.from ?? ""} onChange={(iso) => set({ from: iso })} />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Đến ngày</Label>
-              <DateInput value={value.to ?? ""} onChange={(iso) => set({ to: iso })} />
+              <DateInput className={DATE_CLS} value={value.to ?? ""} onChange={(iso) => set({ to: iso })} />
             </div>
           </>
         )}
       </div>
 
       {"error" in resolved ? (
-        <p role="alert" className="text-xs text-destructive">{resolved.error}</p>
+        <p role="alert" className="order-last basis-full text-xs text-destructive">{resolved.error}</p>
       ) : (
-        <p className="text-xs text-muted-foreground">
+        <p className="order-last basis-full text-xs text-muted-foreground">
           Kỳ xem: <span className="font-medium text-foreground">{resolved.label}</span>
           {preset === "ncc" && " (cửa sổ chung, không thay cho kỳ chốt riêng từng NCC)"}
         </p>

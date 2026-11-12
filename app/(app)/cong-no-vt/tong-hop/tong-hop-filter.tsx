@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { ControlledMultiSelect, type Option } from "@/components/ledger/controlled-multi-select";
 import {
   ReportPeriodSelector,
@@ -43,10 +44,10 @@ export function TongHopFilter({ currentPeriod, entities, selectedEntityIds, hide
 
   return (
     <div className="rounded-md border bg-muted/20 p-4 space-y-4">
-      <div className="flex flex-wrap items-start gap-4">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
         <ReportPeriodSelector value={period} onChange={setPeriod} />
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium">Chủ thể</label>
+          <Label>Chủ thể</Label>
           <ControlledMultiSelect
             options={entities}
             selected={entityIds}

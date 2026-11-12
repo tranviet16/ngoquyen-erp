@@ -29,7 +29,7 @@ export default async function TienDoXdPage({ searchParams }: Props) {
       <form className="flex gap-2 items-center flex-wrap">
         <label className="text-sm text-muted-foreground">Kỳ:</label>
         <MonthYearPicker year={year} month={month} yearOptions={yearOptions} />
-        <button type="submit" className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Xem</button>
+        <button type="submit" className="h-9 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Xem</button>
       </form>
 
       <TienDoXdClient rows={rows} />
