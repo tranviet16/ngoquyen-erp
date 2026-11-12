@@ -207,8 +207,11 @@ async function removeSlipEvent(tx: LockedEditTx, deliveryId: number): Promise<Ad
   return "posted";
 }
 
-/** Đông cứng lại mọi kỳ đã ký của cặp có ngày cuối ≥ `date`, theo thứ tự thời gian. */
-async function refreezeSignedPeriodsFrom(
+/**
+ * Đông cứng lại mọi kỳ đã ký của cặp có ngày cuối ≥ `date`, theo thứ tự thời gian. Dùng chung cho
+ * admin sửa phiếu ngày và admin ghi thanh toán / thuế HĐ trong giai đoạn khoá (material-ledger-service).
+ */
+export async function refreezeSignedPeriodsFrom(
   tx: LockedEditTx,
   supplierId: number,
   projectId: number,
