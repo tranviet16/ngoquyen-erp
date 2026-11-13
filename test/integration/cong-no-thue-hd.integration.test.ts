@@ -70,6 +70,16 @@ async function seed() {
     },
   });
 
+  // Kỳ tạo trước khi ghi sổ: ghi sổ vào tháng chưa có kỳ sẽ tự tạo kỳ tháng (auto-monthly-period.ts).
+  const recon = await prisma.supplierReconciliation.create({
+    data: {
+      supplierId: supplier.id,
+      projectId: project.id,
+      periodFrom: new Date("2026-04-27"),
+      periodTo: new Date("2026-05-26"),
+    },
+  });
+
   const ledger = new LedgerService("material");
   const common = {
     entityId: entity.id,
@@ -87,15 +97,6 @@ async function seed() {
     invoiceNo: "00000232",
     invoiceDate: "2026-05-29",
     content: "Thuế HĐ: 00000232 ngày 29/5/2026",
-  });
-
-  const recon = await prisma.supplierReconciliation.create({
-    data: {
-      supplierId: supplier.id,
-      projectId: project.id,
-      periodFrom: new Date("2026-04-27"),
-      periodTo: new Date("2026-05-26"),
-    },
   });
 
   return { entity, supplier, project, recon };

@@ -20,8 +20,13 @@ import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
 export interface ReconListRow {
   id: number;
+  /** Tháng hiển thị (27→26). */
   periodFrom: string;
   periodTo: string;
+  /** Một tháng của kỳ dài hơn một tháng — link mở bảng đối chiếu của riêng tháng đó. */
+  monthOfLongerPeriod: boolean;
+  /** Tháng cuối của kỳ: nơi đặt thao tác Xoá / Gỡ ký của cả kỳ. */
+  lastMonthOfPeriod: boolean;
   opening: number;
   totalIn: number;
   totalPaid: number;
@@ -115,7 +120,7 @@ export function DoiChieuClient({ supplierId, projectId, initialData, canCreate, 
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Đối chiếu công nợ</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Số liệu tính tự động từ sổ công nợ vật tư. Kỳ đã ký được đông cứng và khóa ghi.
+            Số liệu tính tự động từ sổ công nợ vật tư, hiển thị theo tháng (27 → 26). Kỳ đã ký được đông cứng và khóa ghi.
           </p>
         </div>
         <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>
@@ -146,9 +151,16 @@ export function DoiChieuClient({ supplierId, projectId, initialData, canCreate, 
               </td></tr>
             )}
             {reconSort.sortedRows.map((r) => (
-              <tr key={r.id} className="border-t">
+              <tr key={`${r.id}-${r.periodFrom}`} className="border-t">
                 <td className="px-3 py-2 whitespace-nowrap">
-                  <Link href={`/vat-tu-ncc/${supplierId}/doi-chieu/${r.id}?projectId=${projectId}`} className="text-primary hover:underline">
+                  <Link
+                    href={
+                      r.monthOfLongerPeriod
+                        ? `/vat-tu-ncc/${supplierId}/doi-chieu/${r.id}?projectId=${projectId}&from=${r.periodFrom}&to=${r.periodTo}`
+                        : `/vat-tu-ncc/${supplierId}/doi-chieu/${r.id}?projectId=${projectId}`
+                    }
+                    className="text-primary hover:underline"
+                  >
                     {formatDate(r.periodFrom)} – {formatDate(r.periodTo)}
                   </Link>
                 </td>
@@ -172,6 +184,8 @@ export function DoiChieuClient({ supplierId, projectId, initialData, canCreate, 
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   {r.cutoverMarker
                     ? <span className="text-xs text-muted-foreground">Kỳ chuyển đổi (khóa)</span>
+                    : !r.lastMonthOfPeriod
+                    ? null
                     : r.signedBySupplier
                     ? isAdmin && (
                         <Button variant="outline" size="sm" onClick={() => handleUnsign(r.id)}>Gỡ ký</Button>

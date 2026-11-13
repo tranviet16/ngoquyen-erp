@@ -229,11 +229,29 @@ export async function headerNames(
 export async function freezeReconciliationSnapshot(
   db: ReconFreezeClient,
   reconId: number,
-  opts: { auditUserId?: string | null } = {},
+  opts: {
+    auditUserId?: string | null;
+    /**
+     * Đông cứng LẠI một kỳ đã ký sau khi admin sửa phiếu trong giai đoạn khoá: tính lại số từ sổ,
+     * GIỮ ngày ký cũ và ghi audit `refrozen_after_admin_edit` kèm số trước / sau và lý do.
+     */
+    refreeze?: { reason: string };
+  } = {},
 ): Promise<ReconSnapshot> {
   const recon = await db.supplierReconciliation.findFirst({
     where: { id: reconId, deletedAt: null },
-    select: { supplierId: true, projectId: true, periodFrom: true, periodTo: true, importRunId: true },
+    select: {
+      supplierId: true,
+      projectId: true,
+      periodFrom: true,
+      periodTo: true,
+      importRunId: true,
+      signedDate: true,
+      openingBalance: true,
+      totalIn: true,
+      totalPaid: true,
+      closingBalance: true,
+    },
   });
   if (!recon) throw new Error(`Kỳ đối chiếu #${reconId} không tồn tại`);
   const from = toBusinessDateUtc(recon.periodFrom);
@@ -243,7 +261,8 @@ export async function freezeReconciliationSnapshot(
   const names = await headerNames(recon.supplierId, recon.projectId, from, to, db);
   const snapshot: ReconSnapshot = { ...computed, ...names };
 
-  const signedDate = new Date();
+  const now = new Date();
+  const signedDate = opts.refreeze && recon.signedDate ? recon.signedDate : now;
   const totals = {
     openingBalance: new Prisma.Decimal(computed.opening),
     totalIn: new Prisma.Decimal(computed.totalIn),
@@ -258,7 +277,7 @@ export async function freezeReconciliationSnapshot(
         signedBySupplier: true,
         signedDate,
         signedSnapshotJson: snapshot as unknown as Prisma.InputJsonValue,
-        updatedAt: signedDate,
+        updatedAt: now,
       },
     }),
   );
@@ -273,8 +292,23 @@ export async function freezeReconciliationSnapshot(
       tableName: "SupplierReconciliation",
       recordId: String(reconId),
       action: "update",
+      ...(opts.refreeze
+        ? {
+            beforeJson: {
+              openingBalance: Number(recon.openingBalance ?? 0),
+              totalIn: Number(recon.totalIn ?? 0),
+              totalPaid: Number(recon.totalPaid ?? 0),
+              closingBalance: Number(recon.closingBalance ?? 0),
+            },
+          }
+        : {}),
       afterJson: {
-        event: recon.importRunId != null ? "cutover_marker_signed" : "signed",
+        event: opts.refreeze
+          ? "refrozen_after_admin_edit"
+          : recon.importRunId != null
+            ? "cutover_marker_signed"
+            : "signed",
+        ...(opts.refreeze ? { reason: opts.refreeze.reason } : {}),
         supplierId: recon.supplierId,
         projectId: recon.projectId,
         importRunId: recon.importRunId,

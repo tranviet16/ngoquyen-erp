@@ -152,11 +152,11 @@ describe("vat-tu-ncc theo công trình (integration)", () => {
     expect(byId.get(ids.supplierA.id)!.debt).toEqual({ tt: "27200000", hd: "0" });
     expect(byId.get(ids.supplierB.id)!.debt).toEqual({ tt: "1000000", hd: "400000" });
 
-    // Số phiếu, kỳ gần nhất của cặp: chốt → chưa ký, ký → đã ký.
+    // Số phiếu, kỳ gần nhất của cặp: khoản trả 02/11 tự tạo kỳ tháng 27/10 – 26/11 (chưa ký), ký → đã ký.
     expect(byId.get(ids.supplierA.id)).toMatchObject({
       deliveryCount: 2,
       lastDeliveryDate: "2026-10-12",
-      latestPeriod: { periodFrom: K.from, periodTo: K.to, status: "unsigned" },
+      latestPeriod: { periodFrom: "2026-10-27", periodTo: "2026-11-26", status: "unsigned" },
     });
     expect(byId.get(ids.supplierB.id)).toMatchObject({ deliveryCount: 1, latestPeriod: null });
     const [marker] = await listReconciliationsDerived(ids.supplierA.id, ids.projectX.id);

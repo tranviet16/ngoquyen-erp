@@ -138,14 +138,16 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
 
 ### 3.9 Chốt kỳ và ký — theo cặp NCC × công trình
 
-Chốt kỳ xác nhận công nợ với NCC tại **một công trình**. Ký kỳ của NCC A tại công trình X không khoá phiếu của A tại công trình Y. Quy trình:
+Chốt kỳ xác nhận công nợ với NCC tại **một công trình**. Ký kỳ của NCC A tại công trình X không khoá phiếu của A tại công trình Y.
+
+Kỳ tháng **tự tạo**: khi có phiếu ngày (có đơn giá), chuyển khoản, thuế HĐ hay điều chỉnh sau mốc chuyển đổi rơi vào tháng chưa có kỳ của cặp (tới hết tháng hiện tại), hệ thống tự tạo kỳ 27→26 đó ở trạng thái **Chưa ký** và ghi phiếu có giá của tháng vào công nợ ngay. Bấm **Chốt kỳ** chỉ còn cần khi muốn gán / sửa đơn giá hàng loạt, hoặc cho phiếu ghi trước cho tháng sau. Ký vẫn làm tay. Quy trình:
 
 1. Menu → **Vật tư – Nhà cung cấp** → **Theo công trình →** → chọn công trình → chọn NCC (hoặc vào trang NCC rồi chọn công trình ở thanh "NCC × Công trình") → tab **Chốt kỳ**. Thiếu công trình thì trang hiện bộ chọn công trình.
 2. Bộ chọn **Từ ngày → Đến ngày** (tuỳ chọn):
    - Mặc định gợi ý: từ ngày sau kỳ gần nhất của cặp (sau go-live là 27/10/2026), hoặc phiếu sớm nhất chưa chốt → ngày 26 kế tiếp
    - **Nguyên tắc liền kề**: kỳ mới phải bắt đầu đúng ngày hôm sau kỳ gần nhất đã có của cặp (ký hoặc chưa ký, kể cả "Kỳ chuyển đổi (khóa)")
-   - Kỳ **Kỳ chuẩn** là 27 tháng trước → 26 tháng chọn
-3. Xem **Excel label** nhập: vd. "26/5→26/6" → **nhập là "27/5→26/6"** (hệ thống chuẩn hoá lên 27)
+   - **Bắt buộc theo tháng**: kỳ là 27 tháng trước → 26 tháng sau, không gộp nhiều tháng (chọn "Từ ngày" thì "Đến ngày" tự nhảy về ngày 26). Ngoại lệ: kỳ lẻ đầu tiên ngay sau số dư ban đầu của cặp
+3. Xem **Excel label** nhập: vd. "26/5→26/6" → **nhập là "27/5→26/6"** (nhãn lệch ngày 27 bị từ chối)
 4. Gán **đơn giá** cho từng phiếu ngày (auto-suggest từ báo giá hiệu lực)
 5. Click **Chốt kỳ** 
    - Kiểm tra: mọi phiếu trong kỳ phải có sự kiện (dòng giao dịch sổ cái)

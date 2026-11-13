@@ -12,42 +12,53 @@
  */
 
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
-import { createDelivery, updateDelivery, softDeleteDelivery } from "./delivery-service";
+import { createDelivery, updateDelivery, softDeleteDelivery, type DeliveryLedgerStatus } from "./delivery-service";
 import { runAction, type ActionResult } from "./action-result";
 import type { DeliveryInput } from "./schemas";
 
 export type DeliveryActionResult = ActionResult;
+/** Thêm / sửa phiếu còn trả phiếu đã vào công nợ chưa, để lưới báo cho người nhập. */
+export type DeliverySaveResult = ActionResult<{ ledgerStatus: DeliveryLedgerStatus }>;
 
 const GENERIC_MESSAGE = "Lỗi hệ thống khi lưu phiếu — thử lại hoặc liên hệ admin.";
+const LOG_TAG = "vat-tu-ncc.delivery-actions";
 
-function run(action: () => Promise<unknown>): Promise<DeliveryActionResult> {
-  return runAction(
-    "vat-tu-ncc.delivery-actions",
-    async () => {
-      await action();
-      return {};
-    },
-    GENERIC_MESSAGE,
-  );
-}
-
-export async function createDeliveryAction(input: DeliveryInput): Promise<DeliveryActionResult> {
-  return run(async () => {
+/**
+ * `opts.overrideLocked` (thêm / sửa / xoá): admin đã xác nhận thao tác trên phiếu trong kỳ đã ký /
+ * kỳ chuyển đổi (lần gọi thứ hai sau khi lần đầu trả `code: "signed_period" | "cutover_locked"`).
+ * Server tự kiểm admin.
+ */
+export async function createDeliveryAction(
+  input: DeliveryInput,
+  opts?: { overrideLocked?: boolean },
+): Promise<DeliverySaveResult> {
+  return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "create", scope: "module" });
-    await createDelivery(input);
-  });
+    const { ledgerStatus } = await createDelivery(input, { overrideLocked: opts?.overrideLocked === true });
+    return { ledgerStatus };
+  }, GENERIC_MESSAGE);
 }
 
-export async function updateDeliveryAction(id: number, input: DeliveryInput): Promise<DeliveryActionResult> {
-  return run(async () => {
+export async function updateDeliveryAction(
+  id: number,
+  input: DeliveryInput,
+  opts?: { overrideLocked?: boolean },
+): Promise<DeliverySaveResult> {
+  return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    await updateDelivery(id, input);
-  });
+    const { ledgerStatus } = await updateDelivery(id, input, { overrideLocked: opts?.overrideLocked === true });
+    return { ledgerStatus };
+  }, GENERIC_MESSAGE);
 }
 
-export async function deleteDeliveryAction(id: number, supplierId: number): Promise<DeliveryActionResult> {
-  return run(async () => {
+export async function deleteDeliveryAction(
+  id: number,
+  supplierId: number,
+  opts?: { overrideLocked?: boolean },
+): Promise<DeliveryActionResult> {
+  return runAction(LOG_TAG, async () => {
     await requireReleasedModuleRequest("vat-tu-ncc", { minLevel: "edit", scope: "module" });
-    await softDeleteDelivery(id, supplierId);
-  });
+    await softDeleteDelivery(id, supplierId, { overrideLocked: opts?.overrideLocked === true });
+    return {};
+  }, GENERIC_MESSAGE);
 }
