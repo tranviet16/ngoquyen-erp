@@ -1,9 +1,9 @@
 /**
- * Integration test: chốt kỳ với biên `[from, to]` tuỳ chọn + khoá advisory theo NCC.
+ * Integration test: chốt kỳ theo tháng 27→26 (kỳ lẻ đầu tiên sau số dư ban đầu) + khoá advisory theo NCC.
  * Fixture Nam Hương (Excel "Gạch Nam Hương.xlsx"):
  *   Số dư ban đầu 189.805.120 tại 31/3/2026.
- *   Kỳ 01/4→27/4: 8 phiếu × 8.000 viên (6 @1.900 + 2 @1.850) = 120.800.000 → 310.605.120
- *   Kỳ 28/4→26/5: 3 × 8.000 @1.850 = 44.400.000, chuyển khoản 100.000.000 → 255.005.120
+ *   Kỳ lẻ đầu 01/4→26/4: 8 phiếu × 8.000 viên (6 @1.900 + 2 @1.850) = 120.800.000 → 310.605.120
+ *   Kỳ 27/4→26/5: 3 × 8.000 @1.850 = 44.400.000, chuyển khoản 100.000.000 → 255.005.120
  *   Kỳ 27/5→26/6 (nhãn Excel "26/5→26/6" chồng 1 ngày): 8.000 @1.850 + 2 × 5.400 @1.450
  *     = 30.460.000 → 285.465.120
  */
@@ -31,8 +31,8 @@ import {
 import { createDelivery, updateDelivery, softDeleteDelivery } from "@/lib/vat-tu-ncc/delivery-service";
 import { createMaterialTransaction } from "@/lib/cong-no-vt/material-ledger-service";
 
-const K1 = { from: "2026-04-01", to: "2026-04-27" };
-const K2 = { from: "2026-04-28", to: "2026-05-26" };
+const K1 = { from: "2026-04-01", to: "2026-04-26" };
+const K2 = { from: "2026-04-27", to: "2026-05-26" };
 const K3 = { from: "2026-05-27", to: "2026-06-26" };
 const K3_EXCEL_LABEL = { from: "2026-05-26", to: "2026-06-26" };
 
@@ -61,7 +61,7 @@ async function seed() {
     prisma.supplierDeliveryDaily.create({
       data: { supplierId: supplier.id, projectId: project.id, date: new Date(date), itemId: item.id, qty, unit: "viên" },
     });
-  for (const d of ["2026-04-01", "2026-04-04", "2026-04-08", "2026-04-11", "2026-04-15", "2026-04-18", "2026-04-22", "2026-04-27"]) {
+  for (const d of ["2026-04-01", "2026-04-04", "2026-04-08", "2026-04-11", "2026-04-15", "2026-04-18", "2026-04-22", "2026-04-26"]) {
     await delivery(d, 8000);
   }
   for (const d of ["2026-05-04", "2026-05-09", "2026-05-13"]) await delivery(d, 8000);
@@ -105,7 +105,7 @@ async function payK2(entityId: number, supplierId: number, projectId: number) {
     vatPctTt: "0",
     vatPctHd: "0",
     status: "approved",
-    content: "Chuyển khoản kỳ 28/4→26/5",
+    content: "Chuyển khoản kỳ 27/4→26/5",
   });
 }
 
@@ -150,8 +150,8 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     await signReconciliation((await reconFor(supplier.id, project.id, K1.from)).id);
     await signReconciliation((await reconFor(supplier.id, project.id, K2.from)).id);
 
-    // Nhãn Excel chồng 1 ngày bị từ chối ở cả chốt kỳ lẫn tạo kỳ đối chiếu tay.
-    await expect(commitPeriodClose(supplier.id, project.id, K3_EXCEL_LABEL, [])).rejects.toThrow(/chồng lấn kỳ đã ký/);
+    // Nhãn Excel lệch ngày 27 bị từ chối ở cả chốt kỳ lẫn tạo kỳ đối chiếu tay (kỳ phải theo tháng).
+    await expect(commitPeriodClose(supplier.id, project.id, K3_EXCEL_LABEL, [])).rejects.toThrow(/theo tháng/);
     await expect(
       createReconciliation({
         supplierId: supplier.id,
@@ -159,10 +159,13 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
         periodFrom: K3_EXCEL_LABEL.from,
         periodTo: K3_EXCEL_LABEL.to,
       }),
-    ).rejects.toThrow(/chồng lấn kỳ đã ký/);
-    // Bỏ trống một ngày cũng bị từ chối.
+    ).rejects.toThrow(/theo tháng/);
+    // Gộp hai tháng, hoặc bỏ trống cả một tháng, cũng bị từ chối.
     await expect(
-      commitPeriodClose(supplier.id, project.id, { from: "2026-05-28", to: "2026-06-26" }, []),
+      commitPeriodClose(supplier.id, project.id, { from: "2026-05-27", to: "2026-07-26" }, []),
+    ).rejects.toThrow(/theo tháng/);
+    await expect(
+      commitPeriodClose(supplier.id, project.id, { from: "2026-06-27", to: "2026-07-26" }, []),
     ).rejects.toThrow(/phải bắt đầu 27\/05\/2026/);
 
     await close(supplier.id, project.id, K3);
@@ -187,15 +190,11 @@ describe("vat-tu-ncc chốt kỳ linh hoạt (integration)", () => {
     expect(event).not.toBeNull();
   });
 
-  it("hai lần chốt song song với biên khác nhau: chỉ một thành công", async () => {
+  it("hai lần chốt song song cùng kỳ: khoá NCC tuần tự hoá, chỉ một marker", async () => {
     const { supplier, project } = await seed();
-    const results = await Promise.allSettled([
-      close(supplier.id, project.id, K1),
-      close(supplier.id, project.id, { from: "2026-04-01", to: "2026-04-26" }),
-    ]);
-    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
-    const rejected = results.find((r): r is PromiseRejectedResult => r.status === "rejected")!;
-    expect(String(rejected.reason)).toMatch(/chồng lấn kỳ chưa ký/);
+    // Kỳ theo tháng nên hai biên khác nhau mà chồng lấn không còn hợp lệ; còn lại là chốt trùng song song.
+    const results = await Promise.allSettled([close(supplier.id, project.id, K1), close(supplier.id, project.id, K1)]);
+    expect(results.filter((r) => r.status === "fulfilled").length).toBeGreaterThanOrEqual(1);
     expect(await prisma.supplierReconciliation.count({ where: { supplierId: supplier.id, deletedAt: null } })).toBe(1);
   });
 

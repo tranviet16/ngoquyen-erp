@@ -232,14 +232,16 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     await seedDelivery(ids.supplier.id, orphanProject.id, ids.item.id, "2026-05-10", 100);
     await seedDelivery(ids.supplier.id, orphanProject.id, ids.item.id, "2026-05-11", 50);
 
-    const preview = await previewPeriodClose(ids.supplier.id, orphanProject.id, P5);
+    // Cặp này không có số dư ban đầu nên kỳ là tháng chuẩn 27/4 → 26/5 (P5 bắt đầu 28/4 sau số dư của cặp chính).
+    const month = { from: "2026-04-27", to: "2026-05-26" };
+    const preview = await previewPeriodClose(ids.supplier.id, orphanProject.id, month);
     expect(preview.violations).toHaveLength(2);
     expect(preview.violations.every((v) => v.reason === "missing_entity")).toBe(true);
     await expect(
       commitPeriodClose(
         ids.supplier.id,
         orphanProject.id,
-        P5,
+        month,
         preview.deliveries.map((d) => ({ deliveryId: d.id, unitPrice: 1000 })),
       ),
     ).rejects.toThrow(/chưa đủ điều kiện/);

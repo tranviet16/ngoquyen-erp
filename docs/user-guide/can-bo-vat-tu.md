@@ -107,7 +107,8 @@ Tab **Chốt kỳ** (`/vat-tu-ncc/[NCC]/chot-ky?projectId=…`) đóng dấu m�
 1. Mở trang NCC × công trình (mục 3.1) → tab **Chốt kỳ**
 2. **Chọn kỳ** bằng ô **Từ ngày / Đến ngày**:
    - Mặc định gợi ý từ ngày sau kỳ gần nhất của cặp (sau go-live: 27/10/2026 → 26/11/2026)
-   - **Quy tắc**: kỳ mới phải bắt đầu ngay **ngày hôm sau kỳ gần nhất của cặp** (ký hoặc chưa ký)
+   - **Quy tắc**: kỳ chốt **theo tháng** — từ ngày 27 tháng trước đến ngày 26 tháng sau; chọn "Từ ngày" thì "Đến ngày" tự nhảy về ngày 26 kế tiếp. Không gộp nhiều tháng vào một kỳ. Ngoại lệ duy nhất: kỳ lẻ đầu tiên ngay sau số dư ban đầu (vd. số dư 31/03 → kỳ 01/04 – 26/04)
+   - Kỳ mới phải bắt đầu ngay **ngày hôm sau kỳ gần nhất của cặp** (ký hoặc chưa ký)
 3. Xem **danh sách phiếu** trong kỳ:
    - Kiểm tra phiếu cần gán giá
    - Gán **đơn giá** (nếu để trống)
@@ -127,7 +128,8 @@ Tab **Chốt kỳ** (`/vat-tu-ncc/[NCC]/chot-ky?projectId=…`) đóng dấu m�
 Tab **Đối chiếu công nợ** (`/vat-tu-ncc/[NCC]/doi-chieu?projectId=…`) hiển thị bảng đối chiếu chính thức **của cặp NCC × công trình** và cho phép ký xác nhận. Một công trình là một bản đối chiếu, kể cả khi file Excel cũ gộp nhiều công trình.
 
 1. Mở trang NCC × công trình → tab **Đối chiếu công nợ**
-   - Kỳ **"Kỳ chuyển đổi (khóa)"** 01/01/2026 → 26/10/2026 là số liệu nạp từ Excel lúc go-live: đã ký, không gỡ ký hay sửa được
+   - Danh sách luôn hiện **theo tháng** (27 → 26), bắt đầu từ tháng đầu tiên cặp có phát sinh (số dư, lấy hàng hoặc thanh toán); các tháng trống trước đó không hiện
+   - Kỳ **"Kỳ chuyển đổi (khóa)"** 01/01/2026 → 26/10/2026 là số liệu nạp từ Excel lúc go-live: đã ký, không gỡ ký hay sửa được. Danh sách tách kỳ này thành từng tháng (01/01 – 26/01, 27/01 – 26/02, …); bấm vào một tháng để xem / in bảng đối chiếu của riêng tháng đó (số tính từ sổ, đầu tháng sau = cuối tháng trước)
 2. **Lọc kỳ** (tuỳ chọn):
    - Mặc định: tất cả kỳ chưa ký
    - Hoặc: từ ngày → đến ngày
