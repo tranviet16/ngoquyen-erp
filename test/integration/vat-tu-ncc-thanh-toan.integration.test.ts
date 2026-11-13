@@ -73,6 +73,17 @@ async function seed() {
     },
   });
 
+  // Marker kỳ đối chiếu 28/4→26/5 (số tổng dẫn xuất từ sổ cái). Tạo trước khi ghi sổ: ghi sổ vào tháng
+  // chưa có kỳ sẽ tự tạo kỳ tháng (auto-monthly-period.ts).
+  const recon = await prisma.supplierReconciliation.create({
+    data: {
+      supplierId: supplier.id,
+      projectId: project.id,
+      periodFrom: new Date("2026-04-28"),
+      periodTo: new Date("2026-05-26"),
+    },
+  });
+
   // B: 3 phiếu lấy hàng (sinh trực tiếp như kết quả chốt kỳ)
   const ledger = new LedgerService("material");
   for (const date of ["2026-05-04", "2026-05-09", "2026-05-13"]) {
@@ -87,16 +98,6 @@ async function seed() {
       amountHd: "0",
     });
   }
-
-  // Marker kỳ đối chiếu 28/4→26/5 (số tổng dẫn xuất từ sổ cái)
-  const recon = await prisma.supplierReconciliation.create({
-    data: {
-      supplierId: supplier.id,
-      projectId: project.id,
-      periodFrom: new Date("2026-04-28"),
-      periodTo: new Date("2026-05-26"),
-    },
-  });
 
   return { entity, supplier, project, item, recon };
 }

@@ -17,6 +17,7 @@ import { toBusinessDateFromInput } from "@/lib/ledger/business-date";
 import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { applyAdminSlipChange, lockedKindOf, type LockedEditTx } from "./locked-delivery-edit";
+import { ensureMonthlyPeriodFor } from "./auto-monthly-period";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -52,6 +53,10 @@ interface SyncableDelivery {
  */
 async function syncDeliveryLedger(tx: DeliveryTx, d: SyncableDelivery): Promise<DeliveryLedgerStatus> {
   const projectId = requireProjectId(d.projectId, `Phiếu #${d.id}`);
+  // Tháng của phiếu chưa có kỳ → tự tạo kỳ tháng chưa ký (và ghi phiếu chờ của tháng đó) để phiếu vào
+  // công nợ ngay; không tạo được (trước mốc, tương lai, thiếu Chủ thể…) thì phiếu chờ chốt kỳ như cũ.
+  const ledger = new LedgerService("material");
+  await ensureMonthlyPeriodFor(tx, d.supplierId, projectId, d.date, (input) => ledger.upsertFromDelivery(input, tx));
   const closed = await tx.supplierReconciliation.findFirst({
     where: {
       supplierId: d.supplierId,
@@ -64,7 +69,7 @@ async function syncDeliveryLedger(tx: DeliveryTx, d: SyncableDelivery): Promise<
     select: { periodFrom: true, periodTo: true },
   });
   if (closed && d.unitPrice != null) {
-    await new LedgerService("material").upsertFromDelivery(
+    await ledger.upsertFromDelivery(
       {
         deliveryId: d.id,
         date: d.date,

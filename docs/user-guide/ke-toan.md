@@ -138,7 +138,9 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
 
 ### 3.9 Chốt kỳ và ký — theo cặp NCC × công trình
 
-Chốt kỳ xác nhận công nợ với NCC tại **một công trình**. Ký kỳ của NCC A tại công trình X không khoá phiếu của A tại công trình Y. Quy trình:
+Chốt kỳ xác nhận công nợ với NCC tại **một công trình**. Ký kỳ của NCC A tại công trình X không khoá phiếu của A tại công trình Y.
+
+Kỳ tháng **tự tạo**: khi có phiếu ngày (có đơn giá), chuyển khoản, thuế HĐ hay điều chỉnh sau mốc chuyển đổi rơi vào tháng chưa có kỳ của cặp (tới hết tháng hiện tại), hệ thống tự tạo kỳ 27→26 đó ở trạng thái **Chưa ký** và ghi phiếu có giá của tháng vào công nợ ngay. Bấm **Chốt kỳ** chỉ còn cần khi muốn gán / sửa đơn giá hàng loạt, hoặc cho phiếu ghi trước cho tháng sau. Ký vẫn làm tay. Quy trình:
 
 1. Menu → **Vật tư – Nhà cung cấp** → **Theo công trình →** → chọn công trình → chọn NCC (hoặc vào trang NCC rồi chọn công trình ở thanh "NCC × Công trình") → tab **Chốt kỳ**. Thiếu công trình thì trang hiện bộ chọn công trình.
 2. Bộ chọn **Từ ngày → Đến ngày** (tuỳ chọn):
