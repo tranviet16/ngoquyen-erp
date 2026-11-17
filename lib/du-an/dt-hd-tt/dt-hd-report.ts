@@ -5,8 +5,10 @@
  * đầu mối có một NCC. Nhóm không có NCC phụ trách (hoặc phụ trách là tổ / khoản khác) nằm trong khối
  * "Chưa có đầu mối". Cột khối: G dự toán, N HĐ do NCC của đầu mối xuất, L thực tế chốt gồm VAT,
  * M = L / (1 + VAT), S = HĐ của đầu mối nằm trong nhóm của mình, T = HĐ của đầu mối ngoài dự toán,
- * O = N − S − T (HĐ gán chéo sang nhóm khối khác), P = M − N (còn phải lấy HĐ so thực tế).
- * Dòng đối soát khối: Σ HĐ trong các nhóm của khối = N → "✓ Khớp sổ Hóa Đơn", lệch → "⚠ Lệch".
+ * O = HĐ của đầu mối nằm ở nhóm của khối khác, P = M − N (còn phải lấy HĐ so thực tế).
+ * Dòng đối soát khối (như file: tổng HĐ của NCC trên HĐ-TT = cộng chi tiết HĐ của NCC đó): N = S + T + O,
+ * O cộng riêng — không khớp nghĩa là có dòng HĐ của đầu mối không được xếp vào đâu. Σ HĐ trong nhóm
+ * của khối còn gồm HĐ của NCC đầu mối khác (fromOtherSuppliers) nên không so trực tiếp với N.
  * Kiểm tổng: Σ HĐ trong nhóm của mọi khối + Phần B (ngoài dự toán / chưa gán) = Σ mọi dòng HĐ.
  */
 
@@ -65,6 +67,8 @@ export interface DtHdBlock {
   inOwnGroups: number;
   outsideDt: number;
   crossAssigned: number;
+  /** HĐ của NCC thuộc đầu mối khác (hoặc chưa có đầu mối) nằm trong nhóm của khối này. */
+  fromOtherSuppliers: number;
   remainingVsActual: number | null;
   groupsHd: number;
   groups: DtHdGroupRow[];
@@ -162,6 +166,7 @@ export function buildDtHdReport(inp: ReportInputs, index: BookIndex = buildBookI
     const ownGroupIds = new Set(groups.map((g) => g.groupCodeId));
     const inOwnGroups = sum(own.filter((p) => p.place.kind !== "outside" && ownGroupIds.has(p.place.groupCodeId)).map((p) => p.row.amount));
     const outsideDt = sum(own.filter((p) => p.place.kind === "outside").map((p) => p.row.amount));
+    const crossAssigned = sum(own.filter((p) => p.place.kind !== "outside" && !ownGroupIds.has(p.place.groupCodeId)).map((p) => p.row.amount));
     const groupsHd = sum(groups.map((g) => g.valueHd));
     const valueDt = sum(groups.map((g) => g.valueDt));
     const a = cpId === null ? null : actual.get(cpId) ?? null;
@@ -169,9 +174,10 @@ export function buildDtHdReport(inp: ReportInputs, index: BookIndex = buildBookI
     blocks.push({
       counterpartyId: cpId, name: cpId === null ? "Chưa có đầu mối" : index.counterparties.get(cpId)!.name,
       valueDt, invoiceTotal, balance: valueDt - invoiceTotal, actual: a, actualExVat,
-      inOwnGroups, outsideDt, crossAssigned: invoiceTotal - inOwnGroups - outsideDt,
+      inOwnGroups, outsideDt, crossAssigned, fromOtherSuppliers: groupsHd - inOwnGroups,
       remainingVsActual: actualExVat === null ? null : actualExVat - invoiceTotal,
-      groupsHd, groups, tieOut: tieOut("TỔNG HĐ DO NCC XUẤT", invoiceTotal, groupsHd),
+      groupsHd, groups,
+      tieOut: tieOut("TỔNG HĐ DO NCC XUẤT = trong nhóm của khối + ngoài dự toán + ở nhóm khối khác", invoiceTotal, inOwnGroups + outsideDt + crossAssigned),
     });
   }
 

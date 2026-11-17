@@ -1,5 +1,6 @@
 /**
  * Ghi import "Đối chiếu DT-HĐ-TT" trong transaction commit của engine (đã duyệt, đã khóa). Thứ tự:
+ *   0. điền MST còn trống của NCC ERP đã gắn (như cột "Điền MST" ở màn duyệt);
  *   1. đồng bộ dự toán: xóa mềm + supersededByRunId các dòng thay, thêm dòng mới (importRunId);
  *   2. thay giao dịch HĐ cũ: đúng tập id đã xác nhận, số dòng phải khớp;
  *   3. sổ: mã nhóm → đầu mối → NCC của đầu mối → ánh xạ → hóa đơn → thực tế nhập → chi thực tế;
@@ -14,6 +15,7 @@ import { deriveTransactions } from "@/lib/du-an/dt-hd-tt/derive-transactions";
 import { dtLineKeyOf, groupEstimatesByKey, itemKeyOf } from "@/lib/du-an/dt-hd-tt/keys";
 import type { ImportSummary, ImportTx } from "../adapter-types";
 import type { ImportPlan } from "./import-plan";
+import { taxCodeFills } from "./supplier-resolution";
 import type { DtHdTtWorkbook } from "./workbook-types";
 
 type Tx = Pick<ImportTx, "$queryRaw" | "$executeRaw" | "projectEstimate">;
@@ -28,6 +30,16 @@ export async function applyImport(wb: DtHdTtWorkbook, plan: ImportPlan, tx: Tx, 
   const inputs = plan.inputs!;
   const sync = plan.dtSync!;
   const now = new Date();
+
+  // 0. Điền MST còn trống của NCC đã gắn (dữ liệu nền — hoàn tác không gỡ). Bỏ qua nếu MST đó đã thuộc
+  //    NCC khác (khi đó NCC trùng phải được gộp ở Dữ liệu nền tảng).
+  let taxCodesFilled = 0;
+  for (const f of taxCodeFills(plan.suppliers)) {
+    taxCodesFilled += await tx.$executeRaw`
+      UPDATE suppliers SET "taxCode" = ${f.mst}, "updatedAt" = ${now}
+       WHERE id = ${f.supplierId} AND COALESCE(TRIM("taxCode"), '') = ''
+         AND NOT EXISTS (SELECT 1 FROM suppliers o WHERE o.id <> ${f.supplierId} AND o."deletedAt" IS NULL AND o."taxCode" = ${f.mst})`;
+  }
 
   // 1. Dự toán.
   const estSum = await tx.$queryRaw<{ s: Prisma.Decimal | null }[]>`
@@ -127,6 +139,7 @@ export async function applyImport(wb: DtHdTtWorkbook, plan: ImportPlan, tx: Tx, 
       counts: {
         estimatesInserted: sync.insert.length, estimatesSuperseded: sync.supersedeEstimateIds.length, transactionsSuperseded: ptxIds.length,
         invoiceLines: inputs.invoiceLines.length, receipts: inputs.receipts.length, payments: inputs.payments.length, derivedTransactions: derived.length,
+        taxCodesFilled,
       },
     },
   };

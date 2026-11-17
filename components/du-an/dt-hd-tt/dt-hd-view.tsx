@@ -52,8 +52,9 @@ function BlockSummary({ b }: { b: DtHdBlock }) {
     b.actual === null ? "chưa chốt thực tế" : `thực tế gồm VAT ${moneyOrZero(b.actual)} (chưa VAT ${moneyOrZero(b.actualExVat)})`,
     `HĐ trong nhóm của mình ${moneyOrZero(b.inOwnGroups)}`,
     `ngoài dự toán ${moneyOrZero(b.outsideDt)}`,
-    `gán chéo sang khối khác ${moneyOrZero(b.crossAssigned)}`,
+    `ở nhóm của khối khác ${moneyOrZero(b.crossAssigned)}`,
   ];
+  if (Math.round(b.fromOtherSuppliers) !== 0) parts.push(`nhóm của khối có HĐ của NCC khác ${moneyOrZero(b.fromOtherSuppliers)}`);
   if (b.remainingVsActual !== null) parts.push(`còn phải lấy HĐ so thực tế ${moneyOrZero(b.remainingVsActual)}`);
   return <p className="text-xs text-muted-foreground">{parts.join(" · ")}</p>;
 }

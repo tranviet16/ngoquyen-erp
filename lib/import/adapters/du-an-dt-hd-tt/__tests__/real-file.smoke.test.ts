@@ -89,4 +89,8 @@ describe.skipIf(!loaded)("file thật của đội — tính lại khớp số t
   it("DT-HĐ: mọi dòng hóa đơn đều được cộng", () => {
     expect(reports.dtHd.grandCheck.ok).toBe(true);
   });
+
+  it("DT-HĐ: đối soát từng khối đều khớp, như mọi khối của file đều '✓ Khớp sổ Hóa Đơn'", () => {
+    expect(reports.dtHd.blocks.filter((b) => !b.tieOut.ok).map((b) => b.name)).toEqual([]);
+  });
 });

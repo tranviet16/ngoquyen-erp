@@ -55,7 +55,7 @@ export function resolveSuppliers(wb: DtHdTtWorkbook, mapping: ImportMapping, erp
     if (mst) byMst.set(mst, [...(byMst.get(mst) ?? []), s]);
     byName.set(normVtName(s.name), [...(byName.get(normVtName(s.name)) ?? []), s]);
   }
-  return workbookSuppliers(wb).map(({ key, name, mst }) => {
+  const resolved = workbookSuppliers(wb).map(({ key, name, mst }): SupplierResolution => {
     const chosen = mapping[key];
     let hit: ErpSupplier | null = null;
     let how: SupplierResolution["how"] = null;
@@ -82,6 +82,25 @@ export function resolveSuppliers(wb: DtHdTtWorkbook, mapping: ImportMapping, erp
           .sort((a, b) => b.score - a.score)
           .slice(0, 3)
           .map((x) => ({ id: x.s.id, name: x.s.name }));
-    return { key, name, mst, supplierId: hit?.id ?? null, how, suggestions, fillTaxCode: !!hit && !!mst && !normalizeMst(hit.taxCode) };
+    return { key, name, mst, supplierId: hit?.id ?? null, how, suggestions, fillTaxCode: !!hit && !!mst && !normalizeMst(hit.taxCode) && !byMst.has(mst) };
   });
+  // Cột "Điền MST" của màn duyệt phải đúng với những gì sẽ ghi.
+  const fills = new Set(taxCodeFills(resolved).map((f) => f.supplierId));
+  return resolved.map((r) => ({ ...r, fillTaxCode: r.fillTaxCode && fills.has(r.supplierId!) }));
+}
+
+/**
+ * MST sẽ điền vào NCC ERP khi ghi (dữ liệu nền, giữ lại khi hoàn tác). Một NCC ERP được gắn với nhiều
+ * NCC của file có MST khác nhau (vd. hai pháp nhân gộp về một NCC) → không điền, để admin tự sửa.
+ */
+export function taxCodeFills(resolutions: SupplierResolution[]): { supplierId: number; mst: string }[] {
+  const msts = new Map<number, Set<string>>();
+  for (const r of resolutions) {
+    if (r.supplierId === null || !r.mst) continue;
+    msts.set(r.supplierId, (msts.get(r.supplierId) ?? new Set()).add(r.mst));
+  }
+  return resolutions
+    .filter((r) => r.fillTaxCode && r.supplierId !== null && msts.get(r.supplierId)!.size === 1)
+    .map((r) => ({ supplierId: r.supplierId!, mst: r.mst }))
+    .filter((f, i, all) => all.findIndex((x) => x.supplierId === f.supplierId) === i);
 }

@@ -55,7 +55,8 @@ describe("buildDtHdReport", () => {
     expect(b.invoiceTotal).toBe(14_500_000);
     expect(b.inOwnGroups).toBe(13_500_000);
     expect(b.crossAssigned).toBe(1_000_000);
-    expect(b.tieOut.ok).toBe(false); // file: "⚠ Lệch" khi có HĐ gán chéo
+    // Như file: mọi HĐ của NCC đều được xếp (trong nhóm mình / ngoài DT / nhóm khối khác) → khớp.
+    expect(b.tieOut).toMatchObject({ ok: true, expected: 14_500_000, actual: 14_500_000 });
     expect(b.actualExVat).toBeCloseTo(15_250_000, 4);
     expect(b.remainingVsActual).toBeCloseTo(750_000, 4);
   });
@@ -68,6 +69,10 @@ describe("buildDtHdReport", () => {
     expect(g.groupOnly.map((i) => i.invoiceLineId)).toEqual([3]);
     expect(g.valueHd).toBe(66_000_000);
     expect(b.invoiceTotal).toBe(65_000_000);
+    // HĐ của NCC khác trong nhóm của khối không làm lệch đối soát của khối.
+    expect(b.fromOtherSuppliers).toBe(b.groupsHd - b.inOwnGroups);
+    expect(b.fromOtherSuppliers).toBeGreaterThan(0);
+    expect(b.tieOut.ok).toBe(true);
   });
 
   it("đầu mối chỉ có HĐ ngoài dự toán vẫn có khối; nhóm không có NCC phụ trách vào 'Chưa có đầu mối'", () => {
