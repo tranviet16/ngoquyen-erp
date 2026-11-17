@@ -70,12 +70,20 @@ describe("HĐ-TT", () => {
     expect(row("Chương Dương").actual).toBe(1_080_000);
   });
 
-  it("NCC chưa gắn đầu mối: thực tế tạm = HĐ; kiểm Σ E và Σ T", () => {
-    expect(row("Máy Lộc Tài")).toMatchObject({ actual: 4_320_000, actualIsTemporary: true });
+  it("NCC không thuộc đầu mối nào: T = 0 như file (cột Q trống); kiểm Σ E và Σ T", () => {
+    expect(row("Máy Lộc Tài")).toMatchObject({ actual: 0, actualIsTemporary: false });
     expect(hdTt.totals.invoiceTotal).toBe(93_420_000);
     expect(hdTt.actualGap.counterpartiesWithoutRows).toEqual([{ name: "Vật tư phụ", actual: 4_000 }]);
     expect(hdTt.checks.every((c) => c.ok)).toBe(true);
-    expect(hdTt.totals.actual).toBeCloseTo(99_990_000, 4);
+    expect(hdTt.totals.actual).toBeCloseTo(95_670_000, 4);
+  });
+
+  it("đầu mối chưa chốt thực tế: các NCC của nó lấy T tạm = HĐ", () => {
+    const inp = fixture();
+    inp.counterparties[0].actualBasis = "manual"; // Đại Ngàn, actualManualVnd = null
+    const r = buildReports(inp).hdTt.rows.find((x) => x.supplierName === "Đại Ngàn")!;
+    expect(r).toMatchObject({ actual: 15_660_000, actualIsTemporary: true });
+    expect(buildReports(inp).hdTt.checks.every((c) => c.ok)).toBe(true);
   });
 });
 

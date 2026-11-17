@@ -14,6 +14,7 @@ import { DuAnXayDungAdapter } from "./du-an-xay-dung.adapter";
 import { TaiChinhNqAdapter } from "./tai-chinh-nq.adapter";
 import { SlDtAdapter } from "./sl-dt.adapter";
 import { VatTuChuyenDoiAdapter } from "./vat-tu-chuyen-doi/vat-tu-chuyen-doi.adapter";
+import { duAnDtHdTtAdapter } from "./du-an-dt-hd-tt/dt-hd-tt.adapter";
 import type { RegisteredImportAdapter } from "./adapter-types";
 
 const ADAPTERS: RegisteredImportAdapter[] = [
@@ -24,6 +25,7 @@ const ADAPTERS: RegisteredImportAdapter[] = [
   TaiChinhNqAdapter,
   SlDtAdapter,
   VatTuChuyenDoiAdapter,
+  duAnDtHdTtAdapter,
 ];
 
 const REGISTRY = new Map<string, RegisteredImportAdapter>(

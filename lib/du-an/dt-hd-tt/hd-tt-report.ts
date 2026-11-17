@@ -4,7 +4,8 @@
  *   J cần nộp thêm = max(0, E − I); K đã nộp vượt = max(0, I − E); L = I / E;
  *   T thực tế: S (nhập tách) nếu có; đầu mối nhiều NCC → dòng đầu nhận phần còn lại
  *     (thực tế đầu mối − Σ (S ?? E) các NCC khác), các dòng sau = S ?? E; đầu mối một NCC → thực tế
- *     đầu mối; chưa chốt / không có đầu mối → T = E ("chưa chốt thực tế, tạm = HĐ");
+ *     đầu mối; đầu mối chưa chốt thực tế → T = E ("chưa chốt thực tế, tạm = HĐ"); NCC không thuộc
+ *     đầu mối nào (vd. Chương Dương, LPP xuất HĐ thay Sobek) → T = 0, như file (cột Q trống);
  *   U = T − E; V nợ thực tế = T − I (không trừ X); W sẽ lấy về = max(0, J − V); X đã lấy về;
  *   Y còn phải lấy về = W − X.
  * Kiểm: Σ E = sổ Hóa Đơn gồm VAT; Σ T = Σ thực tế các đầu mối NCC − đầu mối NCC không có dòng
@@ -70,20 +71,24 @@ export function buildHdTtReport(inp: ReportInputs, index: BookIndex = buildBookI
   for (const cp of [...inp.counterparties].sort(compareCounterparties)) {
     for (const link of index.suppliersOf.get(cp.id) ?? []) ordered.push({ supplierId: link.supplierId, link });
   }
-  const unlinked = new Set([...inv.keys(), ...paidBook.keys()].filter((id) => !index.supplierLink.has(id)));
+  const withoutCounterparty = (id: number) => (index.supplierLink.get(id)?.counterpartyId ?? null) === null;
+  const unlinked = new Set(
+    [...inv.keys(), ...paidBook.keys(), ...inp.counterpartySuppliers.map((l) => l.supplierId)].filter(withoutCounterparty),
+  );
   for (const supplierId of [...unlinked].sort((a, b) => (index.supplierName.get(a) ?? "").localeCompare(index.supplierName.get(b) ?? "", "vi"))) {
-    ordered.push({ supplierId, link: null });
+    ordered.push({ supplierId, link: index.supplierLink.get(supplierId) ?? null });
   }
 
   const rows: HdTtRow[] = ordered.map(({ supplierId, link }) => {
     const e = invoiceTotal(supplierId);
-    const cp = link ? index.counterparties.get(link.counterpartyId) ?? null : null;
+    const cp = link?.counterpartyId != null ? index.counterparties.get(link.counterpartyId) ?? null : null;
     const cpActual = cp ? actual.get(cp.id) ?? null : null;
     const siblings = cp ? index.suppliersOf.get(cp.id) ?? [] : [];
     const isFirst = siblings[0]?.supplierId === supplierId;
     let t: number;
     let temporary = false;
     if (link?.splitActualVnd != null) t = link.splitActualVnd;
+    else if (!cp) t = 0;
     else if (cpActual === null) {
       t = e;
       temporary = true;

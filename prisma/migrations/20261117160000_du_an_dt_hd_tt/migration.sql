@@ -78,7 +78,7 @@ CREATE TABLE "project_counterparties" (
 CREATE TABLE "project_counterparty_suppliers" (
     "id" SERIAL NOT NULL,
     "projectId" INTEGER NOT NULL,
-    "counterpartyId" INTEGER NOT NULL,
+    "counterpartyId" INTEGER,
     "supplierId" INTEGER NOT NULL,
     "splitActualVnd" DECIMAL(18,2),
     "paidOverrideVnd" DECIMAL(18,2),

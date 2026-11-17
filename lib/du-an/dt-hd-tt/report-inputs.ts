@@ -56,7 +56,8 @@ export interface CounterpartyIn {
 
 export interface CounterpartySupplierIn {
   id: number;
-  counterpartyId: number;
+  /** null = NCC không thuộc đầu mối nào (dòng HĐ-TT có T = 0 nhưng giữ số nhập tay). */
+  counterpartyId: number | null;
   supplierId: number;
   splitActualVnd: number | null;
   paidOverrideVnd: number | null;

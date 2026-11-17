@@ -662,12 +662,13 @@ model ProjectCounterparty {
   @@map("project_counterparties")
 }
 
-// NCC pháp nhân gộp vào một đầu mối (mỗi NCC một đầu mối / công trình) = một dòng báo cáo HĐ-TT,
-// giữ các số nhập tay của dòng đó.
+// Một dòng báo cáo HĐ-TT: NCC pháp nhân (mỗi NCC một dòng / công trình), đầu mối nó gộp vào, và các
+// số nhập tay của dòng. counterpartyId NULL = NCC không thuộc đầu mối nào (vd. xuất HĐ thay NCC khác)
+// — thực tế của dòng = 0 nhưng vẫn giữ được thực nộp rà soát / đã lấy về.
 model ProjectCounterpartySupplier {
   id              Int       @id @default(autoincrement())
   projectId       Int
-  counterpartyId  Int
+  counterpartyId  Int?
   supplierId      Int
   splitActualVnd  Decimal?  @db.Decimal(18, 2) // S: thực tế riêng NCC khi một đầu mối có nhiều NCC
   paidOverrideVnd Decimal?  @db.Decimal(18, 2) // H: thực nộp rà soát (để trống = theo sổ chi)
@@ -679,9 +680,9 @@ model ProjectCounterpartySupplier {
   updatedAt       DateTime  @default(now()) @updatedAt
 
   importRunId  Int?
-  importRun    ImportRun?          @relation(fields: [importRunId], references: [id], onDelete: SetNull)
-  counterparty ProjectCounterparty @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
-  supplier     Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  importRun    ImportRun?           @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  counterparty ProjectCounterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  supplier     Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
 
   // Partial unique (projectId, supplierId) WHERE "deletedAt" IS NULL — raw SQL
   @@index([projectId])

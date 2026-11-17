@@ -63,6 +63,7 @@ export function buildBookIndex(inp: ReportInputs): BookIndex {
 
   const suppliersOf = new Map<number, CounterpartySupplierIn[]>();
   for (const link of [...inp.counterpartySuppliers].sort((a, b) => a.id - b.id)) {
+    if (link.counterpartyId === null) continue;
     suppliersOf.set(link.counterpartyId, [...(suppliersOf.get(link.counterpartyId) ?? []), link]);
   }
 

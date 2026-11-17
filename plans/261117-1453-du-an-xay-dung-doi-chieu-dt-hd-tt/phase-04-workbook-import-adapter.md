@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Workbook import adapter, review screen, derived transactions"
-status: pending
+status: completed
 priority: P1
 effort: "5.5d"
 dependencies: [2, 3]
@@ -97,3 +97,18 @@ All of this runs in the engine's single commit transaction, through `$executeRaw
   - rollback restores everything and keeps the created supplier;
   - `ledger_transactions` count unchanged.
 - Manual check on the local copy: the review screen walks through the project, the suppliers and the acks to commit.
+
+## Implementation notes (17/11/2026)
+- The adapter lives in `lib/import/adapters/du-an-dt-hd-tt/` and is registered as `du-an-dt-hd-tt`. Every file there is under 200 lines. The review screen is `app/(app)/admin/import/[runId]/dt-hd-tt-review.tsx` plus its sections file.
+- The readers are anchored on labels, not fixed rows. A cell that cannot be read becomes an issue that needs the `cells` ack, never a silent zero.
+- `ProjectCounterpartySupplier.counterpartyId` is now nullable. The workbook has suppliers that belong to no đầu mối (column Q blank) whose X override must still be kept. For them HĐ-TT T = 0, as in the workbook.
+- Parser fixes found while testing on the real file:
+  - The formula classifier stripped every space, which broke sheet names such as 'Thực Tế Nhập'. Every đầu mối fell back to the manual figure, and the goldens still matched, which hid the bug. It now strips only the leading "=" and the outer whitespace. The smoke test asserts the basis counts: at least 6 receipts, 3 invoices and 2 payments.
+  - The cash-book reader now follows column K of the file. It skips the "Cộng…/Tổng…" subtotal rows, which had doubled the sums, and keeps payments with an empty content cell, such as tổ advances.
+- The old `bang-can-doi-vat-tu` and `du-an-xay-dung` adapters now block in review when a project already has DT-HĐ-TT book rows.
+- Verification:
+  - unit: 1224 passed;
+  - integration with the real workbook: 23 files / 127 tests ([log](reports/phase-04-integration-run.txt)). After a real engine commit, the reports read back from the DB match every golden, and rollback restores the superseded transactions and estimates;
+  - `tsc` and `eslint` clean;
+  - `next build --webpack` passes. Turbopack rejects the worktree's `node_modules` junction; that is an environment issue, not a code one.
+- The real-file tests run only when `DT_HD_TT_WORKBOOK` points to a copy of the workbook, which stays out of the repo.
