@@ -108,6 +108,18 @@ const API_RISK_MANIFEST: readonly RiskManifestRecord[] = [
     recovery: standardRecovery,
   },
   {
+    id: "api-project-dt-hd-tt-export",
+    kind: "api-route",
+    path: "app/api/du-an/[id]/dt-hd-tt/export/route.ts",
+    operation: "GET",
+    tier: "P0",
+    dataClassification: "restricted",
+    owners: { technical: "application", business: "operations", release: "release" },
+    authorization: { reference: "released du-an module, read access scoped to the requested project", status: "defined" },
+    requiredTests: ["allow", "deny", "cross-scope", "audit", "recovery"],
+    recovery: standardRecovery,
+  },
+  {
     id: "api-cascade-projects",
     kind: "api-route",
     path: "app/api/cong-no/cascade-projects/route.ts",
