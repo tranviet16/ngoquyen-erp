@@ -100,6 +100,18 @@ Theo đúng thứ tự, dừng ở bước nào đủ thì thôi:
 - Muốn sửa số: sửa file → hoàn tác run → import lại bản mới. Cách này chỉ dùng được khi chưa ai sửa dòng đã import trong ERP.
 - Từ bản phát hành 2 (nhập trực tiếp trên ERP), import chỉ chạy một lần.
 
+## 7. Bản phát hành 2: nhập trực tiếp trên ERP
+
+Bản phát hành 2 thêm sáu màn nhập liệu: Hóa đơn, Thực tế nhập, Chi thực tế, Ánh xạ, Đầu mối, Mã nhóm. Deploy như mục 1, không có migration mới.
+
+1. **Chốt ngày chuyển:** thống nhất với đội một ngày; từ ngày đó file "Cân đối vật tư" của công trình bị **đóng băng** (chỉ đọc, lưu bản cuối vào thư mục dự án).
+2. **Import lần cuối** bản file đã đóng băng theo mục 3 (hoàn tác run cũ trước nếu file đã đổi so với lần import trước).
+3. **Thông báo** cho đội và kế toán: từ ngày chuyển, mọi hóa đơn / thực tế / khoản chi nhập trên ERP; gửi kèm [hướng dẫn sử dụng](../../../docs/user-guide/doi-chieu-dt-hd-tt.md). NCC mới phải nhờ admin tạo.
+4. **Không import lại** công trình này nữa. Ngay khi có một dòng nhập hoặc sửa trên màn hình, hoàn tác run import bị từ chối (đã kiểm trên bản sao) — sửa tiếp trên màn hình.
+5. Kiểm sau ngày chuyển: nhập một dòng mỗi sổ, gán một tên mới, xem ba báo cáo và tab Giao dịch / Cân đối VT như mục 4.
+
+Công trình chưa từng import mà còn giao dịch HĐ cũ: màn Hóa đơn từ chối thêm dòng cho tới khi import file của công trình đó (tránh cộng HĐ hai lần ở các tab cũ).
+
 ### Bảng gắn NCC (MNTC-GD1, đã kiểm trên bản sao 17/11)
 
 | NCC trong file (MST) | NCC trong ERP | Căn cứ |

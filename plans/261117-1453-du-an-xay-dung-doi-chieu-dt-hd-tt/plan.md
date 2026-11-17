@@ -1,7 +1,7 @@
 ---
 title: "Dự án xây dựng – Dự toán / Hóa đơn / Thực tế và 3 báo cáo đối chiếu A4"
 description: "Store the đội's own book (invoice lines, receipts, cash payments) next to the existing Dự toán, map it through one alias table, reproduce the DT-HĐ, DT-TT and HĐ-TT reports proven against the Mầm Non workbook, and keep the old du-an tabs fed with the new invoice list."
-status: pending
+status: in-progress
 priority: P1
 effort: 18.5d
 branch: feat/du-an-dt-hd-tt
@@ -90,10 +90,10 @@ Evidence:
 | 3 | [Pure report engine with golden tests](phase-03-pure-report-engine.md) | 2.5d | 1 (2 for types) | Done |
 | 4 | [Workbook import adapter, review screen, Dự toán sync, derived transactions](phase-04-workbook-import-adapter.md) | 5.5d | 2, 3 | Done ([integration run](reports/phase-04-integration-run.txt)) |
 | 5 | [Report screens, A4 print, Excel export](phase-05-report-screens-print-export.md) | 2d | 3 (4 for real data) | Done (screen checks on real data in phase 8) |
-| 6 | [Entry screens for the three streams](phase-06-entry-screens.md) | 3d | 4, 5 | Pending |
-| 7 | [Ánh xạ, Đầu mối and Mã nhóm screens](phase-07-mapping-counterparty-screens.md) | 1.5d | 5 | Pending |
+| 6 | [Entry screens for the three streams](phase-06-entry-screens.md) | 3d | 4, 5 | Done ([integration run](reports/phase-06-integration-run.txt), [review](reports/code-reviewer-phase-06-entry-screens-review.md) fixed) |
+| 7 | [Ánh xạ, Đầu mối and Mã nhóm screens](phase-07-mapping-counterparty-screens.md) | 1.5d | 5 | Done ([integration run](reports/phase-07-integration-run.txt), [review](reports/code-reviewer-phase-07-mapping-screens-review.md) fixed) |
 | 8 | [Release 1 dry run on the local copy and production runbook](phase-08-dry-run-docs-runbook.md) | 0.5d + approval | 4, 5 | Dry run done ([result](reports/dry-run-result.md)); production awaits approval |
-| 9 | [Release 2 dry run and user guide](phase-09-release-2-dry-run-user-guide.md) | 0.5d | 6, 7, 8 | Pending |
+| 9 | [Release 2 dry run and user guide](phase-09-release-2-dry-run-user-guide.md) | 0.5d | 6, 7, 8 | Done ([result](reports/dry-run-result.md)); production awaits approval |
 
 Release 1 = phases 1–5 and 8: reports on imported data; the workbook stays the master and corrections go through rollback + re-import. Release 2 = phases 6, 7 and 9: the đội enters directly, and the import becomes one-shot. Phase 5 owns `app/(app)/du-an/[id]/dt-hd-tt/layout.tsx` with every sub-navigation entry; phases 6 and 7 only add pages.
 

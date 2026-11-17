@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Release 2 dry run and user guide"
-status: pending
+status: completed
 priority: P2
 effort: "0.5d"
 dependencies: [6, 7, 8]
@@ -37,3 +37,9 @@ Confirm the entry and mapping screens on the local copy, then document how the �
 ## Verification
 - The release 2 section of `dry-run-result.md` shows the manual entries reflected in all reports and the old tabs, and the rollback refusal.
 - The user guide page renders, and its links resolve.
+
+## Implementation notes (17/11)
+- Dry run on the copy: see the release 2 section of [dry-run-result.md](reports/dry-run-result.md). One entry per book, one new name mapped, one H figure changed; the three reports and the old tabs reflect them, and rolling back the import is refused with the list of edited rows.
+- User guide: [docs/user-guide/doi-chieu-dt-hd-tt.md](../../docs/user-guide/doi-chieu-dt-hd-tt.md), linked from the cán bộ vật tư and kế toán guides.
+- Runbook: section 7 of [production-runbook.md](reports/production-runbook.md) (freeze the workbook, last import, announce, no more imports).
+- Found while running: the breadcrumb showed "Dt hd tt"; Vietnamese labels added for the tab and its pages.

@@ -138,6 +138,24 @@ Người dùng đã xem bản xem trước in A4 ngang thật của ba báo cáo
   - Cộng lại: 5.270.589.388 + 330.885.650 + 136.116.666 = 5.737.591.704.
   - Cách cộng này có từ trước, không phải thay đổi của lần này.
 
+## Bản phát hành 2 (nhập trực tiếp) trên bản sao, 17/11 tối
+
+Image `docker-erp-3001:ban-sao-du-an-dt-hd-tt-4` (phase 6–7 + các sửa review). Sao lưu trước: `C:\Users\tranv\.ngoquyen-ban-sao\backups\bansao-truoc-ban-phat-hanh-2-20261117-2205.dump`. Run #10 vẫn ghi.
+
+| Thao tác trên màn hình | Kết quả |
+|---|---|
+| Hóa đơn: thêm "Thép tròn chạy thử D10", Đại Ngàn, 100 kg × 15.000, VAT 8 % | Sổ 280 dòng, chưa VAT +1.500.000, VAT +120.000. DT-HĐ: dòng ở Phần B "Ngoài DT / chưa gán", Phần B +1.500.000, cả 30 dòng kiểm ✓ (tổng 5.739.091.704) |
+| Thực tế nhập: cùng tên, đầu mối Đại Ngàn, 100 × 16.200 | +1.620.000. DT-TT Cộng A 6.531.555.277 → 6.533.175.277; HĐ-TT Σ T +1.620.000 |
+| Chi thực tế: Mục I, CK 1.620.000, đầu mối + NCC Đại Ngàn | Sổ chi +1.620.000; HĐ-TT G Đại Ngàn 801.620.000 |
+| Ánh xạ: gán tên mới → THEP-TRON / "Thép tròn D<=10mm", hệ số 1, Xác nhận | Hết "Hóa đơn chưa gán"; giao dịch HĐ sinh từ dòng chuyển sang HM1-VL / HM1-VL-042 (= mã dòng dự toán) |
+| Đầu mối: H của Đại Ngàn = 800.000.000 | HĐ-TT I Đại Ngàn = 800.000.000 (H); hai dòng kiểm HĐ-TT ✓ |
+
+- Tab cũ: Giao dịch HĐ 5.739.091.704 = Σ sổ (280 dòng, đều sinh từ sổ, băng "Sửa ở sổ Hóa đơn" trỏ tới `/hoa-don`); Cân đối VT "Đã lấy HĐ" 5.739.091.704, "Ngoài DT" vẫn 50.
+- `ledger_transactions` không đổi (1040, cùng md5).
+- **Hoàn tác run #10 bị từ chối**, thông báo liệt kê: 1 dòng ánh xạ, 1 thực tế nhập, 1 chi thực tế, 1 hóa đơn, 1 giao dịch không thuộc run, và 1 dòng NCC của đầu mối đã sửa sau commit.
+- Ba dòng chạy thử lưu **ngày trống**: do công cụ tự động điền ô ngày không tạo sự kiện rời ô; gõ thật rồi Tab thì ô ngày giữ "18/11/2026". Không phải lỗi app.
+- Sửa thêm khi chạy thử: breadcrumb hiện "Dt hd tt" → thêm nhãn tiếng Việt cho tab và sáu trang con.
+
 ## Lỗi tìm thấy và đã sửa
 
 1. **Cột "Điền MST" không được ghi.**
