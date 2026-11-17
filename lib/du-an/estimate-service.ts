@@ -7,6 +7,9 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { Prisma } from "@prisma/client";
 import { estimateSchema, type EstimateInput } from "./schemas";
 
+// Sửa / xóa theo id từ chối dòng đã xóa mềm (`deletedAt`), kể cả dòng bị import "Đối chiếu DT-HĐ-TT"
+// thay khi đồng bộ dự toán theo file của đội: hoàn tác import khôi phục đúng số lúc thay.
+
 export async function listEstimates(projectId: number) {
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
   return prisma.projectEstimate.findMany({
@@ -40,8 +43,10 @@ export async function createEstimate(input: EstimateInput) {
 
 export async function updateEstimate(id: number, input: EstimateInput) {
   const data = estimateSchema.parse(input);
-  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
-  if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  // deletedAt: dòng đã xóa mềm (kể cả dòng bị import "Đối chiếu DT-HĐ-TT" thay khi đồng bộ dự toán) không
+  // sửa được — hoàn tác import khôi phục đúng số lúc thay.
+  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true, deletedAt: true } });
+  if (!existing || existing.deletedAt || existing.projectId !== data.projectId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const totalVnd = new Prisma.Decimal(data.qty).mul(new Prisma.Decimal(data.unitPrice));
   const record = await prisma.projectEstimate.update({
@@ -74,8 +79,10 @@ export async function adminPatchEstimate(
   patch: Partial<{ itemName: string; unit: string; qty: number; unitPrice: number; totalVnd: number; note: string }>,
   projectId: number,
 ) {
-  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
-  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  // deletedAt: dòng đã xóa mềm (kể cả dòng bị import "Đối chiếu DT-HĐ-TT" thay khi đồng bộ dự toán) không
+  // sửa được — hoàn tác import khôi phục đúng số lúc thay.
+  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true, deletedAt: true } });
+  if (!existing || existing.deletedAt || existing.projectId !== projectId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId: existing.projectId } });
   await requireActiveAdmin();
   const data: Prisma.ProjectEstimateUpdateInput = {};
@@ -93,8 +100,10 @@ export async function adminPatchEstimate(
 }
 
 export async function softDeleteEstimate(id: number, projectId: number) {
-  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true } });
-  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  // deletedAt: dòng đã xóa mềm (kể cả dòng bị import "Đối chiếu DT-HĐ-TT" thay khi đồng bộ dự toán) không
+  // sửa được — hoàn tác import khôi phục đúng số lúc thay.
+  const existing = await prisma.projectEstimate.findUnique({ where: { id }, select: { projectId: true, deletedAt: true } });
+  if (!existing || existing.deletedAt || existing.projectId !== projectId) throw new Error("Forbidden");
   await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectEstimate.update({
     where: { id, projectId },

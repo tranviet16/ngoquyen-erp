@@ -18,7 +18,19 @@ type SettingsRow = {
   contractWarningDays: number;
   managementFeePct: unknown;
   teamSharePct: unknown;
+  generalCostPct?: unknown;
+  tempHousingPct?: unknown;
+  unmeasuredPct?: unknown;
+  presumptiveIncomePct?: unknown;
 };
+
+/** Tỷ lệ Phần III báo cáo DT-TT — nhập dạng 0–1 như các tỷ lệ khác. */
+const PHAN_III_RATES = [
+  { name: "generalCostPct", label: "Chi phí chung (× chi phí trực tiếp T)", fallback: 0.07 },
+  { name: "tempHousingPct", label: "Nhà tạm để ở và điều hành (× T)", fallback: 0.01 },
+  { name: "unmeasuredPct", label: "Việc không xác định được khối lượng (× T)", fallback: 0.03 },
+  { name: "presumptiveIncomePct", label: "Thu nhập chịu thuế tính trước (× (T + gián tiếp))", fallback: 0.06 },
+] as const;
 
 interface Props {
   projectId: number;
@@ -40,6 +52,9 @@ export function CaiDatClient({ projectId, initialSettings, canEdit }: Props) {
       contractWarningDays: Number(initialSettings?.contractWarningDays ?? 90),
       managementFeePct: Number(initialSettings?.managementFeePct ?? 0.05),
       teamSharePct: Number(initialSettings?.teamSharePct ?? 0.85),
+      ...Object.fromEntries(
+        PHAN_III_RATES.map((r) => [r.name, Number(initialSettings?.[r.name] ?? r.fallback)]),
+      ) as Pick<SettingsInput, (typeof PHAN_III_RATES)[number]["name"]>,
     },
   });
 
@@ -123,6 +138,20 @@ export function CaiDatClient({ projectId, initialSettings, canEdit }: Props) {
               <FormMessage />
             </FormItem>
           )} />
+
+          <h3 className="pt-2 text-sm font-semibold">Phần III báo cáo DT-TT (tỷ lệ dự toán)</h3>
+          {PHAN_III_RATES.map((rate) => (
+            <FormField key={rate.name} control={form.control} name={rate.name} render={({ field }) => (
+              <FormItem>
+                <FormLabel>{rate.label}</FormLabel>
+                <FormControl>
+                  <Input type="number" step="0.001" min="0" max="1" {...field}
+                    onChange={(e) => field.onChange(parseFloat(e.target.value))} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+          ))}
 
           <div className="flex justify-end pt-2">
             {canEdit && <Button type="submit" disabled={isPending}>
