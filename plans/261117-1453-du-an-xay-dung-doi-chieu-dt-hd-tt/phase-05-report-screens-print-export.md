@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Report screens, A4 print, Excel export"
-status: pending
+status: completed
 priority: P1
 effort: "2d"
 dependencies: [3, 4]
@@ -41,3 +41,21 @@ The three reports appear under one new "Đối chiếu DT-HĐ-TT" tab, print on 
   - on-screen totals = export totals = goldens;
   - the print preview fits A4 landscape;
   - the other tabs still print as before.
+
+## Implementation notes (17/11/2026)
+- Pages: `app/(app)/du-an/[id]/dt-hd-tt/{layout,page}.tsx` and `dt-hd`, `dt-tt`, `hd-tt` pages. They are server components that render the views in `components/du-an/dt-hd-tt/`. Each page calls `getDtHdTtReports` once, and that call checks read access.
+- Sub-navigation: `DT_HD_TT_SECTIONS` in `components/du-an/dt-hd-tt/dt-hd-tt-sub-nav.tsx` lists all nine entries. Entries with `ready: false` are hidden; phases 6 and 7 switch them on. `invoiceBookHref` sends the Giao Dịch link to `hoa-don` once that page is ready, and to the tab until then.
+- Print uses `PrintButton`, which gained optional `defaultPageSize` / `defaultOrientation` props (defaults unchanged: A3 landscape). The reports pass A4 landscape. No global `@page` rule was added.
+- Export: `lib/du-an/dt-hd-tt/export-sheets.ts` (`buildSheet`, `toWorkbook`), `export-cells.ts` and one builder per report (`export-sheet-{dt-hd,dt-tt,hd-tt}.ts`).
+  - Totals are numbers, with money "#,##0", quantity "#,##0.00" and percent "0.0%".
+  - A check row holds "✓/✗ label", then expected, actual, Δ and "Khớp/Lệch".
+  - The HĐ-TT money columns are shared between the screen and the export.
+- Giao Dịch:
+  - rows with `sourceInvoiceLineId` are read-only in every column, including the admin raw-amount columns;
+  - they are skipped on delete, and "Sửa đầy đủ" is disabled for them;
+  - a banner counts them and links "Sửa ở sổ Hóa đơn".
+- Verification:
+  - unit: 1233 passed, including 9 new export tests;
+  - `tsc` and `eslint` clean;
+  - `next build --webpack` passes.
+  - The screen, print and export checks against real data stay with the phase 8 dry run, as planned.

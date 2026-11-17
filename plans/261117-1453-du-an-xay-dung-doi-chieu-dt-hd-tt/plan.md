@@ -89,7 +89,7 @@ Evidence:
 | 2 | [Schema, migration, rollback and safety rails](phase-02-schema-migration-rollback.md) | 2d | 1 | Done ([integration run](reports/phase-02-integration-run.txt)) |
 | 3 | [Pure report engine with golden tests](phase-03-pure-report-engine.md) | 2.5d | 1 (2 for types) | Done |
 | 4 | [Workbook import adapter, review screen, Dự toán sync, derived transactions](phase-04-workbook-import-adapter.md) | 5.5d | 2, 3 | Done ([integration run](reports/phase-04-integration-run.txt)) |
-| 5 | [Report screens, A4 print, Excel export](phase-05-report-screens-print-export.md) | 2d | 3 (4 for real data) | Pending |
+| 5 | [Report screens, A4 print, Excel export](phase-05-report-screens-print-export.md) | 2d | 3 (4 for real data) | Done (screen checks on real data in phase 8) |
 | 6 | [Entry screens for the three streams](phase-06-entry-screens.md) | 3d | 4, 5 | Pending |
 | 7 | [Ánh xạ, Đầu mối and Mã nhóm screens](phase-07-mapping-counterparty-screens.md) | 1.5d | 5 | Pending |
 | 8 | [Release 1 dry run on the local copy and production runbook](phase-08-dry-run-docs-runbook.md) | 0.5d + approval | 4, 5 | Pending |
