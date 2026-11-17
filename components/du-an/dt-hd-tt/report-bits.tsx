@@ -22,7 +22,7 @@ export const pct = (v: number | null | undefined): string => (v == null ? "" : p
 
 export const TH = "border px-2 py-1 text-left font-medium bg-muted/60 align-bottom";
 export const TD = "border px-2 py-1 align-top";
-export const TD_NUM = "border px-2 py-1 align-top text-right tabular-nums whitespace-nowrap";
+export const TD_NUM = "border px-2 py-1 align-top text-right tabular-nums whitespace-nowrap print-nowrap";
 
 /** Bảng có cuộn ngang trên màn hình; khi in, CSS in mở rộng hết khổ. */
 export function ReportTable({ head, children }: { head: ReactNode; children: ReactNode }) {

@@ -53,8 +53,10 @@ export function HdTtView({ report }: { report: HdTtReport }) {
     </tr>
   );
   const gap = report.actualGap;
+  // 13 money columns cannot shrink below one number each: on A4 landscape the name columns would be
+  // squeezed to a letter wide. Print at 80 % (the team prints this sheet at 61 %).
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 print:[zoom:0.8]">
       <ReportTable head={head}>
         {report.rows.map((r) => (
           <Row key={r.supplierId} r={r} />

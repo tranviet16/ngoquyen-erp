@@ -10,7 +10,7 @@ export const HD_TT_MONEY_COLS: { key: NumKey; label: string }[] = [
   { key: "invoiceVat", label: "VAT" },
   { key: "invoiceTotal", label: "E. HĐ gồm VAT" },
   { key: "paidBook", label: "G. Đã trả (sổ chi)" },
-  { key: "paid", label: "I. Đã trả (H ?? G)" },
+  { key: "paid", label: "I. Đã trả (H, chưa rà soát thì G)" },
   { key: "toPay", label: "J. Cần nộp thêm" },
   { key: "overpaid", label: "K. Đã nộp vượt" },
   { key: "actual", label: "T. Thực tế" },

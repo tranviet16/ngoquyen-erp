@@ -278,6 +278,7 @@
 @media print {
   /* Hide navigation, sidebar, action buttons */
   [data-sidebar],
+  [data-slot="sidebar"],
   nav,
   aside,
   header,
@@ -288,9 +289,30 @@
     display: none !important;
   }
 
+  /* The shell makes main a scroll box; printing a scroll box clips it to its height. */
   main {
     padding: 0 !important;
     margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Paper is white and browsers skip backgrounds by default: print dark mode with the light
+     tokens, or its light text ends up near-invisible. */
+  .dark {
+    --background: #FFFFFF;
+    --foreground: #1D2530;
+    --card: #FFFFFF;
+    --card-foreground: #1D2530;
+    --popover: #FFFFFF;
+    --popover-foreground: #1D2530;
+    --primary: #1F5F8B;
+    --secondary: #E8E1D3;
+    --secondary-foreground: #1D2530;
+    --muted: #ECE7DC;
+    --muted-foreground: #6A665E;
+    --destructive: #B42318;
+    --border: #D8D0C1;
+    color-scheme: light;
   }
 
   html,
@@ -331,6 +353,13 @@
     text-overflow: clip !important;
     white-space: normal !important;
     overflow-wrap: anywhere;
+  }
+
+  /* Opt-in: keep a number on one line; the rule above lets any cell break anywhere. */
+  th.print-nowrap,
+  td.print-nowrap {
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
   }
 
   body.print-compact table {
