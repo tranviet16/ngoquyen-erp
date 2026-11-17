@@ -50,6 +50,12 @@ const PROJECT_PAGE_FILES = [
   "app/(app)/du-an/[id]/nghiem-thu/page.tsx",
   "app/(app)/du-an/[id]/phat-sinh/page.tsx",
   "app/(app)/du-an/[id]/tien-do/page.tsx",
+  "app/(app)/du-an/[id]/dt-hd-tt/hoa-don/page.tsx",
+  "app/(app)/du-an/[id]/dt-hd-tt/thuc-te-nhap/page.tsx",
+  "app/(app)/du-an/[id]/dt-hd-tt/chi-thuc-te/page.tsx",
+  "app/(app)/du-an/[id]/dt-hd-tt/anh-xa/page.tsx",
+  "app/(app)/du-an/[id]/dt-hd-tt/dau-moi/page.tsx",
+  "app/(app)/du-an/[id]/dt-hd-tt/ma-nhom/page.tsx",
 ] as const;
 
 const LIB_MODULE_PREFIXES = {

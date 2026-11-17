@@ -1,0 +1,210 @@
+"use client";
+
+/**
+ * Sổ Chi thực tế của đội: chuyển khoản + tiền mặt, mục I–IV, đầu mối và / hoặc NCC pháp nhân. Form thêm
+ * dòng + lưới sửa tại ô (mỗi lần sửa chỉ gửi ô vừa đổi). NCC chỉ chọn trong danh sách NCC đang hoạt động.
+ */
+
+import dynamic from "next/dynamic";
+import { useState, useTransition, type ComponentProps, type FormEvent, type ReactElement } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
+import { vndFormatter } from "@/lib/format";
+import type { PaymentPatch } from "@/lib/du-an/dt-hd-tt/entry-schemas";
+import { formNumber, isoToDmy, parseDateCell, parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import { createPayment, softDeletePayment, updatePayment, type PaymentRow } from "@/lib/du-an/dt-hd-tt/payment-service";
+
+const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
+  columns: DataGridColumn<T>[];
+  rows: T[];
+  handlers: DataGridHandlers<T>;
+  height?: number | string;
+}) => ReactElement;
+
+const SECTIONS = ["I", "II", "III", "IV"] as const;
+type Section = (typeof SECTIONS)[number];
+
+interface GridRow extends RowWithId {
+  /** Ô chữ dd/mm/yyyy (hoặc chữ ngày gốc của file khi chưa đọc được). */
+  date: string;
+  content: string;
+  bankVnd: number;
+  cashVnd: number;
+  totalVnd: number;
+  section: string;
+  counterpartyId: number | string;
+  supplierId: number | string;
+  note: string;
+}
+
+const toGrid = (r: PaymentRow): GridRow => ({
+  id: r.id, date: r.date ? isoToDmy(r.date) : r.dateText ?? "", content: r.content, bankVnd: r.bankVnd, cashVnd: r.cashVnd,
+  totalVnd: r.bankVnd + r.cashVnd, section: r.section, counterpartyId: r.counterpartyId ?? "", supplierId: r.supplierId ?? "", note: r.note ?? "",
+});
+
+/** Ô vừa sửa → bản sửa một phần gửi server (chữ / số không đọc được thì báo lỗi, không lưu). */
+function cellPatch(col: string, value: unknown): PaymentPatch {
+  const text = value == null ? "" : String(value);
+  switch (col) {
+    case "date": return { date: parseDateCell(value) };
+    case "content": return { content: text };
+    case "note": return { note: text || null };
+    case "section": return { section: text as Section };
+    case "bankVnd": return { bankVnd: parseNumberCell(value, "Chuyển khoản") };
+    case "cashVnd": return { cashVnd: parseNumberCell(value, "Tiền mặt") };
+    case "counterpartyId": return { counterpartyId: parseNumberCell(value, "Đầu mối") };
+    case "supplierId": return { supplierId: parseNumberCell(value, "NCC") };
+    default: throw new Error(`Cột "${col}" không sửa được`);
+  }
+}
+
+/** Danh sách chọn của lưới: "(trống)" + mục đang dùng + mục dòng cũ trỏ tới nhưng đã ngừng dùng. */
+function withMissing(options: SelectOption[], refs: { id: number | null; name: string | null }[], suffix: string): SelectOption[] {
+  const out: SelectOption[] = [{ id: "", name: "(trống)" }, ...options];
+  const known = new Set(options.map((o) => String(o.id)));
+  for (const ref of refs) {
+    if (ref.id === null || known.has(String(ref.id))) continue;
+    known.add(String(ref.id));
+    out.push({ id: ref.id, name: `${ref.name ?? `#${ref.id}`} (${suffix})` });
+  }
+  return out;
+}
+
+const EMPTY_FORM = { date: "", content: "", bankVnd: "", cashVnd: "", section: "", counterpartyId: "", supplierId: "", note: "" };
+type FormState = typeof EMPTY_FORM;
+
+interface Props {
+  projectId: number;
+  rows: PaymentRow[];
+  counterparties: SelectOption[];
+  suppliers: SelectOption[];
+  canCreate: boolean;
+  canEdit: boolean;
+}
+
+export function ChiThucTeClient({ projectId, rows, counterparties, suppliers, canCreate, canEdit }: Props) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const refresh = () => startTransition(() => router.refresh());
+
+  const totals = rows.reduce((t, r) => ({ bank: t.bank + r.bankVnd, cash: t.cash + r.cashVnd }), { bank: 0, cash: 0 });
+  const bySection = SECTIONS.map((s) => ({ s, v: rows.filter((r) => r.section === s).reduce((a, r) => a + r.bankVnd + r.cashVnd, 0) }));
+  const locked = !canEdit; // cột nhập được chỉ sửa khi có quyền `edit`
+  const sectionOptions: SelectOption[] = SECTIONS.map((s) => ({ id: s, name: `Mục ${s}` }));
+  const cpOptions = withMissing(counterparties, rows.map((r) => ({ id: r.counterpartyId, name: r.counterpartyName })), "đã xóa");
+  const supplierOptions = withMissing(suppliers, rows.map((r) => ({ id: r.supplierId, name: r.supplierName })), "ngừng dùng");
+
+  const columns: DataGridColumn<GridRow>[] = [
+    { id: "date", title: "Ngày", kind: "text", width: 100, readonly: locked },
+    { id: "content", title: "Nội dung", kind: "text", width: 260, readonly: locked },
+    { id: "bankVnd", title: "Chuyển khoản", kind: "currency", width: 130, readonly: locked },
+    { id: "cashVnd", title: "Tiền mặt", kind: "currency", width: 130, readonly: locked },
+    { id: "totalVnd", title: "Cộng", kind: "currency", width: 130, readonly: true },
+    { id: "section", title: "Mục", kind: "select", width: 80, options: sectionOptions, readonly: locked },
+    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 180, options: cpOptions, readonly: locked },
+    { id: "supplierId", title: "NCC", kind: "select", width: 180, options: supplierOptions, readonly: locked },
+    { id: "note", title: "Ghi chú", kind: "text", width: 180, readonly: locked },
+  ];
+
+  const handlers: DataGridHandlers<GridRow> = {
+    // Lỗi ném ra ở đây: lưới hiện thông điệp và trả ô về giá trị cũ.
+    onCellEdit: async (id, col, value) => {
+      const result = await updatePayment(id, projectId, cellPatch(col, value));
+      if (!result.ok) throw new Error(result.message);
+      refresh();
+      return toGrid(result.row);
+    },
+    onDeleteRows: async (ids) => {
+      try {
+        for (const id of ids) {
+          const result = await softDeletePayment(id, projectId);
+          if (!result.ok) throw new Error(result.message);
+        }
+      } finally {
+        refresh(); // lỗi giữa chừng: tải lại để thấy đúng các dòng đã xóa
+      }
+    },
+  };
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!form.section) { toast.error("Chọn mục I–IV"); return; }
+    setSaving(true);
+    try {
+      const result = await createPayment({
+        projectId, date: form.date || null, content: form.content, bankVnd: formNumber(form.bankVnd, "Chuyển khoản"),
+        cashVnd: formNumber(form.cashVnd, "Tiền mặt"), section: form.section as Section,
+        counterpartyId: form.counterpartyId ? Number(form.counterpartyId) : null, supplierId: form.supplierId ? Number(form.supplierId) : null,
+        note: form.note || null,
+      });
+      if (!result.ok) { toast.error(result.message); return; }
+      toast.success("Đã thêm khoản chi");
+      setForm({ ...EMPTY_FORM, date: form.date, section: form.section });
+      refresh();
+    } catch (err) {
+      toast.error("Không thêm được: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const field = (key: keyof FormState, label: string, props: ComponentProps<typeof Input> = {}) => (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <Input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="h-8" {...props} />
+    </label>
+  );
+  const select = (key: keyof FormState, label: string, options: SelectOption[], placeholder: string) => (
+    <label className="flex flex-col gap-1 text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <select value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="h-8 rounded-md border bg-transparent px-2 text-sm">
+        <option value="">{placeholder}</option>
+        {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      </select>
+    </label>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-lg font-semibold">Sổ Chi thực tế</h2>
+        <p className="text-sm text-muted-foreground">
+          {rows.length} khoản · CK <strong>{vndFormatter(totals.bank)}</strong> · TM <strong>{vndFormatter(totals.cash)}</strong> · Cộng{" "}
+          <strong>{vndFormatter(totals.bank + totals.cash)}</strong>
+        </p>
+        <p className="text-xs text-muted-foreground">{bySection.map(({ s, v }) => `Mục ${s}: ${vndFormatter(v)}`).join(" · ")}</p>
+      </div>
+
+      {canCreate && (
+        <form onSubmit={submit} className="grid grid-cols-2 gap-2 rounded border p-3 md:grid-cols-6">
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-muted-foreground">Ngày</span>
+            <DateInput value={form.date} onChange={(iso) => setForm({ ...form, date: iso })} className="h-8" />
+          </label>
+          <div className="col-span-2">{field("content", "Nội dung *", { required: true })}</div>
+          {field("bankVnd", "Chuyển khoản", { type: "number", step: "any" })}
+          {field("cashVnd", "Tiền mặt", { type: "number", step: "any" })}
+          {select("section", "Mục *", sectionOptions, "— Mục —")}
+          <div className="col-span-2">{select("counterpartyId", "Đầu mối", counterparties, "(không gắn)")}</div>
+          <div className="col-span-2">{select("supplierId", "NCC", suppliers, "(không gắn)")}</div>
+          {field("note", "Ghi chú")}
+          <div className="flex items-end"><Button type="submit" disabled={saving} className="h-8 w-full">Thêm khoản chi</Button></div>
+        </form>
+      )}
+
+      <DataGrid<GridRow>
+        key={rows.map((r) => r.id).join(",")}
+        columns={columns}
+        rows={rows.map(toGrid)}
+        handlers={canEdit ? handlers : {}}
+        height={560}
+      />
+    </div>
+  );
+}

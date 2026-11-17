@@ -15,7 +15,25 @@ const serviceFiles = [
   "transaction-service.ts",
   // Sổ "Đối chiếu DT-HĐ-TT": mọi service ("use server") của thư mục con cũng phải theo hợp đồng này.
   "dt-hd-tt/report-service.ts",
+  "dt-hd-tt/invoice-service.ts",
+  "dt-hd-tt/receipt-service.ts",
+  "dt-hd-tt/payment-service.ts",
+  "dt-hd-tt/alias-service.ts",
+  "dt-hd-tt/group-code-service.ts",
+  "dt-hd-tt/counterparty-service.ts",
 ];
+
+/** Sổ nhập liệu "Đối chiếu DT-HĐ-TT": thêm cần `create`, sửa / xóa cần `edit`, xem cần `read`. */
+const entryServiceFiles = ["dt-hd-tt/invoice-service.ts", "dt-hd-tt/receipt-service.ts", "dt-hd-tt/payment-service.ts"];
+
+/** Màn Ánh xạ / Mã nhóm / Đầu mối: cùng phân quyền; xác nhận hàng loạt cần `edit`. */
+const mappingServiceFiles = ["dt-hd-tt/alias-service.ts", "dt-hd-tt/group-code-service.ts", "dt-hd-tt/counterparty-service.ts"];
+
+function requiredLevel(action: string): "create" | "edit" | "read" {
+  if (/^create/.test(action)) return "create";
+  if (/^(update|softDelete|confirm)/.test(action)) return "edit";
+  return "read";
+}
 
 function exportedActions(source: string): Array<{ name: string; body: string }> {
   const matches = [...source.matchAll(/export async function (\w+)\s*\(/g)];
@@ -48,6 +66,47 @@ describe("project service ACL contract", () => {
           /existing\.projectId\s*!==/,
         );
       }
+    }
+  });
+
+  it.each(entryServiceFiles)("%s splits create / edit / read and locks the project before writing", (file) => {
+    const source = readFileSync(join(process.cwd(), "lib", "du-an", file), "utf8");
+    expect(source).not.toMatch(/\.(upsert|updateMany|createMany|deleteMany|delete)\(/);
+    expect(source).not.toContain("$executeRaw");
+    const actions = exportedActions(source);
+    expect(actions.length).toBeGreaterThan(0);
+    for (const action of actions) {
+      const level = requiredLevel(action.name);
+      expect(action.body, `${file}:${action.name} level`).toContain(`minLevel: "${level}"`);
+      if (level === "read") {
+        expect(action.body, `${file}:${action.name} read-only`).not.toContain("$transaction");
+        continue;
+      }
+      expect(action.body, `${file}:${action.name} project lock`).toContain("lockProjectDtHdTt(tx");
+    }
+  });
+
+  it.each(mappingServiceFiles)("%s splits create / edit / read, locks the project and returns refusals", (file) => {
+    const source = readFileSync(join(process.cwd(), "lib", "du-an", file), "utf8");
+    expect(source).not.toMatch(/\.(upsert|createMany|deleteMany|delete)\(/);
+    expect(source).not.toContain("$executeRaw");
+    // Ghi hàng loạt chỉ khi bỏ audit tự động có chủ đích VÀ ghi tay một dòng audit.
+    if (/\.updateMany\(/.test(source)) {
+      expect(source).toContain("bypassAudit(");
+      expect(source).toContain("auditLog.create(");
+    }
+    const actions = exportedActions(source);
+    expect(actions.length).toBeGreaterThan(0);
+    for (const action of actions) {
+      const level = requiredLevel(action.name);
+      expect(action.body, `${file}:${action.name} level`).toContain(`minLevel: "${level}"`);
+      if (level === "read") {
+        expect(action.body, `${file}:${action.name} read-only`).not.toContain("$transaction");
+        continue;
+      }
+      expect(action.body, `${file}:${action.name} project lock`).toContain("lockProjectDtHdTt(tx");
+      // Bản production ẩn thông điệp lỗi ném từ server action → trả ActionResult.
+      expect(action.body, `${file}:${action.name} returns ActionResult`).toMatch(/return run(Entry)?Action\(/);
     }
   });
 });

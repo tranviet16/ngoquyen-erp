@@ -12,12 +12,12 @@ export const DT_HD_TT_SECTIONS = [
   { segment: "dt-hd", label: "DT-HĐ", ready: true },
   { segment: "dt-tt", label: "DT-TT", ready: true },
   { segment: "hd-tt", label: "HĐ-TT", ready: true },
-  { segment: "hoa-don", label: "Hóa đơn", ready: false },
-  { segment: "thuc-te-nhap", label: "Thực tế nhập", ready: false },
-  { segment: "chi-thuc-te", label: "Chi thực tế", ready: false },
-  { segment: "anh-xa", label: "Ánh xạ", ready: false },
-  { segment: "dau-moi", label: "Đầu mối", ready: false },
-  { segment: "ma-nhom", label: "Mã nhóm", ready: false },
+  { segment: "hoa-don", label: "Hóa đơn", ready: true },
+  { segment: "thuc-te-nhap", label: "Thực tế nhập", ready: true },
+  { segment: "chi-thuc-te", label: "Chi thực tế", ready: true },
+  { segment: "anh-xa", label: "Ánh xạ", ready: true },
+  { segment: "dau-moi", label: "Đầu mối", ready: true },
+  { segment: "ma-nhom", label: "Mã nhóm", ready: true },
 ] as const;
 
 /** Nơi sửa dòng HĐ: sổ Hóa đơn khi đã có trang, trước đó là tab Đối chiếu DT-HĐ-TT. */
