@@ -87,7 +87,7 @@ Evidence:
 |---|-------|--------|-----------|--------|
 | 1 | [Spec lock from the workbook](phase-01-spec-lock-from-workbook.md) | 1d | – | Done ([spec](reports/workbook-spec-dump.md)) |
 | 2 | [Schema, migration, rollback and safety rails](phase-02-schema-migration-rollback.md) | 2d | 1 | Done ([integration run](reports/phase-02-integration-run.txt)) |
-| 3 | [Pure report engine with golden tests](phase-03-pure-report-engine.md) | 2.5d | 1 (2 for types) | Pending |
+| 3 | [Pure report engine with golden tests](phase-03-pure-report-engine.md) | 2.5d | 1 (2 for types) | Done |
 | 4 | [Workbook import adapter, review screen, Dự toán sync, derived transactions](phase-04-workbook-import-adapter.md) | 5.5d | 2, 3 | Pending |
 | 5 | [Report screens, A4 print, Excel export](phase-05-report-screens-print-export.md) | 2d | 3 (4 for real data) | Pending |
 | 6 | [Entry screens for the three streams](phase-06-entry-screens.md) | 3d | 4, 5 | Pending |

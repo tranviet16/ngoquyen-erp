@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Pure report engine with golden tests"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [1]
@@ -104,3 +104,11 @@ The three reports and their tie-outs are computed by pure functions from plain i
 ## Verification
 - `npx vitest run lib/du-an/dt-hd-tt` is green; the ACL contract test is green with the new service.
 - Phase 4's real-file smoke test feeds parsed rows into these functions and must hit every golden.
+
+## Implementation notes (17/11/2026)
+- Files are `lib/du-an/dt-hd-tt/{report-inputs,book-index,actual-per-counterparty,dt-hd-status,dt-hd-report,dt-tt-report,phan-iii,hd-tt-report,derive-transactions,reports,report-service}.ts`, and every file is under 200 lines. `report-service.ts` is the only `"use server"` entry point and is covered by the du-an ACL contract test. 23 unit tests run against a hand-computed fixture.
+- DT-HĐ blocks are built per **đầu mối**. The workbook builds them per legal NCC; the two layouts are the same whenever a đầu mối has a single NCC. Groups without an NCC phụ trách, or whose phụ trách is a tổ or a khoản khác, go to the "Chưa có đầu mối" block. The block tie-out shows "⚠ Lệch" when invoices are cross-assigned, as the workbook does. The real identity is the grand check: Σ group HĐ + Phần B = all invoice lines.
+- The `payments` basis with a `paymentSection` sums every payment in that section, regardless of its đầu mối tag. This matches the workbook: H99 is SUMIFS over mục I and H100 over mục II.
+- The Phần III actual column uses VL = Phần II A and NC = Phần II B. Chi phí chung = the khoản khác with mục II; không xác định KL = the khoản khác with mục I; nhà tạm, TN and VAT = 0. This matches workbook rows H108–H119.
+- Rows of an NCC that is not linked to any đầu mối still appear in HĐ-TT, with T = E (temporary). The Σ T check accounts for temporary rows, đầu mối with no HĐ-TT row, and non-NCC đầu mối.
+- Parity with the real workbook (golden totals) is proven in phase 4 by the real-file smoke test.

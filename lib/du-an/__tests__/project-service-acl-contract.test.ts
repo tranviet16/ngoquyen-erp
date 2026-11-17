@@ -13,6 +13,8 @@ const serviceFiles = [
   "settings-service.ts",
   "supplier-debt-service.ts",
   "transaction-service.ts",
+  // Sổ "Đối chiếu DT-HĐ-TT": mọi service ("use server") của thư mục con cũng phải theo hợp đồng này.
+  "dt-hd-tt/report-service.ts",
 ];
 
 function exportedActions(source: string): Array<{ name: string; body: string }> {
