@@ -48,4 +48,4 @@ Prove the import, the reports and the derived invoice list on real data on the V
 - Run #8 matched every gate and rolled back to the baseline (same count, Σ and md5). It also found two defects, both fixed before run #10: the MST fill shown in the review was never written; the DT-HĐ per-block tie-out compared the supplier's invoices with the group totals and showed ✗ on 14 of 29 blocks.
 - Run #10 is committed on the copy: all 29 blocks ✓, 20 MSTs filled.
 - Rolling back an old run once a newer run replaced its rows cannot happen in this sequence; the phase 2 integration test covers it.
-- Not checked: A4 print preview.
+- A4 landscape print was simulated with the app's print CSS at the printable width. The simulation found four app-wide print defects, all fixed: the sidebar was not hidden, dark mode printed light text, the scrolling main could clip, and numbers broke mid-number. HĐ-TT now prints at 80 %. The user checked the real print preview of the three reports on the copy and confirmed it prints well.

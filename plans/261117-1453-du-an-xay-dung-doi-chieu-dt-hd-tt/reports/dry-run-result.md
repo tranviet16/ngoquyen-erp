@@ -99,7 +99,30 @@ select 'suppliers_mst_filled', count(*) from suppliers where "taxCode" is not nu
   - 28 dòng NCC, hai dòng kiểm ✓;
   - 1 dòng "tạm = HĐ".
 - Excel DT-TT và HĐ-TT: các tổng khớp với màn hình.
-- **Chưa kiểm:** xem trước khi in A4.
+
+### In A4 ngang
+
+Hộp thoại in của trình duyệt không chụp được. Vì vậy đã giả lập: áp đúng CSS `@media print` của app (A4 ngang, lề 8 mm, chế độ "Vừa ngang" + "Gọn") lên màn hình ở bề rộng 281 mm (~1.047 px), rồi đo.
+
+Giả lập tìm ra bốn lỗi, có trước tính năng này, cả bốn đã sửa:
+1. **Sidebar không bị ẩn khi in.** CSS in ẩn `[data-sidebar]`, nhưng sidebar hiện dùng `data-slot="sidebar"`. Nó chiếm 272 px bên trái trên mọi trang có nút in. Đã thêm `[data-slot="sidebar"]` vào danh sách ẩn.
+2. **Chế độ tối:** chữ màu kem trên giấy trắng, vì trình duyệt không in nền. Đã thêm: khi in, `.dark` dùng bảng màu sáng.
+3. **`main` là vùng cuộn** (`overflow: auto`, bị giới hạn chiều cao), nên khi in có thể bị cắt mất phần dưới. Đã đặt `overflow: visible` cho `main` khi in.
+4. **Số bị ngắt giữa chừng** (390 ô ở DT-HĐ, ví dụ "115.644.189" trong cột 41 px). CSS in cho mọi ô ngắt ở bất kỳ đâu. Đã thêm class opt-in `print-nowrap` cho ô số của ba báo cáo.
+
+HĐ-TT có 13 cột tiền: ở 100 %, cột tên NCC bị ép còn 1–2 ký tự. Khi in, báo cáo này giờ được thu nhỏ còn 80 %; file đội in sheet này ở 61 %.
+
+Đổi tiêu đề cột I của HĐ-TT (màn hình và Excel) từ "Đã trả (H ?? G)" thành "Đã trả (H, chưa rà soát thì G)".
+
+Kết quả giả lập sau khi sửa:
+
+| Báo cáo | Bảng tràn khổ | Số bị ngắt | Số trang ước tính |
+|---|---|---|---|
+| DT-HĐ | 0 / 30 | 0 / 2.482 | ~17 |
+| DT-TT | 0 / 3 | 0 / 1.034 | ~4 |
+| HĐ-TT (80 %) | 0 / 1 | 0 / 284 | ~2; tên NCC tối đa 3 dòng |
+
+Người dùng đã xem bản xem trước in A4 ngang thật của ba báo cáo trên bản sao (image `-3`) và xác nhận in đẹp (17/11).
 
 ## Các tab cũ của MNTC-GD1 (sau run #10)
 
@@ -135,7 +158,6 @@ Docker Desktop tự khởi động lại lúc 19:12, trong lúc đổi container
 
 ## Chưa kiểm
 
-- **Xem trước khi in A4** của ba báo cáo.
 - **Từ chối hoàn tác run cũ** khi đã có run mới thay giao dịch. Trình tự chạy thử này không tạo ra tình huống đó; test tích hợp của phase 2 đã kiểm.
 
 Sau hai bản sửa đã chạy lại:
