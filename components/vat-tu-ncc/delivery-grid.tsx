@@ -13,6 +13,7 @@ import {
   deleteDeliveryAction,
   updateDeliveryAction,
   type DeliveryActionResult,
+  type DeliverySaveResult,
 } from "@/lib/vat-tu-ncc/delivery-actions";
 import { type DeliveryInput } from "@/lib/vat-tu-ncc/schemas";
 import { DeliveryForm } from "./delivery-form";
@@ -55,8 +56,9 @@ interface DeliveryGridRow extends RowWithId {
   itemLabel: string;
   qty: number;
   unit: string;
-  unitPrice: number;
-  totalAmount: number;
+  /** null = phiếu chưa có đơn giá (ô để trống, không hiện "0 ₫"). */
+  unitPrice: number | null;
+  totalAmount: number | null;
   projectLabel: string;
   cbVatTu: string;
   chiHuyCt: string;
@@ -73,13 +75,45 @@ interface Props {
   canCreate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  /** Admin: được xác nhận để sửa phiếu trong kỳ đã ký / kỳ chuyển đổi (server kiểm lại). */
+  canOverrideLocked?: boolean;
   /** Trang đang xem một cặp (`?projectId=`): form tạo/sửa khoá sẵn công trình này. */
   lockedProjectId?: number;
 }
 
-/** Ném lỗi khi server action trả `ok: false` — thông điệp nghiệp vụ đi nguyên văn lên toast. */
-function unwrap(result: DeliveryActionResult): void {
+/** Lỗi khoá kỳ mà admin được phép xác nhận để vẫn thêm / sửa / xoá. */
+const isLockedRefusal = (r: DeliveryActionResult) =>
+  !r.ok && (r.code === "signed_period" || r.code === "cutover_locked");
+
+const LOCK_CONFIRM_TAIL =
+  "Công nợ, báo cáo và bảng đối chiếu đã ký của kỳ này và các kỳ sau sẽ được cập nhật theo " +
+  "(có ghi lại người sửa).";
+
+/**
+ * Lưu phiếu; phiếu thuộc kỳ đã ký / kỳ chuyển đổi thì admin được hỏi xác nhận rồi lưu lại với cờ
+ * `overrideLocked` (server kiểm admin, ghi thay đổi vào công nợ và đông cứng lại kỳ đã ký).
+ */
+async function saveWithLockConfirm(
+  save: (overrideLocked: boolean) => Promise<DeliverySaveResult>,
+  canOverrideLocked: boolean,
+  verb: "thêm" | "sửa",
+): Promise<DeliverySaveResult> {
+  const first = await save(false);
+  if (!canOverrideLocked || !isLockedRefusal(first) || first.ok) return first;
+  const ok = window.confirm(`${first.message}\n\nBạn là admin: vẫn ${verb} phiếu này? ${LOCK_CONFIRM_TAIL}`);
+  return ok ? save(true) : { ok: false, message: `Đã huỷ ${verb} phiếu trong kỳ khoá.` };
+}
+
+/**
+ * Ném lỗi khi server action trả `ok: false` (thông điệp nghiệp vụ đi nguyên văn lên toast); lưu được
+ * thì báo phiếu đã vào công nợ chưa (xem DeliveryLedgerStatus).
+ */
+function toastSaved(result: DeliverySaveResult, savedText: string) {
   if (!result.ok) throw new Error(result.message);
+  if (result.ledgerStatus === "posted") toast.success(`${savedText} — công nợ đã cập nhật`);
+  else if (result.ledgerStatus === "missing_price") {
+    toast.warning(`${savedText}. Phiếu thuộc kỳ đã chốt nhưng chưa có đơn giá nên chưa vào công nợ — nhập đơn giá.`);
+  } else toast.success(`${savedText}. Phiếu vào công nợ khi chốt kỳ.`);
 }
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -93,6 +127,7 @@ export function DeliveryGrid({
   canCreate,
   canEdit,
   canDelete,
+  canOverrideLocked = false,
   lockedProjectId,
 }: Props) {
   const router = useRouter();
@@ -111,8 +146,8 @@ export function DeliveryGrid({
     itemLabel: itemMap[r.itemId] ?? String(r.itemId),
     qty: Number(r.qty),
     unit: r.unit,
-    unitPrice: r.unitPrice == null ? 0 : Number(r.unitPrice),
-    totalAmount: r.totalAmount == null ? 0 : Number(r.totalAmount),
+    unitPrice: r.unitPrice == null ? null : Number(r.unitPrice),
+    totalAmount: r.totalAmount == null ? null : Number(r.totalAmount),
     projectLabel: r.projectId ? (projectMap[r.projectId] ?? String(r.projectId)) : "",
     cbVatTu: r.cbVatTu ?? "",
     chiHuyCt: r.chiHuyCt ?? "",
@@ -125,8 +160,8 @@ export function DeliveryGrid({
     { id: "itemLabel", title: "Vật tư", kind: "text", width: 240, readonly: true },
     { id: "qty", title: "SL", kind: "number", width: 100 },
     { id: "unit", title: "ĐVT", kind: "text", width: 80, readonly: true },
-    { id: "unitPrice", title: "Đơn giá", kind: "number", width: 120 },
-    { id: "totalAmount", title: "Thành tiền", kind: "number", width: 130, readonly: true },
+    { id: "unitPrice", title: "Đơn giá", kind: "currency", width: 120 },
+    { id: "totalAmount", title: "Thành tiền", kind: "currency", width: 140, readonly: true },
     { id: "projectLabel", title: "Công trình", kind: "text", width: 100, readonly: true },
     { id: "cbVatTu", title: "Cán bộ VT", kind: "text", width: 140 },
     { id: "chiHuyCt", title: "Chỉ huy CT", kind: "text", width: 140 },
@@ -155,14 +190,13 @@ export function DeliveryGrid({
       keToan: typeof patch.keToan === "string" ? (patch.keToan || undefined) : (current.keToan ?? undefined),
       note: typeof patch.note === "string" ? (patch.note || undefined) : (current.note ?? undefined),
     };
-    unwrap(await updateDeliveryAction(id, merged));
+    return saveWithLockConfirm((overrideLocked) => updateDeliveryAction(id, merged, { overrideLocked }), canOverrideLocked, "sửa");
   };
 
   const handlers: DataGridHandlers<DeliveryGridRow> = {
     ...(canEdit ? { onCellEdit: async (id: number, col: string, value: unknown) => {
       try {
-        await patchDelivery(id, { [col]: value } as Partial<DeliveryGridRow>);
-        toast.success("Đã lưu");
+        toastSaved(await patchDelivery(id, { [col]: value } as Partial<DeliveryGridRow>), "Đã lưu");
         startTransition(() => router.refresh());
       } catch (err) {
         toast.error("Lưu thất bại: " + errorMessage(err));
@@ -170,13 +204,33 @@ export function DeliveryGrid({
       }
     } } : {}),
     ...(canDelete ? { onDeleteRows: async (ids: number[]) => {
-      // Xoá từng phiếu; phiếu thuộc kỳ đã ký / trước mốc chuyển đổi bị từ chối — báo lỗi, xoá tiếp phần còn lại.
+      // Xoá từng phiếu; phiếu thuộc kỳ đã ký / trước mốc chuyển đổi bị từ chối — báo lỗi, xoá tiếp phần
+      // còn lại. Admin được hỏi một lần cho mọi phiếu kỳ khoá rồi xoá lại các phiếu đó.
       const failures: string[] = [];
+      const lockedIds: number[] = [];
+      let lockedMessage = "";
       let deleted = 0;
       for (const id of ids) {
         const result = await deleteDeliveryAction(id, supplierId);
         if (result.ok) deleted++;
-        else failures.push(`#${id}: ${result.message}`);
+        else if (canOverrideLocked && isLockedRefusal(result)) {
+          lockedIds.push(id);
+          lockedMessage ||= result.message;
+        } else failures.push(`#${id}: ${result.message}`);
+      }
+      if (lockedIds.length > 0) {
+        const confirmed = window.confirm(
+          `${lockedMessage}\n\nBạn là admin: vẫn xoá ${lockedIds.length} phiếu trong kỳ khoá? ${LOCK_CONFIRM_TAIL}`,
+        );
+        for (const id of lockedIds) {
+          if (!confirmed) {
+            failures.push(`#${id}: đã huỷ xoá phiếu trong kỳ khoá`);
+            continue;
+          }
+          const result = await deleteDeliveryAction(id, supplierId, { overrideLocked: true });
+          if (result.ok) deleted++;
+          else failures.push(`#${id}: ${result.message}`);
+        }
       }
       if (deleted > 0) toast.success(`Đã xoá ${deleted} phiếu`);
       if (failures.length > 0) {
@@ -195,8 +249,10 @@ export function DeliveryGrid({
 
   async function handleCreate(data: DeliveryInput) {
     try {
-      unwrap(await createDeliveryAction(data));
-      toast.success("Đã thêm phiếu nhập");
+      toastSaved(
+        await saveWithLockConfirm((overrideLocked) => createDeliveryAction(data, { overrideLocked }), canOverrideLocked, "thêm"),
+        "Đã thêm phiếu nhập",
+      );
       setCreateOpen(false);
       startTransition(() => router.refresh());
     } catch (err) {
@@ -207,8 +263,11 @@ export function DeliveryGrid({
   async function handleEdit(data: DeliveryInput) {
     if (!editTarget) return;
     try {
-      unwrap(await updateDeliveryAction(editTarget.id, data));
-      toast.success("Đã lưu phiếu");
+      const targetId = editTarget.id;
+      toastSaved(
+        await saveWithLockConfirm((overrideLocked) => updateDeliveryAction(targetId, data, { overrideLocked }), canOverrideLocked, "sửa"),
+        "Đã lưu phiếu",
+      );
       setEditTarget(null);
       startTransition(() => router.refresh());
     } catch (err) {

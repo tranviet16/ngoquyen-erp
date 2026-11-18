@@ -81,11 +81,23 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
 ### 3.4 Sửa & Xóa phiếu giao nhận
 
 1. Tìm phiếu trong tab **Vật tư ngày**
-2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu**
-   - Phiếu trong kỳ đã ký → từ chối
+2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu** (Đơn giá, Thành tiền hiển thị dạng số tiền)
+   - Phiếu trong kỳ đã ký hoặc trước mốc chuyển đổi → từ chối với người dùng thường (thêm, sửa, xoá)
+   - **Admin**: hiện cảnh báo kỳ khoá; bấm OK để vẫn **thêm, sửa (mọi ô, kể cả ngày, công trình, vật tư) hoặc xoá** phiếu. Hệ thống gỡ tiền của phiếu ở chỗ cũ và ghi vào chỗ mới:
+     - Kỳ NCC đã ký: dòng công nợ của phiếu đi theo phiếu (ngày, công trình, số tiền mới); xoá phiếu thì gỡ dòng đó. Phiếu trong kỳ đã ký phải có đơn giá.
+     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): tiền của phiếu đi qua dòng **lấy hàng chênh lệch** (có thể âm, nội dung «Chênh lệch do admin sửa phiếu ngày #…») — trừ tiền cũ ở ngày / công trình cũ, cộng tiền mới ở ngày / công trình mới (cùng chỗ thì chỉ ghi phần chênh). Số này nằm ở cột **Cộng P/S** của bảng đối chiếu và cột lấy hàng của báo cáo, không vào cột Thuế/ĐC.
+     - Dời phiếu ra sau mốc: như phiếu thường (mục 4 bên dưới) — tháng chưa có kỳ thì kỳ tháng được tự tạo và phiếu vào công nợ ngay.
+     - Bảng đối chiếu đã ký của công trình cũ và công trình mới, từ kỳ bị đụng tới trở đi, được tính lại số, giữ ngày ký; hệ thống ghi lại người sửa và nội dung thay đổi.
    - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)
 3. Xóa: Click icon thùng rác → xác nhận
-   - Chỉ xóa được phiếu chưa chốt kỳ / chưa thanh toán
+   - Người dùng thường chỉ xóa được phiếu ngoài kỳ đã ký / trước mốc chuyển đổi; admin xoá được sau khi xác nhận (như trên)
+4. Phiếu vào công nợ lúc nào (thông báo sau khi lưu nói rõ):
+   - **Kỳ đã chốt, chưa ký** và phiếu có đơn giá: thêm hoặc sửa phiếu (ngày, công trình, vật tư, số lượng, đơn giá) thì công nợ, bảng đối chiếu và báo cáo công nợ cập nhật **ngay**, không phải chốt lại kỳ.
+   - **Kỳ đã chốt nhưng phiếu chưa có đơn giá**: chưa vào công nợ; nhập đơn giá cho phiếu (hoặc chốt lại kỳ) để vào.
+   - **Tháng chưa có kỳ** (sau mốc chuyển đổi, tới hết tháng hiện tại): hệ thống **tự tạo kỳ tháng 27→26** của cặp ở trạng thái **Chưa ký** (ghi chú «Tự tạo khi có phát sinh trong tháng»), rồi ghi phiếu có đơn giá vào công nợ ngay — cùng mọi phiếu có giá đang chờ của tháng đó. Kỳ mới hiện ngay trên tab **Đối chiếu công nợ**. Tháng trống nằm giữa kỳ gần nhất và tháng của phiếu cũng được tạo để các kỳ liền nhau.
+   - Không tự tạo (phiếu chờ kế toán chốt kỳ như trước) khi: phiếu ghi trước cho tháng sau tháng hiện tại, ngày nằm trước kỳ đầu tiên của cặp, hoặc công trình chưa gán Chủ thể.
+   - Chuyển khoản, thuế HĐ, điều chỉnh sau mốc cũng tự tạo kỳ tháng của chúng theo cùng cách.
+   - Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi công nợ.
 
 ---
 
@@ -96,7 +108,8 @@ Tab **Chốt kỳ** (`/vat-tu-ncc/[NCC]/chot-ky?projectId=…`) đóng dấu m�
 1. Mở trang NCC × công trình (mục 3.1) → tab **Chốt kỳ**
 2. **Chọn kỳ** bằng ô **Từ ngày / Đến ngày**:
    - Mặc định gợi ý từ ngày sau kỳ gần nhất của cặp (sau go-live: 27/10/2026 → 26/11/2026)
-   - **Quy tắc**: kỳ mới phải bắt đầu ngay **ngày hôm sau kỳ gần nhất của cặp** (ký hoặc chưa ký)
+   - **Quy tắc**: kỳ chốt **theo tháng** — từ ngày 27 tháng trước đến ngày 26 tháng sau; chọn "Từ ngày" thì "Đến ngày" tự nhảy về ngày 26 kế tiếp. Không gộp nhiều tháng vào một kỳ. Ngoại lệ duy nhất: kỳ lẻ đầu tiên ngay sau số dư ban đầu (vd. số dư 31/03 → kỳ 01/04 – 26/04)
+   - Kỳ mới phải bắt đầu ngay **ngày hôm sau kỳ gần nhất của cặp** (ký hoặc chưa ký)
 3. Xem **danh sách phiếu** trong kỳ:
    - Kiểm tra phiếu cần gán giá
    - Gán **đơn giá** (nếu để trống)
@@ -116,7 +129,8 @@ Tab **Chốt kỳ** (`/vat-tu-ncc/[NCC]/chot-ky?projectId=…`) đóng dấu m�
 Tab **Đối chiếu công nợ** (`/vat-tu-ncc/[NCC]/doi-chieu?projectId=…`) hiển thị bảng đối chiếu chính thức **của cặp NCC × công trình** và cho phép ký xác nhận. Một công trình là một bản đối chiếu, kể cả khi file Excel cũ gộp nhiều công trình.
 
 1. Mở trang NCC × công trình → tab **Đối chiếu công nợ**
-   - Kỳ **"Kỳ chuyển đổi (khóa)"** 01/01/2026 → 26/10/2026 là số liệu nạp từ Excel lúc go-live: đã ký, không gỡ ký hay sửa được
+   - Danh sách luôn hiện **theo tháng** (27 → 26), bắt đầu từ tháng đầu tiên cặp có phát sinh (số dư, lấy hàng hoặc thanh toán); các tháng trống trước đó không hiện
+   - Kỳ **"Kỳ chuyển đổi (khóa)"** 01/01/2026 → 26/10/2026 là số liệu nạp từ Excel lúc go-live: đã ký, không gỡ ký hay sửa được. Danh sách tách kỳ này thành từng tháng (01/01 – 26/01, 27/01 – 26/02, …); bấm vào một tháng để xem / in bảng đối chiếu của riêng tháng đó (số tính từ sổ, đầu tháng sau = cuối tháng trước)
 2. **Lọc kỳ** (tuỳ chọn):
    - Mặc định: tất cả kỳ chưa ký
    - Hoặc: từ ngày → đến ngày
