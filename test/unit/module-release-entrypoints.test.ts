@@ -24,12 +24,14 @@ const ACTION_MODULES = {
   "app/(app)/sl-dt/chi-tieu/actions.ts": "sl-dt",
   "app/(app)/sl-dt/cau-hinh/actions.ts": "sl-dt",
   "app/(app)/sl-dt/danh-muc-lo/actions.ts": "sl-dt",
+  "app/(app)/du-an/[id]/hop-dong/[contractId]/scan-actions.ts": "du-an",
 } as const;
 
 const API_MODULES = {
   "app/api/notifications/route.ts": "thong-bao",
   "app/api/notifications/stream/route.ts": "thong-bao",
   "app/api/tasks/[id]/attachments/[attId]/route.ts": "van-hanh.cong-viec",
+  "app/api/du-an/[id]/hop-dong/[contractId]/scan/[scanId]/route.ts": "du-an",
 } as const;
 
 const PAYMENT_LAYOUT_MODULES = {
@@ -47,6 +49,8 @@ const PROJECT_PAGE_FILES = [
   "app/(app)/du-an/[id]/du-toan-dieu-chinh/page.tsx",
   "app/(app)/du-an/[id]/giao-dich/page.tsx",
   "app/(app)/du-an/[id]/hop-dong/page.tsx",
+  "app/(app)/du-an/[id]/hop-dong/hoa-don-cdt/page.tsx",
+  "app/(app)/du-an/[id]/hop-dong/[contractId]/page.tsx",
   "app/(app)/du-an/[id]/nghiem-thu/page.tsx",
   "app/(app)/du-an/[id]/phat-sinh/page.tsx",
   "app/(app)/du-an/[id]/tien-do/page.tsx",
@@ -171,6 +175,14 @@ describe("module release entrypoint contract", () => {
     expect(source("lib/master-data/project-query.ts")).not.toMatch(
       /^\s*["']use server["'];/,
     );
+    // Nguồn số của màn chi tiết hợp đồng: hàm nội bộ của page / loader, không phải server action.
+    for (const path of [
+      "lib/du-an/contract-detail/ledger-source.ts",
+      "lib/du-an/contract-detail/cdt-source.ts",
+      "lib/du-an/contract-detail/contract-detail-loader.ts",
+    ]) {
+      expect(source(path), path).not.toMatch(/^\s*["']use server["'];/);
+    }
     expect(source("lib/cong-no-vt/material-detail-report-service.ts")).toContain(
       'requireReleasedModuleRequest("cong-no-vt")',
     );

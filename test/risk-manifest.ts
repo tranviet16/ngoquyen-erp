@@ -72,6 +72,18 @@ const API_RISK_MANIFEST: readonly RiskManifestRecord[] = [
     recovery: standardRecovery,
   },
   {
+    id: "api-du-an-contract-scan",
+    kind: "api-route",
+    path: "app/api/du-an/[id]/hop-dong/[contractId]/scan/[scanId]/route.ts",
+    operation: "GET",
+    tier: "P0",
+    dataClassification: "confidential",
+    owners: { technical: "application", business: "operations", release: "release" },
+    authorization: { reference: "du-an project reader download within resource scope, audited", status: "defined" },
+    requiredTests: ["allow", "deny", "cross-scope", "audit", "recovery"],
+    recovery: standardRecovery,
+  },
+  {
     id: "api-notification-list",
     kind: "api-route",
     path: "app/api/notifications/route.ts",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONTRACT_DOC_TYPES, CONTRACT_PARTY_KINDS, CONTRACT_STATUSES } from "./contract-labels";
 
 export const scheduleSchema = z.object({
   projectId: z.number().int().positive(),
@@ -81,17 +82,78 @@ export const transactionSchema = z.object({
   note: z.string().optional(),
 });
 
-export const contractSchema = z.object({
+/**
+ * Hợp đồng dự án. Các trường tùy chọn nhận `null` để xóa giá trị. `superRefine` khớp các CHECK của
+ * DB (migration 20261118120000): loại đối tác hợp lệ, đúng khóa theo loại, chỉ hợp đồng kinh tế
+ * mới gắn đối tác, giá trị theo TT không âm.
+ */
+/** Ngày dạng YYYY-MM-DD có thật (không nhận 2026-02-30). */
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Ngày không hợp lệ")
+  .refine((s) => {
+    // Zod vẫn chạy refine khi regex đã trượt: ngày rác cho Invalid Date, toISOString sẽ ném.
+    const d = new Date(`${s}T00:00:00.000Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, "Ngày không hợp lệ");
+
+export const contractSchema = z
+  .object({
+    projectId: z.number().int().positive(),
+    docName: z.string().trim().min(1, "Tên tài liệu không được để trống"),
+    docType: z.enum(CONTRACT_DOC_TYPES),
+    status: z.enum(CONTRACT_STATUSES),
+    partyKind: z.enum(CONTRACT_PARTY_KINDS).nullable().optional(),
+    supplierId: z.number().int().positive().nullable().optional(),
+    contractorId: z.number().int().positive().nullable().optional(),
+    partyName: z.string().nullable().optional(),
+    /** Giá trị theo DT (với loại khác hợp đồng kinh tế: "Giá trị"). */
+    valueVnd: z.number().finite().nullable().optional(),
+    /** Giá trị theo TT. */
+    valueTtVnd: z.number().finite().min(0, "Giá trị theo TT không được âm").nullable().optional(),
+    signedDate: isoDate.nullable().optional(),
+    expiryDate: isoDate.nullable().optional(),
+    storage: z.string().nullable().optional(),
+    note: z.string().nullable().optional(),
+  })
+  .superRefine((d, ctx) => {
+    const kind = d.partyKind ?? null;
+    if (kind !== null && d.docType !== "contract") {
+      ctx.addIssue({ code: "custom", path: ["partyKind"], message: "Chỉ hợp đồng kinh tế mới gắn được đối tác" });
+    }
+    const hasSupplier = d.supplierId != null;
+    const hasContractor = d.contractorId != null;
+    if (kind === "ncc" && !hasSupplier) {
+      ctx.addIssue({ code: "custom", path: ["supplierId"], message: "Chọn NCC của hợp đồng" });
+    }
+    if (kind === "doi_thi_cong" && !hasContractor) {
+      ctx.addIssue({ code: "custom", path: ["contractorId"], message: "Chọn đội thi công của hợp đồng" });
+    }
+    if (hasSupplier && kind !== "ncc") {
+      ctx.addIssue({ code: "custom", path: ["supplierId"], message: "Chỉ hợp đồng với NCC mới gắn NCC" });
+    }
+    if (hasContractor && kind !== "doi_thi_cong") {
+      ctx.addIssue({ code: "custom", path: ["contractorId"], message: "Chỉ hợp đồng với đội thi công mới gắn đội" });
+    }
+  });
+
+/**
+ * Hóa đơn xuất CĐT (sổ dùng chung cho mọi hợp đồng CĐT của công trình). Số và ký hiệu được trim;
+ * giá trị chưa VAT khác 0, được âm (hóa đơn điều chỉnh giảm).
+ */
+export const cdtInvoiceSchema = z.object({
   projectId: z.number().int().positive(),
-  docName: z.string().min(1, "Tên tài liệu không được để trống"),
-  docType: z.enum(["contract", "license"]),
-  partyName: z.string().optional(),
-  valueVnd: z.number().optional(),
-  signedDate: z.string().optional(),
-  expiryDate: z.string().optional(),
-  status: z.enum(["active", "expired", "terminated"]),
-  storage: z.string().optional(),
-  note: z.string().optional(),
+  invoiceDate: isoDate,
+  invoiceSymbol: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((s) => (s?.trim() ? s.trim() : null)),
+  invoiceNo: z.string().trim().min(1, "Số hóa đơn không được để trống"),
+  amountVnd: z.number().finite().refine((n) => n !== 0, "Giá trị chưa VAT phải khác 0 (hóa đơn điều chỉnh giảm ghi số âm)"),
+  vatVnd: z.number().finite().default(0),
+  acceptanceBatch: z.string().nullable().optional().transform((s) => (s?.trim() ? s.trim() : null)),
+  note: z.string().nullable().optional().transform((s) => (s?.trim() ? s.trim() : null)),
 });
 
 export const cashflowSchema = z.object({
@@ -132,4 +194,5 @@ export type ChangeOrderInput = z.infer<typeof changeOrderSchema>;
 export type TransactionInput = z.infer<typeof transactionSchema>;
 export type ContractInput = z.infer<typeof contractSchema>;
 export type CashflowInput = z.infer<typeof cashflowSchema>;
+export type CdtInvoiceInput = z.input<typeof cdtInvoiceSchema>;
 export type SettingsInput = z.infer<typeof settingsSchema>;
