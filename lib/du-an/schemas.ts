@@ -115,6 +115,11 @@ export const settingsSchema = z.object({
   contractWarningDays: z.number().int().min(0),
   managementFeePct: z.number().min(0).max(1),
   teamSharePct: z.number().min(0).max(1),
+  // Tỷ lệ Phần III báo cáo DT-TT (Đối chiếu DT-HĐ-TT).
+  generalCostPct: z.number().min(0).max(1),
+  tempHousingPct: z.number().min(0).max(1),
+  unmeasuredPct: z.number().min(0).max(1),
+  presumptiveIncomePct: z.number().min(0).max(1),
 }).refine(
   (d) => d.normYellowThreshold < d.normRedThreshold,
   { message: "Ngưỡng cảnh báo vàng phải nhỏ hơn ngưỡng cảnh báo đỏ", path: ["normRedThreshold"] }
