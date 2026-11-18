@@ -79,15 +79,15 @@ describe("buildCongNoTongHopExcel", () => {
     expect(aoa[3][0]).toBe("Bê tông HP");
     const nh = aoa[4];
     expect(nh[0]).toBe("Nam Hương");
-    expect(nh.slice(1, 4)).toEqual([355_005_120, 100_000_000, 255_005_120]);
+    expect(nh.slice(1, 4)).toEqual([44_400_000, 100_000_000, 255_005_120]);
   });
 
   it("writes the TỔNG row as column sums", async () => {
     const { aoa } = await load({ from: null, to: null });
     const total = aoa[aoa.length - 1];
     expect(total[0]).toBe("TỔNG");
-    // Alpha group LH TT: (310.605.120 + 44.400.000) + (500 + 100)
-    expect(total[1]).toBe(355_005_120 + 600);
+    // Alpha group LH TT: lấy hàng trong kỳ only, without the opening balances: 44.400.000 + 100
+    expect(total[1]).toBe(44_400_000 + 100);
     // TỔNG CÔNG TY Nợ TT = every row's closeTt summed
     expect(total[1 + 3 * 6 + 2]).toBe(255_005_120 + 1_000_000 + 550 + 0);
   });

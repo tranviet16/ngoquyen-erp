@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { listMaterialTransactions } from "@/lib/cong-no-vt/material-ledger-service";
+import { NhapLieuPager } from "./nhap-lieu-pager";
 import {
   patchMaterialTransactionAction,
   adminPatchMaterialTransactionAction,
@@ -10,10 +12,21 @@ import { LedgerTransactionGrid, type TxRow } from "@/components/ledger-grid/tran
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
 
-export default async function NhapLieuPage() {
+/** Số dòng sổ mỗi trang của lưới (mới nhất trước). */
+const PAGE_SIZE = 200;
+
+interface PageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function NhapLieuPage({ searchParams }: PageProps) {
   const { userId, role } = await requireModuleAccess("cong-no-vt", { minLevel: "read", scope: "module" });
+  const sp = await searchParams;
+  const rawPage = Array.isArray(sp.page) ? sp.page[0] : sp.page;
+  const page = rawPage && /^\d{1,6}$/.test(rawPage) ? Math.max(1, Number(rawPage)) : 1;
+
   const [txResult, entities, suppliers, projects, items, canCreate, canEdit] = await Promise.all([
-    listMaterialTransactions({ pageSize: 200 }),
+    listMaterialTransactions({ page, pageSize: PAGE_SIZE }),
     prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.supplier.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -21,6 +34,10 @@ export default async function NhapLieuPage() {
     canAccessEntitlement(userId, "cong-no-vt", { minLevel: "create", scope: "module" }),
     canAccessEntitlement(userId, "cong-no-vt", { minLevel: "edit", scope: "module" }),
   ]);
+
+  // Trang vượt quá số trang hiện có (ví dụ sau khi xóa dòng) → về trang cuối.
+  const totalPages = Math.max(1, Math.ceil(txResult.total / PAGE_SIZE));
+  if (page > totalPages) redirect(`/cong-no-vt/nhap-lieu?page=${totalPages}`);
 
   const rows: TxRow[] = txResult.items.map((t) => ({
     id: t.id,
@@ -53,7 +70,10 @@ export default async function NhapLieuPage() {
         </p>
       </div>
 
+      <NhapLieuPager total={txResult.total} page={page} pageSize={PAGE_SIZE} />
+
       <LedgerTransactionGrid
+        key={page}
         initialData={rows}
         entities={entities}
         partyOptions={suppliers}

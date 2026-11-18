@@ -396,6 +396,12 @@ export async function firstMaterialEntityWithActivity(year: number, month: numbe
   return service.firstEntityWithActivity(year, month);
 }
 
+/** Ngày nghiệp vụ mới nhất có phát sinh công nợ vật tư, không sau `today` (ngày nghiệp vụ UTC 00:00). */
+export async function latestMaterialActivityDate(today: Date): Promise<Date | null> {
+  await requireReleasedModuleRequest("cong-no-vt");
+  return service.latestActivityDate(today);
+}
+
 export async function getMaterialCurrentBalance(
   entityId: number,
   partyId: number,
