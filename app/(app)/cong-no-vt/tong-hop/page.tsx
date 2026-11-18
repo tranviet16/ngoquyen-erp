@@ -58,14 +58,15 @@ export default async function TongHopPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Tổng hợp công nợ vật tư – NCC × Chủ thể</h1>
           <p className="text-sm text-muted-foreground">
-            Kỳ xem: {period.label}. LH = Đầu kỳ + Phát sinh tăng; Nợ = LH − Trả (TT = thực tế, HĐ = hợp đồng).
+            {/* Kỳ xem đã hiện ở bộ lọc; chỉ in ra khi xuất PDF (bộ lọc không in). */}
+            <span className="hidden print:inline">Kỳ xem: {period.label}. </span>LH = Đầu kỳ + Phát sinh tăng; Nợ = LH − Trả (TT = thực tế, HĐ = hợp đồng).
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExcelExportButton
             template="cong-no-tong-hop"
             params={{ from, to, entityIds }}

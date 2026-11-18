@@ -34,19 +34,19 @@ export function BaoCaoThangFilter({ currentPeriod, currentEntityId, entities }: 
   }
 
   return (
-    <div className="flex gap-4 items-start flex-wrap">
+    <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
       <ReportPeriodSelector value={period} onChange={setPeriod} />
       <div className="flex flex-col gap-1.5">
         <Label>Chủ thể</Label>
         <select
-          className="h-10 rounded-md border border-input bg-background text-foreground px-3 text-sm"
+          className="h-9 rounded-md border border-input bg-background text-foreground px-3 text-sm shadow-sm"
           value={entityId}
           onChange={(e) => setEntityId(e.target.value)}
         >
           {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
       </div>
-      <Button className="mt-[22px]" onClick={handleFilter} disabled={invalid}>Xem</Button>
+      <Button size="lg" onClick={handleFilter} disabled={invalid}>Xem</Button>
     </div>
   );
 }
