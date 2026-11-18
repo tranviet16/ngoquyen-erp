@@ -12,7 +12,7 @@ Trước bản sửa này, tải đính kèm task (`/van-hanh/cong-viec`) hỏng
 Bản sửa gồm ba phần:
 
 - Compose gắn thư mục host `D:\docker-data\ngoquyyen-erp\uploads` vào `/data/uploads` và đặt `UPLOAD_DIR=/data/uploads`.
-- `next.config.ts` đặt `experimental.proxyClientMaxBodySize: "26mb"`, lớn hơn giới hạn 25MB của server action.
+- `next.config.ts` đặt `experimental.proxyClientMaxBodySize: "27mb"`, lớn hơn giới hạn body của server action (`serverActions.bodySizeLimit: "26mb"`: tệp tối đa 25 MiB cộng phần bao multipart). Hai giới hạn này được nới từ 26mb / 25mb khi thêm bản scan hợp đồng dự án, vì tệp đúng 25 MiB cộng phần bao vượt 25mb.
 - Route tải về kiểm tệp còn trên ổ trước khi gửi. Nếu tệp mất, route trả 404 thay vì đứt giữa chừng, và log ghi `[task-attachment] file missing from storage`.
 
 Không có migration và không đổi dữ liệu DB.

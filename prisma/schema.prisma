@@ -39,6 +39,8 @@ model User {
   taskComments    TaskComment[]    @relation("TaskCommentAuthor")
   taskAttachments TaskAttachment[] @relation("TaskAttachmentUploader")
 
+  contractAttachments ProjectContractAttachment[] @relation("ProjectContractAttachmentUploader")
+
   deptAccess    UserDeptAccess[] @relation("UserAccess")
   accessGranted UserDeptAccess[] @relation("AccessGranter")
 
@@ -248,6 +250,8 @@ model Supplier {
   projectCounterpartySuppliers ProjectCounterpartySupplier[]
   projectCashPayments          ProjectCashPayment[]
 
+  projectContracts ProjectContract[]
+
   // Partial unique enforced via raw SQL: suppliers_name_active_unique WHERE "deletedAt" IS NULL
   @@index([name])
   @@map("suppliers")
@@ -261,6 +265,8 @@ model Contractor {
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  projectContracts ProjectContract[]
 
   // Partial unique enforced via raw SQL: contractors_name_active_unique WHERE "deletedAt" IS NULL
   @@index([name])
@@ -287,6 +293,8 @@ model Project {
   paymentItems    PaymentRoundItem[]
 
   supplierReconciliations SupplierReconciliation[]
+
+  cdtInvoices ProjectCdtInvoice[]
 
   // Partial unique enforced via raw SQL: projects_code_active_unique WHERE "deletedAt" IS NULL
   @@index([code])
@@ -505,24 +513,82 @@ model ProjectContract {
   id         Int       @id @default(autoincrement())
   projectId  Int
   docName    String
-  docType    String // contract|license
+  docType    String // contract|license|insurance|acceptance|other
   partyName  String?
+  // Giá trị theo DT (dự toán) ghi trên hợp đồng. Giữ tên cột vì import ghi bằng raw INSERT.
   valueVnd   Decimal?  @db.Decimal(18, 2)
+  // Giá trị theo TT (thực tế) ghi trên hợp đồng.
+  valueTtVnd Decimal?  @db.Decimal(18, 2)
   signedDate DateTime?
   expiryDate DateTime?
-  status     String    @default("active") // active|expired|terminated
+  status     String    @default("active") // active|pending|expired|terminated
   storage    String?
   note       String?
   deletedAt  DateTime?
   createdAt  DateTime  @default(now())
+  // Không có @updatedAt: service tự gán mỗi lần sửa; guard hoàn tác import dựa vào cột này.
   updatedAt  DateTime  @default(now())
+
+  // Đối tác có mã của hợp đồng kinh tế (chỉ docType = contract). CHECK bằng raw SQL:
+  //   project_contracts_party_kind_check, project_contracts_party_binding_check,
+  //   project_contracts_party_doc_type_check, project_contracts_value_tt_nonneg.
+  partyKind    String? // ncc|doi_thi_cong|cdt
+  supplierId   Int?
+  contractorId Int?
+  supplier     Supplier?   @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  contractor   Contractor? @relation(fields: [contractorId], references: [id], onDelete: Restrict)
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
+  attachments ProjectContractAttachment[]
+
+  // Index một phần (raw SQL): (projectId, supplierId) / (projectId, contractorId) WHERE deletedAt IS NULL.
   @@index([projectId])
   @@index([importRunId])
   @@map("project_contracts")
+}
+
+/// Bản scan của hợp đồng dự án. Tệp nằm ở UPLOAD_DIR; xóa mềm giữ tệp, admin xóa vĩnh viễn.
+model ProjectContractAttachment {
+  id         Int       @id @default(autoincrement())
+  contractId Int
+  uploaderId String
+  filename   String
+  storedPath String    @unique
+  mimeType   String // CHECK: application/pdf|image/jpeg|image/png
+  sizeBytes  Int // CHECK: 1..26214400
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  contract ProjectContract @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  uploader User            @relation("ProjectContractAttachmentUploader", fields: [uploaderId], references: [id])
+
+  @@index([contractId, createdAt])
+  @@index([uploaderId])
+  @@map("project_contract_attachments")
+}
+
+/// Sổ gốc hóa đơn xuất cho CĐT của công trình. Số âm = hóa đơn điều chỉnh giảm.
+model ProjectCdtInvoice {
+  id              Int       @id @default(autoincrement())
+  projectId       Int
+  invoiceDate     DateTime // 00:00 UTC
+  invoiceSymbol   String? // ký hiệu hóa đơn, ví dụ 1C26TAA
+  invoiceNo       String
+  amountVnd       Decimal   @db.Decimal(18, 2) // chưa VAT, khác 0, được âm
+  vatVnd          Decimal   @default(0) @db.Decimal(18, 2)
+  acceptanceBatch String?
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  // Unique một phần (raw SQL): (projectId, invoiceSymbol, invoiceNo) NULLS NOT DISTINCT WHERE deletedAt IS NULL.
+  @@index([projectId, invoiceDate])
+  @@map("project_cdt_invoices")
 }
 
 model Project3WayCashflow {

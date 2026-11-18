@@ -90,10 +90,10 @@ Chỉ huy công trường theo dõi tiến độ thi công, ghi nhận nghiệm 
 ## 6. Xem Hợp Đồng
 
 1. Vào dự án → Tab **Hợp Đồng**
-2. Danh sách hợp đồng: nhà thầu, giá trị, ngày ký
-3. Click vào hợp đồng để xem chi tiết điều khoản
+2. Danh mục hợp đồng: đối tác (NCC, đội thi công, CĐT), giá trị theo DT / TT, công nợ còn lại, ngày ký, hết hạn
+3. Bấm tên hợp đồng để mở màn chi tiết: bản scan, giá trị, lấy hàng / hóa đơn / chuyển tiền, công nợ và phần hợp đồng chưa thực hiện
 
-> Chỉ huy công trường xem được, không thêm/sửa hợp đồng (admin thực hiện).
+> Thêm / sửa hợp đồng và tải bản scan cần quyền sửa công trình. Chi tiết: [Hướng dẫn Hợp đồng dự án](./hop-dong-du-an.md).
 
 ---
 
