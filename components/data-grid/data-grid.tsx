@@ -19,7 +19,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { useGlideTheme } from "./theme";
 import { useGridMutation } from "./use-grid-mutation";
 import { sameOrderedRowIds, useGridView } from "./use-grid-view";
-import { buildCell, parseCellValue } from "./cells";
+import { buildCell, isCreateOptionPick, parseCellValue } from "./cells";
 import { FilterBar } from "./filter-bar";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "./types";
 
@@ -134,6 +134,15 @@ export function DataGrid<T extends RowWithId>({
       const row = view[rowIdx]; // view row has same id as full-set row
       if (!col || !row) return;
       const raw = "data" in newCell ? (newCell.data as unknown) : undefined;
+      if (isCreateOptionPick(col, raw)) {
+        // "+ Tạo mới…": mở hộp thoại tạo; chỉ ghi vào ô khi đã có bản ghi (huỷ = ô giữ nguyên).
+        clearSelection();
+        const rowId = row.id;
+        void col.onCreateOption!().then((option) => {
+          if (option) editCell(rowId, col.id, option.id);
+        });
+        return;
+      }
       const parsed = parseCellValue(col, raw);
       clearSelection();
       editCell(row.id, col.id, parsed);

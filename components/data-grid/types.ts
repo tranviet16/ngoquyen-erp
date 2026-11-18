@@ -45,6 +45,12 @@ export interface DataGridColumn<T> {
    * rather than the raw ID. Use with `kind: "fk"`.
    */
   fk?: FkConfig;
+  /**
+   * Cột select: thêm mục "+ Tạo mới…" vào dropdown. Lưới gọi hàm này thay vì lưu sentinel, rồi ghi
+   * id của lựa chọn trả về vào ô (null = người dùng huỷ, ô giữ nguyên). Lựa chọn mới phải có trong
+   * `options` của lần render sau để ô hiện tên.
+   */
+  onCreateOption?: () => Promise<SelectOption | null>;
 }
 
 export interface DataGridHandlers<T> {

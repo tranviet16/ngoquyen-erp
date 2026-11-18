@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { QuickCreateProvider } from "@/components/master-data/quick-create/quick-create-provider";
 
 /**
  * Defense-in-depth: middleware.ts is the primary auth gate. This layout
@@ -43,15 +44,18 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider style={{ "--sidebar-width": "17rem" } as React.CSSProperties}>
-      <div className="nq-app-shell flex min-h-screen w-full">
-        <AppSidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar />
-          <main className="nq-main flex-1 overflow-auto">
-            {children}
-          </main>
+      {/* Tạo danh mục ngay trong ô chọn: chỉ admin (server kiểm lại khi tạo). */}
+      <QuickCreateProvider enabled={session.user.role === "admin"}>
+        <div className="nq-app-shell flex min-h-screen w-full">
+          <AppSidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Topbar />
+            <main className="nq-main flex-1 overflow-auto">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </QuickCreateProvider>
     </SidebarProvider>
   );
 }

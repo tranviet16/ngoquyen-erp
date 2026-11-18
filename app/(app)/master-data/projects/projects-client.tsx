@@ -18,6 +18,11 @@ import { projectFormDefaults, saveProjectEdit, type EditableProject } from "@/co
 import { type ProjectInput } from "@/lib/master-data/schemas";
 import { PROJECT_SPEC, type ProjectRow } from "@/lib/master-data/projects/table-spec";
 import { formatNumber } from "@/lib/utils/format";
+import {
+  toNamedOption,
+  useOptionsWithCreated,
+  useQuickCreate,
+} from "@/components/master-data/quick-create/quick-create-provider";
 
 type EntityOption = { id: number; name: string };
 type ProjectListRow = ProjectRow & EditableProject & { entityId: number | null };
@@ -26,7 +31,10 @@ type ProjectListRow = ProjectRow & EditableProject & { entityId: number | null }
  * Cột "Chủ thể" (sửa nhanh bằng select). Chủ thể là nguồn suy Chủ thể cho công nợ vật tư; server
  * từ chối đổi khi công trình đã có dữ liệu vật tư (gán lần đầu luôn được).
  */
-function entityColumn(entities: EntityOption[]): ColumnDef<Record<string, unknown>> {
+function entityColumn(
+  entities: EntityOption[],
+  onCreateOption?: ColumnDef<Record<string, unknown>>["onCreateOption"],
+): ColumnDef<Record<string, unknown>> {
   const names = new Map(entities.map((e) => [e.id, e.name]));
   return {
     key: "entityId",
@@ -35,6 +43,7 @@ function entityColumn(entities: EntityOption[]): ColumnDef<Record<string, unknow
     editable: true,
     editKind: "select",
     editOptions: entities.map((e) => ({ id: String(e.id), name: e.name })),
+    onCreateOption,
     parseEdit: (raw) => (raw === "" ? null : Number(raw)),
     render: (row) => {
       const id = typeof row.entityId === "number" ? row.entityId : null;
@@ -110,16 +119,21 @@ interface ProjectsClientProps {
   searchValue: string;
 }
 
-export function ProjectsClient({ data, entities, total, page, pageSize, searchValue }: ProjectsClientProps) {
+export function ProjectsClient({ data, entities: baseEntities, total, page, pageSize, searchValue }: ProjectsClientProps) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProjectListRow | null>(null);
   const [, startTransition] = useTransition();
+  const entities = useOptionsWithCreated("entity", baseEntities, toNamedOption);
+  const { enabled: canQuickCreate, request: requestQuickCreate } = useQuickCreate();
   // Chèn "Chủ thể" sau "Chủ đầu tư".
   const columns = useMemo(() => {
     const at = PROJECT_COLUMNS.findIndex((c) => c.key === "ownerInvestor") + 1;
-    return [...PROJECT_COLUMNS.slice(0, at), entityColumn(entities), ...PROJECT_COLUMNS.slice(at)];
-  }, [entities]);
+    const createEntity = canQuickCreate
+      ? () => requestQuickCreate("entity").then((r) => (r ? { id: String(r.id), name: r.name } : null))
+      : undefined;
+    return [...PROJECT_COLUMNS.slice(0, at), entityColumn(entities, createEntity), ...PROJECT_COLUMNS.slice(at)];
+  }, [entities, canQuickCreate, requestQuickCreate]);
 
   // Lỗi (vd. trùng mã) hiện trên toast và giữ hộp thoại mở để sửa tiếp.
   async function handleCreate(input: ProjectInput) {
