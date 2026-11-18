@@ -21,6 +21,12 @@ services:
       TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-http://admin-pc:3001,https://admin-pc.tail8998df.ts.net,http://localhost:3001,http://127.0.0.1:3001}"
       SENTRY_DSN: "${SENTRY_DSN:-}"
       NODE_ENV: production
+      # Task attachments. The image runs as uid 1001 and cannot write under /app, and the
+      # container filesystem is lost on recreate, so files live on the host next to the
+      # database data. The image has no /data, so a missing mount fails uploads loudly.
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - D:/docker-data/ngoquyyen-erp/uploads:/data/uploads
     ports:
       - "127.0.0.1:3001:3000"
     networks:
