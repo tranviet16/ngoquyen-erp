@@ -8,6 +8,13 @@ import { SortableTableHead } from "@/components/sortable-table/sortable-table-he
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 import { formatDate, formatNumber, formatVND } from "@/lib/utils/format";
 import type { PairPeriodStatus, ProjectPairRow } from "@/lib/vat-tu-ncc/project-overview-service";
+import {
+  QuickCreateOption,
+  toNamedOption,
+  useOptionsWithCreated,
+  useQuickCreate,
+  useQuickCreatePick,
+} from "@/components/master-data/quick-create/quick-create-provider";
 
 interface Props {
   projectId: number;
@@ -35,9 +42,12 @@ const STATUS_CLASS: Record<PairPeriodStatus, string> = {
 const selectClass = "h-8 max-w-xs rounded-md border border-input bg-transparent px-2 text-sm";
 
 /** Các NCC của một công trình — liên kết dẫn sang trang NCC hiện có với `?projectId=`. */
-export function ProjectPairTable({ projectId, pairs, debtVisible, showPaymentLink, otherSuppliers }: Props) {
+export function ProjectPairTable({ projectId, pairs, debtVisible, showPaymentLink, otherSuppliers: baseOtherSuppliers }: Props) {
   const router = useRouter();
   const [newSupplier, setNewSupplier] = useState("");
+  const { enabled: canQuickCreate } = useQuickCreate();
+  const pickQuickCreate = useQuickCreatePick();
+  const otherSuppliers = useOptionsWithCreated("supplier", baseOtherSuppliers, toNamedOption);
   const columns = useMemo(() => ({
     supplier: { accessor: (r: ProjectPairRow) => r.supplierName, kind: "text" as const },
     deliveries: { accessor: (r: ProjectPairRow) => r.deliveryCount, kind: "number" as const },
@@ -137,7 +147,7 @@ export function ProjectPairTable({ projectId, pairs, debtVisible, showPaymentLin
         </table>
       </div>
 
-      {otherSuppliers.length > 0 && (
+      {(otherSuppliers.length > 0 || canQuickCreate) && (
         <form
           className="flex flex-wrap items-center gap-2 text-sm"
           onSubmit={(e) => {
@@ -152,12 +162,16 @@ export function ProjectPairTable({ projectId, pairs, debtVisible, showPaymentLin
             id="project-pair-new-supplier"
             className={selectClass}
             value={newSupplier}
-            onChange={(e) => setNewSupplier(e.target.value)}
+            onChange={(e) => {
+              if (pickQuickCreate(e.target.value, "supplier", (r) => setNewSupplier(String(r.id)))) return;
+              setNewSupplier(e.target.value);
+            }}
           >
             <option value="">— Chọn NCC —</option>
             {otherSuppliers.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
+            <QuickCreateOption />
           </select>
           <Button type="submit" size="sm" variant="outline" disabled={!newSupplier}>
             Mở
