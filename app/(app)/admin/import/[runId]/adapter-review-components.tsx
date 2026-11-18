@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { AdapterReviewProps } from "./adapter-review-types";
 import { CutoverReview } from "./cutover-review";
+import { DtHdTtReview } from "./dt-hd-tt-review";
 import { GenericReviewSection } from "./generic-review-section";
 
 /**
@@ -11,6 +12,7 @@ import { GenericReviewSection } from "./generic-review-section";
  */
 export const adapterReviewComponents: Readonly<Record<string, ComponentType<AdapterReviewProps>>> = {
   "vat-tu-chuyen-doi": CutoverReview,
+  "du-an-dt-hd-tt": DtHdTtReview,
 };
 
 /** Hiển thị phần duyệt của run bằng component đã đăng ký cho adapter, hoặc phần mặc định. */

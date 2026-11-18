@@ -225,6 +225,9 @@ Quy trình tương tự Công Nợ Vật Tư, nhưng dành cho nhà thầu nhân
 | Đối chiếu NCC | Vật Tư NCC > Đối Chiếu > Xuất Excel | doi-chieu |
 | Dự toán | Dự Án > Dự Toán > Xuất Excel | du-toan |
 | SL/DT | SL/DT > Báo Cáo DT > Xuất Excel | sl-dt |
+| DT-HĐ / DT-TT / HĐ-TT | Dự Án > (công trình) > Đối chiếu DT-HĐ-TT > Xuất Excel | — |
+
+Rà soát số đã trả (H), số đã lấy về (X) và in ba báo cáo đối chiếu: xem [Đối chiếu DT-HĐ-TT](doi-chieu-dt-hd-tt.md).
 
 ---
 

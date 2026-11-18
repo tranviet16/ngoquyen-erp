@@ -48,6 +48,11 @@ const TRANSIENT_NESTED_KEYS = ["meta", "cause", "driverAdapterError"] as const;
  * (có giới hạn độ sâu, chống vòng lặp).
  */
 export function isTransientDbError(err: unknown): boolean {
+  return hasDbErrorCode(err, TRANSIENT_DB_CODES);
+}
+
+/** Lỗi có mang một trong các mã DB (Prisma hoặc Postgres, kể cả lồng trong driver adapter) không. */
+export function hasDbErrorCode(err: unknown, codes: ReadonlySet<string>): boolean {
   const seen = new Set<object>();
   const visit = (value: unknown, depth: number): boolean => {
     if (depth > 6 || value === null || typeof value !== "object" || seen.has(value)) return false;
@@ -55,7 +60,7 @@ export function isTransientDbError(err: unknown): boolean {
     const record = value as Record<string, unknown>;
     for (const key of TRANSIENT_CODE_KEYS) {
       const code = record[key];
-      if (typeof code === "string" && TRANSIENT_DB_CODES.has(code)) return true;
+      if (typeof code === "string" && codes.has(code)) return true;
     }
     return TRANSIENT_NESTED_KEYS.some((key) => visit(record[key], depth + 1));
   };

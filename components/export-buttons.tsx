@@ -62,10 +62,18 @@ export function ExcelExportButton({ template, params, label = "Xuất Excel", fi
   );
 }
 
-export function PrintButton({ label = "Xuất PDF (In)" }: { label?: string }) {
+export function PrintButton({
+  label = "Xuất PDF (In)",
+  defaultPageSize = "a3",
+  defaultOrientation = "landscape",
+}: {
+  label?: string;
+  defaultPageSize?: PrintPageSize;
+  defaultOrientation?: PrintOrientation;
+}) {
   const styleKey = useId().replace(/:/g, "");
-  const [pageSize, setPageSize] = useState<PrintPageSize>("a3");
-  const [orientation, setOrientation] = useState<PrintOrientation>("landscape");
+  const [pageSize, setPageSize] = useState<PrintPageSize>(defaultPageSize);
+  const [orientation, setOrientation] = useState<PrintOrientation>(defaultOrientation);
   const [fitWidth, setFitWidth] = useState(true);
   const [compact, setCompact] = useState(true);
 

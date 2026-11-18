@@ -17,6 +17,7 @@ const TABS = [
   { href: "/dinh-muc", label: "Định Mức" },
   { href: "/giao-dich", label: "Giao Dịch" },
   { href: "/can-doi-vat-tu", label: "Cân Đối VT" },
+  { href: "/dt-hd-tt", label: "Đối chiếu DT-HĐ-TT" },
   { href: "/hop-dong", label: "Hợp Đồng" },
   { href: "/dong-tien-3-ben", label: "Dòng Tiền 3 Bên" },
   { href: "/cong-no", label: "Công Nợ NCC" },
