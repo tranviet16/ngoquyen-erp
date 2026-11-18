@@ -13,6 +13,12 @@ Kết quả chạy thử trên bản sao: [dry-run-result.md](dry-run-result.md)
 
 ## 1. Sao lưu → dừng app → migrate → chạy build mới
 
+Script [deploy-erp-3001-du-an-dt-hd-tt.ps1](deploy-erp-3001-du-an-dt-hd-tt.ps1) làm các bước dưới đây theo thứ tự. Chạy trên admin-pc: `powershell -ExecutionPolicy Bypass -File .\deploy-erp-3001-du-an-dt-hd-tt.ps1`.
+- Bước 1.4 (số liệu nền theo công trình) vẫn làm tay trước khi import.
+- Script dừng nếu DB còn chờ migration nào khác `20261117160000_du_an_dt_hd_tt`, và hỏi gõ `DEPLOY` trước khi dừng app.
+- Script sao lưu **sau** khi dừng app, nên bản sao lưu khớp đúng trạng thái trước migrate.
+- Bản mới không lên thì script tự quay về image cũ.
+
 1. Ghi tên image hiện tại để có thể quay lại:
    ```powershell
    docker inspect -f "{{.Config.Image}}" ngoquyen-erp-3001

@@ -131,7 +131,7 @@ Mục tiêu: chạy bước 3–11 trên bản sao DB thật. Ghi kết quả v�
    pnpm dev                                              # http://localhost:3000, DATABASE_URL của phiên này thắng .env.local
    ```
    Không dùng `docker-compose.erp-3001.yml`, không build image ở bước chạy thử, không chạy `prisma migrate dev` trên container dùng chung.
-5. **Bước 8–11** trên app dev (`http://localhost:3000`), với thư mục Excel hiện có (CSV chưa xuất lại thì một số cặp có thể lệch đúng bằng phát sinh sau giờ xuất CSV).
+5. **Bước 8–11** trên app dev (`http://localhost:3000`), với thư mục Excel hiện có (CSV chưa xuất lại thì một số cặp có thể lệch đúng bằng phát sinh sau giờ xuất CSV). Sau đó chạy **bước 12a** trên DB chạy thử (chỉ lần chạy thử, không `APPLY=1`) để biết trước script có tìm đủ dòng không.
 6. **Ghi `reports/dry-run-result.md`:** kiểm kê trước và sau dọn (mục 1 phải toàn 0), số dòng của script dọn, kết quả migrate, V1–V4, các lệch so với runbook. Xác nhận các chi tiết "(theo kế hoạch)" ở Phụ lục P4. Nêu rõ thời gian thực tế của từng bước.
 7. **Dọn:** dừng `pnpm dev`; `docker exec $PG dropdb -U nqerp ngoquyyen_erp_dryrun`; đóng cửa sổ PowerShell, để không còn `DATABASE_URL` trỏ DB chạy thử.
 
@@ -148,6 +148,7 @@ Dùng **một** cửa sổ PowerShell từ bước 2 tới bước 13, đã dán
 - [ ] Docker Desktop bật; `docker ps` có `docker-postgres-1` và `ngoquyen-erp-3001`.
 - [ ] Người duyệt có mặt. Thư mục `Quản Lý Công Nợ` trên máy là bản mới nhất.
 - [ ] Đã thông báo **toàn bộ người dùng ERP** ngừng dùng hệ thống trong cửa sổ go-live, không riêng 3 module (xem "Rollback vận hành").
+- [ ] Commit deploy có quyền admin ghi sổ trong kỳ khoá (`LedgerService` với `adminOverride`, `refreezeSignedPeriodsFrom`) và script `scripts/vat-tu-bo-sung-mam-non-sau-import.ts`. Bước 12a cần cả hai.
 
 ### Bước 2 — Đóng module, đóng băng Excel
 
@@ -163,6 +164,10 @@ Dùng **một** cửa sổ PowerShell từ bước 2 tới bước 13, đã dán
 5. **Đóng băng Excel:**
    - Chốt giờ đóng băng và báo người dùng ngừng sửa file.
    - Xác nhận các file theo dõi đã cập nhật đến giờ đó.
+   - Sửa Excel nguồn theo các chỉnh sửa số liệu đã thống nhất (bản sao trên máy dev đã sửa trực tiếp trong DB, import thật sẽ không tự có):
+     - **Nam Hương × Mầm non Trại chuối** (người dùng xác nhận 11/11/2026 theo bảng gạch thực tế): xoá 10 dòng "Lấy Hàng" 13/03–29/03/2026 của Nhập Liệu (gồm dòng "Kệ gạch" 5.500.000, bỏ hẳn); thêm "Lấy Hàng" 25/03/2026 52.275.000 (41.820 viên × 1.250) và 28/03/2026 43.411.200 (32.640 viên × 1.330). Số Dư Ban Đầu dòng 9: TT từ −17.016.800 thành 26.386.560 (3 lần lấy gạch 19, 23, 25/12/2025, mỗi lần 8.795.520; không có khoản trả trước 2026), HĐ giữ 0. Từ 02/04 trở đi giữ nguyên. Nợ TT cuối cặp phải ra 100.587.760; dòng "MN trại chuối" của Nam Hương trong CSV xuất lại cũng phải ra số này, nếu không import sẽ báo lệch.
+     - **Quang Minh (chống thấm) × Mầm non Trại chuối** (người dùng xác nhận 12/11/2026: hàng đã cấp, khoản trả 05/08 là trả hoá đơn này): dòng "Lấy Hàng" 31/07/2026 của Nhập Liệu đang chỉ có Tổng HĐ 8.760.000 → điền thêm Tổng TT 8.760.000 (trước VAT 8.111.111, VAT 8%). Nợ TT cuối cặp phải ra 0.
+     - **Đá Việt Hà × Mầm non Trại chuối** (người dùng xác nhận 12/11/2026: đã trả hết ngày 21/09/2026): thêm 2 dòng "Trả Nợ" ngày 21/09/2026 vào Nhập Liệu, một dòng Tổng TT 43.998.700, một dòng Tổng HĐ 78.309.000. Nợ cuối cặp phải ra 0 cả TT lẫn HĐ, khớp CSV.
    - **Xuất lại CSV "Tổng công nợ"** từ bảng tính nguồn đúng giờ đóng băng. Thay tệp CSV cũ trong `Quản Lý Công Nợ\`, chỉ để lại một tệp CSV.
    - Lưu checksum cả thư mục (`$bk` đã tạo ở mục 0.3):
      ```powershell
@@ -292,7 +297,7 @@ Invoke-CutoverSql ngoquyyen_erp vat-tu-cutover-inventory.sql inventory-3.txt $gi
    - Tạo nếu chưa có: "Tiên Lãng (Việt Úc)" (Chủ thể Lưu Minh Xuân), "Tiên Lãng (SH)" (Lê Văn Huyên), "Tân Lộc CDC", "ĐVP-CDC" (Chủ thể theo dòng "CDC" trong Số Dư; mặc định Công Ty Quản Lý).
    - Gán cột **Chủ thể** cho **mọi** công trình sẽ được ánh xạ, kể cả công trình đã xong: Trại Chuối, Mầm non Trại chuối, Mầm non GĐ2, Xây dựng Dải cây xanh, Quán Toan, 326 - Lô 34, Trụ sở 149 Hai Bà Trưng, Phí khác (các dự án)… Chủ thể lấy theo cột "Chủ Thể" của Số Dư / Nhập Liệu.
    - Gán đúng Chủ thể cho các công trình trong danh sách "công trình chưa có Chủ thể" của `cleanup-commit.txt`.
-   - Tạo «346 Cát Dài» (Chủ thể Ngô Quyền). Công trình này chỉ có trong CSV, không có dòng Nhập Liệu hay Số Dư nào để import tự lấy Chủ thể.
+   - **Không tạo «346 Cát Dài».** Người dùng xác nhận 12/11/2026: «346 Cát Dài» trong CSV và «326 - Lô 34» là một công trình; ở bước Ánh xạ tên, chọn «326 - Lô 34» cho tên CSV này.
    - Chủ thể gán lần đầu (từ trống) được, **trừ khi** công trình đã có dòng sổ / số dư vật tư mang Chủ thể khác (app báo "Không thể gán Chủ thể #…") — gán đúng Chủ thể trong danh sách của `cleanup-commit.txt`. Khi công trình đã có sổ, phiếu, số dư hoặc kỳ vật tư thì không đổi sang Chủ thể khác được nữa.
 3. Kiểm trong psql: `SELECT id, code, name FROM projects WHERE "deletedAt" IS NULL AND "entityId" IS NULL ORDER BY name;` không còn công trình nào sẽ được ánh xạ. Theo kế hoạch, import báo lỗi chặn nếu công trình đã có mà chưa gán Chủ thể.
 4. Tuỳ chọn: pilot đã đổi vật tư `CA-MX` từ `machine` sang `material`. Nay báo giá nhận cả ca máy (commit `df1e1e7`), nên có thể đổi lại `machine` ở **Vật Tư / Hạng Mục**.
@@ -308,7 +313,7 @@ Invoke-CutoverSql ngoquyyen_erp vat-tu-cutover-inventory.sql inventory-3.txt $gi
       - NCC, gồm bí danh "Cty (Anh Công)" → Khánh Đức, "Cty Hiệu Trần (Anh Hiếu)" và "Thép Hiệu Trần ( chú Hiếu )" → Thương Hiệu Trần;
       - công trình theo `tên@Chủ thể`: "Cống hộp - Tiên lãng@Lưu Minh Xuân" → Tiên Lãng (Việt Úc), "@Lê Văn Huyên" → Tiên Lãng (SH); "CDC@…" → tách;
       - thư mục: "Mầm Non TC1" → Mầm non Trại chuối, "Mầm Non TC2" → Mầm non GĐ2, "Dải Cây Xanh" → Xây dựng Dải cây xanh;
-      - tên CSV: "Ngô quyền Trại chuối" → Trại Chuối, "Tân lộc CDC" → Tân Lộc CDC, "ĐVP -CDC" → ĐVP-CDC;
+      - tên CSV: "Ngô quyền Trại chuối" → Trại Chuối, "Tân lộc CDC" → Tân Lộc CDC, "ĐVP -CDC" → ĐVP-CDC, "346 Cát Dài" và "Ngô quyền 346 Cát Dài" → 326 - Lô 34;
       - vật tư.
 
       NCC, công trình và Chủ thể không có lựa chọn "Bỏ qua".
@@ -352,6 +357,31 @@ Chỉ làm sau khi người duyệt chấp nhận bước 10–11. Chốt kỳ s
 - Quang Minh × Xây dựng Dải cây xanh → tab **Chốt kỳ**: 27/10/2026→26/11/2026, giá 450.000/m³ → **Chốt kỳ** (không ký).
 - Tab **Đối chiếu công nợ**: không có thanh toán trong kỳ thì nợ cuối = **159.360.000** (152.160.000 tại 26/10 + 16 m³ × 450.000).
 - Kỳ chưa ký chốt lại được khi có thêm phiếu.
+
+### Bước 12a — Bổ sung Mầm Non Trại Chuối GĐ1 theo đối chiếu file đội
+
+Người dùng đã đối chiếu file của đội (`Ngo Quyen\Cong Trinh Khoan\Mầm Non\Can Doi Vat Tu 2.xlsx`) với sổ công nợ ngày 13–17/11/2026 và chốt nguồn từng chỗ lệch. Excel nguồn của import không có các chỉnh sửa này, nên sau import phải ghi bổ sung cho công trình `MNTC-GD1`:
+- thêm HĐ 146 Thương Hiệu Trần, 00000853 Phương Minh, 00000031 Hoàng Yến (kèm khoản trả 24/08: thực trả 9.900.000, trả HĐ 28.500.000), 999 Quang Minh (chống thấm), 4585 Điện cơ (kèm khoản trả 1.430.000);
+- HĐ 00000232 Bê tông HP đủ 5 dòng (175.720.000);
+- Kế Hằng bỏ tiền HĐ tính trùng ngày 11/08; khoản trả 11/08 thành 23.467.181;
+- Điện cơ thực tế 06/08 thành 1.430.000;
+- Việt Đức thêm thực tế 6.360.336 ngày 26/10;
+- thêm 6 NCC mà sổ chưa theo dõi (Tiến Phát, Tiến Đạt, Thanh Tùng, Gia Hưng Thịnh, Phúc An Khang, Văn Toán; khớp/tạo theo MST) cùng HĐ và khoản trả của từng NCC.
+
+Như bước 12, chỉ làm sau khi người duyệt chấp nhận bước 10–11: dòng sổ mới không thuộc run làm **Hoàn tác** import bị từ chối.
+
+```powershell
+Set-ErpDatabaseUrl .env.local ngoquyyen_erp
+$env:ADMIN_USER_ID = "<id tài khoản admin đang chạy go-live>"
+npx tsx scripts/vat-tu-bo-sung-mam-non-sau-import.ts                       # chạy thử, tự hoàn tác
+$env:APPLY = "1"; npx tsx scripts/vat-tu-bo-sung-mam-non-sau-import.ts     # ghi thật
+Remove-Item Env:APPLY
+```
+
+- Script tìm từng dòng cần sửa theo nội dung (NCC, ngày, loại, số tiền cũ). Nếu một dòng không còn đúng như lúc đối chiếu (đã có người sửa Excel trước giờ đóng băng), hoặc dòng sắp thêm đã có, script dừng và không ghi gì. Khi đó so dòng đó với file đội rồi hỏi người dùng, không sửa script cho chạy qua.
+- Cuối lần chạy, script in tổng thực tế / HĐ / thực trả / trả HĐ của 14 NCC liên quan và đánh dấu ✓ khi khớp số chốt ngày 16/11. Dòng ⚠ chỉ chấp nhận được khi chênh đúng bằng phát sinh sau 16/11 trong Nhập Liệu; ghi vào `reports/go-live-result.md`.
+- Kỳ chuyển đổi đã ký của các NCC này được tính lại (giữ ngày ký), như thao tác admin sửa kỳ khoá.
+- Đã thử 17/11/2026 trên DB khôi phục từ bản trước mọi chỉnh sửa Mầm Non: 14/14 NCC ✓; tổng sổ theo NCC × loại và 20 kỳ của công trình trùng khớp bản sao đã sửa tay; chạy lần hai bị từ chối.
 
 ### Bước 13 — Đóng băng Excel và mở lại hệ thống
 
