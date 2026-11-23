@@ -193,15 +193,35 @@ The names are fixed here. Each builder, with its round-trip test, is added by th
 
 ## Todo
 
-- [ ] `screen-links.ts` with round-trip, encoding, 100-character and `kindlessEstimateIds` tests
-- [ ] DataGrid `filterAccessor` and controlled `filters` / `onFiltersChange`, with selection clear on incoming change; pure tests; other grids unchanged
-- [ ] `useUrlState` with live-URL seed and `reconcileUrlState`; stale-prop and selection-clear tests
-- [ ] Five book and register clients own their filters through the codec
-- [ ] Ánh xạ `tab` / `status` / `q` / `key` through `effectiveAliasStatus`; `thieu_he_so`; the two link fixes
-- [ ] Đầu mối filters on disjoint synced columns; anchors
-- [ ] Dự toán `?loai=thieu`
-- [ ] Measure `filters` green, including "navigate away, then Back"
-- [ ] Manual write checks done inside the session protocol; dump restored
+- [x] `screen-links.ts` with round-trip, encoding, 100-character and `kindlessEstimateIds` tests
+- [x] DataGrid `filterAccessor` and controlled `filters` / `onFiltersChange`, with selection clear on incoming change; pure tests; other grids unchanged
+- [x] `useUrlState` with live-URL seed and `reconcileUrlState`; stale-prop and selection-clear tests
+- [x] Five book and register clients own their filters through the codec
+- [x] Ánh xạ `tab` / `status` / `q` / `key` through `effectiveAliasStatus`; `thieu_he_so`; the two link fixes
+- [x] Đầu mối filters on disjoint synced columns; anchors
+- [x] Dự toán `?loai=thieu`
+- [x] Measure `filters` green, including "navigate away, then Back"
+- [ ] Manual write checks done inside the session protocol; dump restored. Moved to the single manual session in phase 9 (see run log).
+
+## Run log (2026-11-23)
+
+- **Branch:** `feat/du-an-ui-redesign-p3-filters`, stacked on phase 2 (PR #26).
+- **Static gate:** unit tests 1497 passed. `tsc`, `lint`, `risk:verify` and `build` are green. The print snapshot and the ACL contract test are unchanged.
+- **`measure filters` on `127.0.0.1:3003`:** passes on books + Đầu mối, the Đầu mối anchors, Ánh xạ, Dự toán and the "navigate away, then Back" checks on Hóa đơn and Ánh xạ.
+  - Project 4 has no data for a few cases, so these were skipped and reported: Hóa đơn `chưa gán`, Ánh xạ tab dt `chua_gan` / `de_xuat`, Dự toán `loai=thieu`, and `#ncc-chua-co-dong`.
+- **`measure nav`:** still passes at 1366 and 1440 px.
+- **Baseline `compare`:** exits 0. Print, PDF pages, Excel and Dashboard are identical. Server times are dt-hd 275 → 168 ms, dt-tt 116 → 104, hd-tt 82 → 84 and Dashboard 40 → 33.
+- **Deviations, all behaviour-neutral or stricter:**
+  - `kindOfCategoryCode` moved to `cost-kind.ts`, so client code can import it without Prisma; `keys.ts` re-exports it.
+  - The codec layer is split into `grid-url-codec.ts`, and the Ánh xạ predicates into `anh-xa-filter.ts`.
+  - Equals filters accept only ids, `none` or listed options.
+  - On mount the URL is rewritten to its clean form.
+  - The Đầu mối "Thực tế" filter is URL-only and shows a chip.
+  - Ánh xạ fixes its default tab on arrival.
+  - The Dự toán footer shows the filtered total.
+- **Resolved open point:** `buildCategoryTree` already lists an estimate whose category is no longer live, under "Không xác định", so Dự toán needs no extra list.
+- **Known gap, for a later phase:** the books' "Ánh xạ: chưa gán" column still means "no alias row", from the services' `mapped` flag. Ánh xạ uses `effectiveAliasStatus`. So a key whose alias points at a DT line that no longer exists looks mapped in the book but shows as chưa gán in Ánh xạ.
+- **Step 9 (manual checks with writes) is deferred** to one manual session in phase 9, together with phases 7 and 8. Each session dumps and restores the copy database, so one window instead of three.
 
 ## Verification
 
