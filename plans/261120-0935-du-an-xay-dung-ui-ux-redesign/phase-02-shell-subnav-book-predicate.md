@@ -156,14 +156,38 @@ There is no URL change and no print change.
 
 ## Todo
 
-- [ ] Guard test green on today's guard, then `projectUsesBook` extracted and the guard delegating with the test still green
-- [ ] `project-nav.ts`, `ProjectNav` and the nav-model tests for all 14 segments plus `null`
-- [ ] Shell layout uses `ProjectNav`; book note in its own `Suspense`; entrypoint test green
-- [ ] Sub-nav grouped; Tổng quan index entry present but hidden
-- [ ] `effectiveAliasStatus` and `aliasQueueSummary` in `alias-board.ts`, with the stale-`dtKey` fixture
-- [ ] Badge in its own `Suspense`, fed by the narrow loader
-- [ ] Measure dispatcher and `nav` pass at 1366 and 1440
-- [ ] dt-hd server time is at most the baseline plus 100 ms
+- [x] Guard test green on today's guard, then `projectUsesBook` extracted and the guard delegating with the test still green
+- [x] `project-nav.ts`, `ProjectNav` and the nav-model tests for all 14 segments plus `null`
+- [x] Shell layout uses `ProjectNav`; book note in its own `Suspense`; entrypoint test green
+- [x] Sub-nav grouped; Tổng quan index entry present but hidden
+- [x] `effectiveAliasStatus` and `aliasQueueSummary` in `alias-board.ts`, with the stale-`dtKey` fixture
+- [x] Badge in its own `Suspense`, fed by the narrow loader
+- [x] Measure dispatcher and `nav` pass at 1366 and 1440
+- [x] dt-hd server time is at most the baseline plus 100 ms
+
+## Run log (2026-11-23)
+
+- **Branch:** `feat/du-an-ui-redesign-p2-shell`, stacked on the phase 1 branch (PR #25).
+- **Static gate:** unit tests 1446 passed. `tsc`, `lint`, `risk:verify` and `build` are green. The ACL contract test and the print snapshot are unchanged.
+- **`measure nav` on `127.0.0.1:3003`:** passes on 15 pages at 1366 px and at 1440 px.
+  - The first run used "different offsetTop = wrapped". That flagged the book note, because it is small text centred next to taller pills and sits 4 px lower.
+  - The rule is now: a child counts as wrapped when it starts more than half the height of the row's first item below that item.
+  - The command also waits 1 s for the Suspense note and badge before measuring.
+  - Reverse check: at 900 px the groups row wraps and the rule reports it.
+- **Baseline `compare` on `127.0.0.1:3003`:** exits 0. Print text, PDF pages, Excel and Dashboard are identical.
+
+  | Page | Server time (baseline → branch) | Document size |
+  |---|---|---|
+  | dt-hd | 275 → 183 ms | ×1.00 |
+  | dt-tt | 116 → 106 ms | ×1.00 |
+  | hd-tt | 82 → 76 ms | ×0.99 |
+  | Dashboard | 40 → 31 ms | ×0.95 |
+
+  The bound is the baseline plus 100 ms. The drop is likely a warm database rather than a speed-up.
+- **Small deviations from the text above:**
+  - `effectiveAliasStatus` takes the source as its first argument, because a dt alias always keeps its stored status.
+  - The narrow loader returns the summary directly: `loadAliasQueueSummary`.
+  - The shared measure types live in `scripts/dt-hd-tt-baseline/measure-types.ts`, so `all` never picks them up as a command.
 
 ## Verification
 
