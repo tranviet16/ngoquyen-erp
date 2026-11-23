@@ -217,7 +217,85 @@ Quy trình tương tự Công Nợ Vật Tư, nhưng dành cho nhà thầu nhân
 
 ---
 
-## 7. Xuất Báo Cáo Excel
+## 7. Đối Chiếu DT-HĐ-TT — Rà Soát Trên HĐ-TT
+
+Mỗi công trình dùng sổ đội có báo cáo **HĐ-TT**: mỗi NCC một dòng, so hóa đơn với tiền đã trả và thực tế. Kế toán rà soát và nhập bốn ô tay **H / S / X / Z** ngay trên bảng này. Hướng dẫn đầy đủ: [Đối chiếu DT-HĐ-TT](doi-chieu-dt-hd-tt.md).
+
+### 7.1 Mở HĐ-TT
+
+1. Menu → **Dự Án** → chọn công trình.
+2. Hàng nhóm trên cùng: bấm **Đối chiếu DT-HĐ-TT**. Trang **Tổng quan** mở ra.
+3. Ở hàng dưới, cụm **Báo cáo**: bấm **HĐ-TT**.
+
+Đường tắt từ Tổng quan:
+- việc **"Việc cần làm của kế toán (cột Z)"** → nút **Xem ở HĐ-TT**;
+- thẻ **Còn phải lấy HĐ (Σ U)** hoặc **Còn phải lấy về (Σ Y)**.
+
+Cả ba đều mở HĐ-TT đã lọc sẵn.
+
+### 7.2 Đọc bảng
+
+- 13 cột tiền chia bốn nhóm: **Hóa đơn** (HĐ chưa VAT, VAT, E), **Thanh toán** (G, I, J, K), **Thực tế** (T, U, V), **Lấy về** (W, X, Y). Sau đó là L (đã trả / HĐ) và Z (việc cần làm).
+- Rê chuột lên đầu cột để xem công thức.
+- Đầu bảng, cột NCC và dòng TỔNG CỘNG luôn đứng yên khi cuộn.
+- NCC xếp theo đầu mối.
+- Huy hiệu cạnh số:
+  - **H**: I theo số H nhập tay;
+  - **tạm = HĐ**: đầu mối chưa chốt thực tế, T tạm bằng E;
+  - **tách**: T theo số S nhập tay.
+- Bấm số **E** để mở sổ Hóa đơn của NCC đó; bấm số **G** để mở sổ Chi thực tế của NCC đó.
+
+### 7.3 Lọc
+
+Ba chip trên bảng, mỗi chip kèm số NCC:
+- **Còn phải lấy HĐ (U > 0)**: NCC còn thiếu hóa đơn so với thực tế;
+- **Còn phải lấy về (Y > 0)**: NCC còn tiền phải lấy lại;
+- **Có việc cần làm (Z)**: NCC có ghi chú ở cột Z.
+
+Bấm lại chip đang bật, hoặc **Bỏ lọc**, để xem đủ.
+
+Khi đang lọc, dòng tổng ghi **"Tổng cộng (cả bảng)"**: nó vẫn là tổng cả bảng, không phải tổng các dòng đang hiện. Thẻ Σ U trên Tổng quan cũng là tổng bù trừ giữa các NCC: NCC có U âm bù cho NCC có U dương. Vì vậy cần xem danh sách đã lọc để biết NCC nào thật sự còn phải lấy hóa đơn.
+
+Bộ lọc nằm trên đường dẫn: tải lại trang, bấm Back, hoặc gửi link cho người khác đều giữ đúng bộ lọc.
+
+### 7.4 Nhập H / S / X / Z
+
+1. Bấm **Nhập H / S / X / Z** (góc phải). Nút này chỉ hiện khi bạn có quyền **sửa** công trình.
+2. Bảng thêm cột **Nhập H** (trước cột I) và **Nhập S** (trước cột T). Cột X và Z thành ô nhập.
+3. Gõ số rồi:
+   - **Enter**: lưu, rồi xuống ô cùng cột ở dòng dưới;
+   - **Tab**: sang ô kế bên (rời ô là lưu);
+   - **Esc**: bỏ chữ vừa gõ, trả lại số đang lưu.
+4. Xong thì bấm **Xong nhập**.
+
+Cách gõ tiền: dấu chấm hoặc khoảng trắng tách nghìn, dấu phẩy là thập phân. Ví dụ: "1.500.000" = 1 500 000; "1.500" = 1 500; "12,5" = 12,5. Xóa trắng ô rồi lưu là xóa số nhập tay. Z là chữ, tối đa 1 000 ký tự.
+
+**Lưu không được** (gõ sai số, mất quyền, dòng NCC vừa bị xóa…):
+- ô viền đỏ, thông báo hiện ngay dưới ô;
+- **chữ đã gõ được giữ nguyên** và con trỏ quay về ô đó;
+- sửa chữ rồi Enter lại. Nếu thông báo là "Dòng NCC không còn trong công trình này — tải lại trang", hãy chép lại chữ đã gõ rồi tải lại trang.
+
+Dòng NCC chưa có ở trang Đầu mối thì không có ô nhập, mà có link **Thêm dòng NCC ở Đầu mối**.
+
+### 7.5 Quy tắc S
+
+Trên HĐ-TT, S (thực tế riêng của NCC) chỉ nhập được ở **NCC thứ hai trở đi của một đầu mối có nhiều NCC và đã chốt thực tế**. Ở dòng khác, ô S bị khóa; rê chuột để xem lý do:
+- "Gắn NCC vào đầu mối trước";
+- "Đầu mối chỉ có một NCC";
+- "NCC đầu tiên nhận phần còn lại — nhập S ở NCC sau";
+- "Đầu mối chưa chốt thực tế".
+
+Nhập S sai chỗ sẽ làm dòng kiểm Σ T lệch. Nếu dòng kiểm Σ T dưới bảng báo **Lệch đối soát … — do S ở dòng Công ty A**, nghĩa là dòng đó đang lưu một số S ở chỗ không được phép (thường là số từ lần import). Cách sửa:
+1. Bấm tên NCC trên dòng kiểm. Trang **Đầu mối** mở ra, bảng NCC đã lọc theo tên đó.
+2. Ở cột **S thực tế riêng**, xóa số S rồi Enter.
+
+### 7.6 Lưới NCC ở trang Đầu mối đọc số như HĐ-TT
+
+H, S, X cũng sửa được ở bảng NCC của trang **Đầu mối** (cụm Thiết lập). Ba ô này nay đọc số tiền giống hệt HĐ-TT: gõ "1.500" là 1 500 (trước đây là 1,5), "1.500.000" là 1 500 000. Riêng ô **Số chốt tay** khi sửa trên lưới đầu mối vẫn đọc như cũ: gõ số liền, không dấu chấm (vd. 1500000).
+
+---
+
+## 8. Xuất Báo Cáo Excel
 
 | Báo cáo | Menu | Template |
 |---------|------|----------|
@@ -225,13 +303,13 @@ Quy trình tương tự Công Nợ Vật Tư, nhưng dành cho nhà thầu nhân
 | Đối chiếu NCC | Vật Tư NCC > Đối Chiếu > Xuất Excel | doi-chieu |
 | Dự toán | Dự Án > Dự Toán > Xuất Excel | du-toan |
 | SL/DT | SL/DT > Báo Cáo DT > Xuất Excel | sl-dt |
-| DT-HĐ / DT-TT / HĐ-TT | Dự Án > (công trình) > Đối chiếu DT-HĐ-TT > Xuất Excel | — |
+| DT-HĐ / DT-TT / HĐ-TT | Dự Án > (công trình) > Đối chiếu DT-HĐ-TT > Tổng quan hoặc trang báo cáo > Xuất Excel | — |
 
-Rà soát số đã trả (H), số đã lấy về (X) và in ba báo cáo đối chiếu: xem [Đối chiếu DT-HĐ-TT](doi-chieu-dt-hd-tt.md).
+File Excel và bản in của DT-HĐ / DT-TT / HĐ-TT luôn là báo cáo đầy đủ, không theo bộ lọc trên màn hình. Rà soát số đã trả (H), số đã lấy về (X) và in ba báo cáo đối chiếu: xem mục 7 và [Đối chiếu DT-HĐ-TT](doi-chieu-dt-hd-tt.md).
 
 ---
 
-## 8. Xử Lý Sự Cố
+## 9. Xử Lý Sự Cố
 
 | Vấn đề | Giải pháp |
 |--------|-----------|
@@ -239,10 +317,13 @@ Rà soát số đã trả (H), số đã lấy về (X) và in ba báo cáo đ�
 | Xuất Excel bị lỗi | Thử lại. Nếu vẫn lỗi liên hệ admin |
 | Không tìm thấy nhà cung cấp khi nhập liệu | Yêu cầu admin thêm NCC vào Danh Mục |
 | Khoản vay hiển thị sai lãi | Kiểm tra lãi suất nhập đúng đơn vị %/năm chưa |
+| Không thấy nút "Nhập H / S / X / Z" trên HĐ-TT | Cần quyền **sửa** công trình; nhờ admin cấp |
+| Ô S trên HĐ-TT bị khóa | Rê chuột xem lý do; xem mục 7.5 |
+| Ô trên HĐ-TT viền đỏ | Đọc thông báo dưới ô, sửa chữ rồi Enter lại |
 
 ---
 
-## 9. FAQ
+## 10. FAQ
 
 **Q: Nhập nhầm số tiền, sửa được không?**  
 A: Có, click Edit trên bút toán/giao dịch và sửa lại.
