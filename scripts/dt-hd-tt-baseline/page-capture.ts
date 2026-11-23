@@ -17,6 +17,8 @@ export type ReportSlug = (typeof REPORTS)[number];
 const WARM_REQUESTS = 5;
 /** Trang DT-HĐ thật có ~780 dòng; app giữ kết nối mở nên không bao giờ "networkidle" — chờ "load" + phần tử. */
 const PAGE_TIMEOUT_MS = 90_000;
+const PRINT_CLICK_ATTEMPTS = 15;
+const PRINT_CLICK_WAIT_MS = 2_000;
 
 export interface Timing {
   /** Trung vị thời gian server (ms) của 5 lần gọi sau một lần làm nóng bỏ đi. */
@@ -69,8 +71,16 @@ export async function capturePrint(context: BrowserContext, baseUrl: string, pro
     await page.evaluate(() => {
       window.print = () => undefined;
     });
-    await printButton.click();
-    await page.waitForFunction(() => document.body.classList.contains("print-export-active"));
+    // Trang nặng (màn hình DT-HĐ nạp cả báo cáo) có thể chưa hydrate xong khi nút đã hiện: bấm lúc đó không
+    // có tác dụng. Bấm lại tới khi nút thật sự bật chế độ in, vẫn là đúng đường người dùng đi.
+    let printing = false;
+    for (let attempt = 0; attempt < PRINT_CLICK_ATTEMPTS && !printing; attempt++) {
+      await printButton.click();
+      printing = await page
+        .waitForFunction(() => document.body.classList.contains("print-export-active"), undefined, { timeout: PRINT_CLICK_WAIT_MS })
+        .then(() => true, () => false);
+    }
+    if (!printing) throw new Error(`${report}: bấm "In" ${PRINT_CLICK_ATTEMPTS} lần mà chế độ in không bật`);
     await page.emulateMedia({ media: "print" });
     const text = await page.evaluate(() => document.body.innerText);
     mkdirSync(outDir, { recursive: true });
