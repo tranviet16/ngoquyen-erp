@@ -3,11 +3,13 @@ import { buildQueryString, parseTableQuery } from "@/lib/table/query-params";
 import type { ResourceSpec } from "@/lib/table/types";
 import { canonicalJson, parseGridQuery, writeGridQuery, type GridFilters } from "../grid-url-codec";
 import { kindOfCategoryCode } from "../keys";
+import { HD_TT_LOC_PREDICATES, hdTtLocQuery } from "../overview-todos";
 import {
   anhXaQuery, ANH_XA_QUERY_MAX, CHI_THUC_TE_GRID_SPEC, chiThucTeQuery, DAU_MOI_COUNTERPARTY_GRID_SPEC, DAU_MOI_PAGE_SPEC,
-  DAU_MOI_SUPPLIER_GRID_SPEC, dauMoiQuery, DT_HD_OPEN_MAX, DT_HD_URL, dtHdQuery, duToanQuery, HOA_DON_GRID_SPEC, hoaDonQuery,
-  kindlessEstimateIds, parseAnhXaQuery, parseDtHdQuery, parseDuToanQuery, patchAnhXaQuery, patchDtHdQuery, READY_TARGETS, screenHref,
-  THUC_TE_NHAP_GRID_SPEC, thucTeNhapQuery, type AnhXaParams, type DtHdParams,
+  DAU_MOI_SUPPLIER_GRID_SPEC, dauMoiQuery, DT_HD_OPEN_MAX, DT_HD_URL, DT_TT_ANCHORS, dtHdQuery, dtTtAnchor, dtTtCounterpartyAnchor, duToanQuery,
+  HD_TT_LOCS, HD_TT_URL, hdTtQuery, HOA_DON_GRID_SPEC, hoaDonQuery, kindlessEstimateIds, parseAnhXaQuery, parseDtHdQuery, parseDtTtAnchor,
+  parseDuToanQuery, parseHdTtQuery, patchAnhXaQuery, patchDtHdQuery, patchHdTtQuery, READY_TARGETS, screenHref, THUC_TE_NHAP_GRID_SPEC,
+  thucTeNhapQuery, type AnhXaParams, type DtHdParams, type DtTtAnchor, type HdTtParams,
 } from "../screen-links";
 
 /** "Thép" viết bằng dấu tổ hợp (NFD), khác chuỗi dựng sẵn (NFC). */
@@ -26,13 +28,61 @@ describe("screenHref", () => {
   it("returns the bare page path for a target that is not ready yet", () => {
     expect(READY_TARGETS).not.toContain("cai-dat");
     expect(screenHref(4, "cai-dat", { query: "a=1" })).toBe("/du-an/4/cai-dat");
-    if (!READY_TARGETS.includes("dt-tt")) expect(screenHref(4, "dt-tt", { hash: "phan-iii" })).toBe("/du-an/4/dt-hd-tt/dt-tt");
   });
 
   it("DT-HĐ is ready: its links carry their state", () => {
     expect(READY_TARGETS).toContain("dt-hd");
     expect(screenHref(4, "dt-hd", { query: dtHdQuery({ dauMoi: 12 }) })).toBe("/du-an/4/dt-hd-tt/dt-hd?dauMoi=12");
     expect(screenHref(4, "dt-hd", { query: dtHdQuery({ dauMoi: "none" }) })).toBe("/du-an/4/dt-hd-tt/dt-hd?dauMoi=none");
+  });
+
+  it("HĐ-TT and DT-TT are ready: their links carry the loc filter and the anchor", () => {
+    expect(READY_TARGETS).toContain("hd-tt");
+    expect(READY_TARGETS).toContain("dt-tt");
+    expect(screenHref(4, "hd-tt", { query: hdTtQuery({ loc: "co-viec" }) })).toBe("/du-an/4/dt-hd-tt/hd-tt?loc=co-viec");
+    expect(screenHref(4, "dt-tt", { hash: DT_TT_ANCHORS.phanIII })).toBe("/du-an/4/dt-hd-tt/dt-tt#phan-iii");
+    expect(screenHref(4, "dt-tt", { hash: dtTtCounterpartyAnchor(12) })).toBe("/du-an/4/dt-hd-tt/dt-tt#dm-12");
+  });
+});
+
+describe("HĐ-TT parameters", () => {
+  const cases: HdTtParams[] = [{}, { loc: "con-phai-lay-hd" }, { loc: "con-phai-lay-ve" }, { loc: "co-viec" }];
+
+  it.each(cases)("build then parse returns %o", (params) => {
+    expect(parseHdTtQuery(hdTtQuery(params))).toEqual(params);
+    expect(HD_TT_URL.parse(`?${HD_TT_URL.write(params, "")}`)).toEqual(params);
+  });
+
+  it("uses exactly the loc values that Tổng quan counts with, built the same way as its links", () => {
+    expect([...HD_TT_LOCS].sort()).toEqual(Object.keys(HD_TT_LOC_PREDICATES).sort());
+    for (const loc of HD_TT_LOCS) expect(hdTtQuery({ loc })).toBe(hdTtLocQuery(loc));
+    expect(hdTtQuery({})).toBe("");
+  });
+
+  it("drops unknown values and patches only its own parameter", () => {
+    expect(parseHdTtQuery("loc=vuot")).toEqual({});
+    expect(parseHdTtQuery("loc=")).toEqual({});
+    expect(parseHdTtQuery("loc=CO-VIEC")).toEqual({});
+    expect(patchHdTtQuery("?foo=1&loc=co-viec", { loc: "con-phai-lay-ve" })).toBe("foo=1&loc=con-phai-lay-ve");
+    expect(HD_TT_URL.write({}, "?x=y&loc=co-viec")).toBe("x=y");
+  });
+});
+
+describe("DT-TT anchors", () => {
+  const cases: DtTtAnchor[] = [{ part: "phan-i" }, { part: "phan-ii" }, { part: "phan-iii" }, { counterpartyId: 12 }, { counterpartyId: 999_999_999 }];
+
+  it.each(cases)("build then parse returns %o", (anchor) => {
+    expect(parseDtTtAnchor(dtTtAnchor(anchor))).toEqual(anchor);
+    expect(parseDtTtAnchor(`#${dtTtAnchor(anchor)}`)).toEqual(anchor);
+  });
+
+  it("builds the hashes Tổng quan links to", () => {
+    expect(DT_TT_ANCHORS).toEqual({ phanI: "phan-i", phanII: "phan-ii", phanIII: "phan-iii" });
+    expect(dtTtCounterpartyAnchor(7)).toBe("dm-7");
+  });
+
+  it("drops unknown anchors", () => {
+    for (const hash of ["", "#", "phan-iv", "dm-0", "dm-abc", "dm-12x", "dm-1234567890", "ncc"]) expect(parseDtTtAnchor(hash)).toBeNull();
   });
 });
 
