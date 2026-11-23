@@ -32,6 +32,20 @@ export function isBulkConfirmable(alias: { source: string; status: string; dtKey
   return alias.source === "dt" || alias.dtKey !== null || alias.groupCodeId !== null;
 }
 
+/**
+ * Khóa hd / tt "Chưa có hệ số": alias không phải Ngoài DT, gán vào một Dòng DT còn trong dự toán và chưa
+ * có hệ số — đúng lúc báo cáo xếp dòng vào dòng DT (`placeInvoice` / `placeReceipt`, book-index.ts) với
+ * `factor === null`. Tập này rộng hơn trạng thái "thiếu hệ số" của DT-HĐ (gồm cả dòng DT theo dõi theo
+ * giá trị), nên nhãn là "Chưa có hệ số". Chỉ dùng cho nguồn hd / tt.
+ */
+export function missesFactor(
+  alias: { status: AliasStatus; dtKey: string | null; factor: number | null } | null | undefined,
+  liveDtKeys: ReadonlySet<string>,
+): boolean {
+  if (!alias || alias.status === "ngoai_dt") return false;
+  return alias.dtKey !== null && liveDtKeys.has(alias.dtKey) && alias.factor === null;
+}
+
 /** Mục sổ chi cho ô chọn ở client (cùng giá trị với `PAYMENT_SECTIONS` của schema phía server). */
 export const PAYMENT_SECTION_OPTIONS = ["I", "II", "III", "IV"] as const;
 

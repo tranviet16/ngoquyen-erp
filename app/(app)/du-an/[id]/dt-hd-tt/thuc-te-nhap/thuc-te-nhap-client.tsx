@@ -3,7 +3,8 @@
 /**
  * Sổ Thực tế nhập (thành tiền gồm VAT): form thêm dòng — bắt buộc chọn đầu mối — và lưới sửa tại ô.
  * Mỗi lần sửa chỉ gửi ô vừa đổi; server gộp vào dòng đang lưu (KL / đơn giá đổi → tính lại thành
- * tiền). Đầu mối đã gắn không được bỏ trống.
+ * tiền). Đầu mối đã gắn không được bỏ trống. Bộ lọc đầu mối (cả "chưa gắn") / Ánh xạ / tên do trang
+ * giữ và đồng bộ URL (`filter.<cột>`), nên sống qua lần lưới dựng lại và qua Back.
  */
 
 import dynamic from "next/dynamic";
@@ -12,20 +13,29 @@ import { useState, useTransition, type ComponentProps, type FormEvent, type Reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { noneFilterable } from "@/components/du-an/dt-hd-tt/none-filter-column";
+import { GridStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
+import { useUrlState } from "@/components/du-an/dt-hd-tt/use-url-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { vndFormatter } from "@/lib/format";
 import type { ReceiptPatch } from "@/lib/du-an/dt-hd-tt/entry-schemas";
 import { formNumber, isoToDmy, parseDateCell, parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import { createReceipt, softDeleteReceipt, updateReceipt, type ReceiptRow } from "@/lib/du-an/dt-hd-tt/receipt-service";
+import { anhXaQuery, screenHref, THUC_TE_NHAP_GRID_SPEC, THUC_TE_NHAP_URL, UNMAPPED_TEXT } from "@/lib/du-an/dt-hd-tt/screen-links";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
   columns: DataGridColumn<T>[];
   rows: T[];
   handlers: DataGridHandlers<T>;
   height?: number | string;
+  filters?: GridFilters;
+  onFiltersChange?: (filters: GridFilters) => void;
 }) => ReactElement;
+
+const SYNCED = Object.keys(THUC_TE_NHAP_GRID_SPEC.filterable);
 
 interface GridRow extends RowWithId {
   /** Ô chữ dd/mm/yyyy (hoặc chữ ngày gốc của file khi chưa đọc được). */
@@ -42,7 +52,7 @@ interface GridRow extends RowWithId {
 
 const toGrid = (r: ReceiptRow): GridRow => ({
   id: r.id, date: r.date ? isoToDmy(r.date) : r.dateText ?? "", itemName: r.itemName, unit: r.unit, qty: r.qty, unitPrice: r.unitPrice,
-  amountVnd: r.amountVnd, counterpartyId: r.counterpartyId ?? "", mapping: r.mapped ? "" : "chưa gán", note: r.note ?? "",
+  amountVnd: r.amountVnd, counterpartyId: r.counterpartyId ?? "", mapping: r.mapped ? "" : UNMAPPED_TEXT, note: r.note ?? "",
 });
 
 /** Ô vừa sửa → bản sửa một phần gửi server (chữ / số không đọc được thì báo lỗi, không lưu). */
@@ -70,13 +80,16 @@ interface Props {
   counterparties: SelectOption[];
   canCreate: boolean;
   canEdit: boolean;
+  /** Bộ lọc server đọc từ URL — chỉ dùng cho lần render đầu (xem useUrlState). */
+  initialFilters: GridFilters;
 }
 
-export function ThucTeNhapClient({ projectId, rows, counterparties, canCreate, canEdit }: Props) {
+export function ThucTeNhapClient({ projectId, rows, counterparties, canCreate, canEdit, initialFilters }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [filters, setFilters] = useUrlState(initialFilters, THUC_TE_NHAP_URL);
   const refresh = () => startTransition(() => router.refresh());
 
   const total = rows.reduce((s, r) => s + r.amountVnd, 0);
@@ -94,15 +107,17 @@ export function ThucTeNhapClient({ projectId, rows, counterparties, canCreate, c
 
   const columns: DataGridColumn<GridRow>[] = [
     { id: "date", title: "Ngày", kind: "text", width: 100, readonly: locked },
-    { id: "itemName", title: "Tên", kind: "text", width: 260, readonly: locked },
+    { id: "itemName", title: "Tên", kind: "text", width: 260, readonly: locked, filterable: true },
     { id: "unit", title: "ĐVT", kind: "text", width: 60, readonly: locked },
     { id: "qty", title: "KL", kind: "number", width: 90, readonly: locked },
     { id: "unitPrice", title: "Đơn giá", kind: "currency", width: 110, readonly: locked },
     { id: "amountVnd", title: "Thành tiền gồm VAT", kind: "currency", width: 140, readonly: locked },
-    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 200, options: gridOptions, readonly: locked },
-    { id: "mapping", title: "Ánh xạ", kind: "text", width: 80, readonly: true },
+    // "(chưa gắn)" lọc được: ô lọc mang `none` (`""` là "Tất cả").
+    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 200, options: gridOptions, readonly: locked, ...noneFilterable<GridRow>("counterpartyId", gridOptions) },
+    { id: "mapping", title: "Ánh xạ", kind: "text", width: 80, readonly: true, filterable: true },
     { id: "note", title: "Ghi chú", kind: "text", width: 200, readonly: locked },
   ];
+  const gridRows = rows.map(toGrid);
 
   const handlers: DataGridHandlers<GridRow> = {
     // Lỗi ném ra ở đây: lưới hiện thông điệp và trả ô về giá trị cũ.
@@ -163,7 +178,10 @@ export function ThucTeNhapClient({ projectId, rows, counterparties, canCreate, c
           </p>
         </div>
         {unmapped > 0 && (
-          <Link href={`/du-an/${projectId}/dt-hd-tt/anh-xa`} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-sm text-amber-900 hover:underline">
+          <Link
+            href={screenHref(projectId, "anh-xa", { query: anhXaQuery({ tab: "tt", status: "chua_gan" }) })}
+            className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-sm text-amber-900 hover:underline"
+          >
             {unmapped} dòng chưa gán — mở Ánh xạ
           </Link>
         )}
@@ -200,10 +218,13 @@ export function ThucTeNhapClient({ projectId, rows, counterparties, canCreate, c
       <DataGrid<GridRow>
         key={rows.map((r) => r.id).join(",")}
         columns={columns}
-        rows={rows.map(toGrid)}
+        rows={gridRows}
         handlers={canEdit ? handlers : {}}
         height={560}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
+      <GridStateHook name="thuc-te-nhap" filters={filters} rows={gridRows} columns={columns} synced={SYNCED} />
     </div>
   );
 }

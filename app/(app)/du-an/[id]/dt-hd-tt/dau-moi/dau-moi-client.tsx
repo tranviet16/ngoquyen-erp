@@ -3,7 +3,9 @@
 /**
  * Đầu mối (dòng Phần II DT-TT): form thêm + lưới sửa tại ô — tên, loại, nhóm / thứ tự sắp xếp, nguồn
  * thực tế, số chốt tay, mục chi. Cột "Thực tế" là số báo cáo đang tính theo nguồn đã chọn (đổi nguồn
- * → thực tế, và T của HĐ-TT, đổi theo). Mỗi lần sửa chỉ gửi ô vừa đổi.
+ * → thực tế, và T của HĐ-TT, đổi theo). Mỗi lần sửa chỉ gửi ô vừa đổi. Bộ lọc tên / "chưa chốt" do
+ * trang giữ và đồng bộ URL (`filter.name`, `filter.actual=chua-chot`); lưới NCC bên dưới đồng bộ tập cột
+ * khác trên cùng URL.
  */
 
 import dynamic from "next/dynamic";
@@ -11,22 +13,30 @@ import { useState, useTransition, type FormEvent, type ReactElement } from "reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { GridStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
+import { useUrlState } from "@/components/du-an/dt-hd-tt/use-url-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCounterparty, softDeleteCounterparty, updateCounterparty, type CounterpartyRow } from "@/lib/du-an/dt-hd-tt/counterparty-service";
+import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import type { CounterpartyPatch } from "@/lib/du-an/dt-hd-tt/register-schemas";
 import {
   ACTUAL_BASES, ACTUAL_BASIS_LABEL, COUNTERPARTY_KINDS, COUNTERPARTY_KIND_LABEL, PAYMENT_SECTION_OPTIONS, parseNumberText,
 } from "@/lib/du-an/dt-hd-tt/register-ui";
 import type { ActualBasis, CounterpartyKind } from "@/lib/du-an/dt-hd-tt/report-inputs";
 import { parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import { DAU_MOI_COUNTERPARTY_GRID_SPEC, DAU_MOI_COUNTERPARTY_URL, UNSETTLED_ACTUAL } from "@/lib/du-an/dt-hd-tt/screen-links";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
   columns: DataGridColumn<T>[];
   rows: T[];
   handlers: DataGridHandlers<T>;
   height?: number | string;
+  filters?: GridFilters;
+  onFiltersChange?: (filters: GridFilters) => void;
 }) => ReactElement;
+
+const SYNCED = Object.keys(DAU_MOI_COUNTERPARTY_GRID_SPEC.filterable);
 
 interface GridRow extends RowWithId {
   name: string;
@@ -78,13 +88,16 @@ interface Props {
   actualOf: Record<number, number | null>;
   canCreate: boolean;
   canEdit: boolean;
+  /** Bộ lọc server đọc từ URL — chỉ dùng cho lần render đầu (xem useUrlState). */
+  initialFilters: GridFilters;
 }
 
-export function DauMoiClient({ projectId, rows, actualOf, canCreate, canEdit }: Props) {
+export function DauMoiClient({ projectId, rows, actualOf, canCreate, canEdit, initialFilters }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [filters, setFilters] = useUrlState(initialFilters, DAU_MOI_COUNTERPARTY_URL);
   const refresh = () => startTransition(() => router.refresh());
   const toGrid = (r: CounterpartyRow): GridRow => ({
     id: r.id, name: r.name, kind: r.kind, sortGroup: r.sortGroup ?? "", sortOrder: r.sortOrder, actualBasis: r.actualBasis,
@@ -93,16 +106,27 @@ export function DauMoiClient({ projectId, rows, actualOf, canCreate, canEdit }: 
   const locked = !canEdit;
 
   const columns: DataGridColumn<GridRow>[] = [
-    { id: "name", title: "Đầu mối", kind: "text", width: 220, readonly: locked },
+    { id: "name", title: "Đầu mối", kind: "text", width: 220, readonly: locked, filterable: true },
     { id: "kind", title: "Loại", kind: "select", width: 120, options: KIND_OPTIONS, readonly: locked },
     { id: "sortGroup", title: "Nhóm sắp xếp", kind: "text", width: 110, readonly: locked },
     { id: "sortOrder", title: "Thứ tự", kind: "number", width: 70, readonly: locked },
     { id: "actualBasis", title: "Nguồn thực tế", kind: "select", width: 150, options: BASIS_OPTIONS, readonly: locked },
     { id: "actualManualVnd", title: "Số chốt tay", kind: "text", width: 130, readonly: locked, format: moneyCell },
     { id: "paymentSection", title: "Mục chi", kind: "select", width: 90, options: SECTION_OPTIONS, readonly: locked },
-    { id: "actual", title: "Thực tế (báo cáo)", kind: "currency", width: 140, readonly: true, format: (v) => (v == null ? "chưa chốt" : vnd.format(Number(v))) },
+    // Lọc "chưa chốt" chỉ đến từ URL (ô lọc của cột tiền là khoảng số) → hiện bằng chip phía trên lưới.
+    {
+      id: "actual", title: "Thực tế (báo cáo)", kind: "currency", width: 140, readonly: true, format: (v) => (v == null ? "chưa chốt" : vnd.format(Number(v))),
+      filterAccessor: (r) => (r.actual === null ? UNSETTLED_ACTUAL : String(r.actual)),
+    },
     { id: "note", title: "Ghi chú", kind: "text", width: 200, readonly: locked },
   ];
+  const gridRows = rows.map(toGrid);
+  const unsettledOnly = filters.actual?.kind === "equals" && filters.actual.value === UNSETTLED_ACTUAL;
+  const clearUnsettled = () => {
+    const next = { ...filters };
+    delete next.actual;
+    setFilters(next);
+  };
 
   const handlers: DataGridHandlers<GridRow> = {
     onCellEdit: async (id, col, value) => {
@@ -187,8 +211,26 @@ export function DauMoiClient({ projectId, rows, actualOf, canCreate, canEdit }: 
         </form>
       )}
 
-      {/* Khóa gồm cả thực tế báo cáo: đổi nguồn → sau khi tải lại lưới dựng lại với số mới. */}
-      <DataGrid<GridRow> key={rows.map((r) => `${r.id}:${actualOf[r.id] ?? ""}`).join(",")} columns={columns} rows={rows.map(toGrid)} handlers={canEdit ? handlers : {}} height={420} />
+      {unsettledOnly && (
+        <p className="flex items-center gap-2 text-sm">
+          <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-0.5 text-amber-900">Đang lọc: chưa chốt</span>
+          <button type="button" onClick={clearUnsettled} className="text-muted-foreground underline hover:text-foreground">
+            Bỏ lọc
+          </button>
+        </p>
+      )}
+
+      {/* Khóa gồm cả thực tế báo cáo: đổi nguồn → sau khi tải lại lưới dựng lại với số mới (bộ lọc do trang giữ nên còn nguyên). */}
+      <DataGrid<GridRow>
+        key={rows.map((r) => `${r.id}:${actualOf[r.id] ?? ""}`).join(",")}
+        columns={columns}
+        rows={gridRows}
+        handlers={canEdit ? handlers : {}}
+        height={420}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
+      <GridStateHook name="dau-moi" filters={filters} rows={gridRows} columns={columns} synced={SYNCED} />
     </section>
   );
 }

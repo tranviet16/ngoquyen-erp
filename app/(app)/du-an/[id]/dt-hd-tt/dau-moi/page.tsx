@@ -2,16 +2,25 @@ import { notFound } from "next/navigation";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
 import { listCounterparties } from "@/lib/du-an/dt-hd-tt/counterparty-service";
+import { toSearchParams } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import { listSupplierOptions } from "@/lib/du-an/dt-hd-tt/invoice-service";
 import { getDtHdTtReports } from "@/lib/du-an/dt-hd-tt/report-service";
+import { DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL } from "@/lib/du-an/dt-hd-tt/screen-links";
 import { DauMoiClient } from "./dau-moi-client";
 import { DauMoiSuppliers, type SupplierFigures } from "./dau-moi-suppliers";
 
 /**
  * Đầu mối: xem cần quyền đọc dự án; thêm đầu mối / NCC cần `create`; sửa, xóa và các ô HĐ-TT nhập
  * tay H / S / X / Z cần `edit`. Số thực tế / HĐ / đã trả lấy từ báo cáo để thấy ngay tác động.
+ * Hai lưới đọc bộ lọc từ cùng URL, mỗi lưới một tập cột `filter.` riêng (screen-links).
  */
-export default async function DauMoiPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function DauMoiPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
   const projectId = Number(id);
   if (!Number.isInteger(projectId) || projectId <= 0) notFound();
@@ -20,12 +29,13 @@ export default async function DauMoiPage({ params }: { params: Promise<{ id: str
     scope: { kind: "project", projectId },
   });
 
-  const [{ counterparties, links }, suppliers, reports, canCreate, canEdit] = await Promise.all([
+  const [{ counterparties, links }, suppliers, reports, canCreate, canEdit, query] = await Promise.all([
     listCounterparties(projectId),
     listSupplierOptions(projectId),
     getDtHdTtReports(projectId),
     canAccessEntitlement(userId, "du-an", { minLevel: "create", scope: { kind: "project", projectId } }),
     canAccessEntitlement(userId, "du-an", { minLevel: "edit", scope: { kind: "project", projectId } }),
+    searchParams,
   ]);
 
   const { a, b, c } = reports.dtTt.phanII;
@@ -35,10 +45,18 @@ export default async function DauMoiPage({ params }: { params: Promise<{ id: str
   );
   const linked = new Set(links.map((l) => l.supplierId));
   const withoutRow = reports.hdTt.rows.filter((r) => !linked.has(r.supplierId)).map((r) => r.supplierName);
+  const search = toSearchParams(query).toString();
 
   return (
     <div className="space-y-6">
-      <DauMoiClient projectId={projectId} rows={counterparties} actualOf={actualOf} canCreate={canCreate} canEdit={canEdit} />
+      <DauMoiClient
+        projectId={projectId}
+        rows={counterparties}
+        actualOf={actualOf}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        initialFilters={DAU_MOI_COUNTERPARTY_URL.parse(search)}
+      />
       <DauMoiSuppliers
         projectId={projectId}
         links={links}
@@ -48,6 +66,7 @@ export default async function DauMoiPage({ params }: { params: Promise<{ id: str
         withoutRow={withoutRow}
         canCreate={canCreate}
         canEdit={canEdit}
+        initialFilters={DAU_MOI_SUPPLIER_URL.parse(search)}
       />
     </div>
   );

@@ -3,6 +3,7 @@
 /**
  * Sổ Chi thực tế của đội: chuyển khoản + tiền mặt, mục I–IV, đầu mối và / hoặc NCC pháp nhân. Form thêm
  * dòng + lưới sửa tại ô (mỗi lần sửa chỉ gửi ô vừa đổi). NCC chỉ chọn trong danh sách NCC đang hoạt động.
+ * Bộ lọc NCC / đầu mối (cả "trống") / nội dung do trang giữ và đồng bộ URL (`filter.<cột>`).
  */
 
 import dynamic from "next/dynamic";
@@ -10,20 +11,29 @@ import { useState, useTransition, type ComponentProps, type FormEvent, type Reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { noneFilterable } from "@/components/du-an/dt-hd-tt/none-filter-column";
+import { GridStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
+import { useUrlState } from "@/components/du-an/dt-hd-tt/use-url-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { vndFormatter } from "@/lib/format";
 import type { PaymentPatch } from "@/lib/du-an/dt-hd-tt/entry-schemas";
 import { formNumber, isoToDmy, parseDateCell, parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import { createPayment, softDeletePayment, updatePayment, type PaymentRow } from "@/lib/du-an/dt-hd-tt/payment-service";
+import { CHI_THUC_TE_GRID_SPEC, CHI_THUC_TE_URL } from "@/lib/du-an/dt-hd-tt/screen-links";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
   columns: DataGridColumn<T>[];
   rows: T[];
   handlers: DataGridHandlers<T>;
   height?: number | string;
+  filters?: GridFilters;
+  onFiltersChange?: (filters: GridFilters) => void;
 }) => ReactElement;
+
+const SYNCED = Object.keys(CHI_THUC_TE_GRID_SPEC.filterable);
 
 const SECTIONS = ["I", "II", "III", "IV"] as const;
 type Section = (typeof SECTIONS)[number];
@@ -84,13 +94,16 @@ interface Props {
   suppliers: SelectOption[];
   canCreate: boolean;
   canEdit: boolean;
+  /** Bộ lọc server đọc từ URL — chỉ dùng cho lần render đầu (xem useUrlState). */
+  initialFilters: GridFilters;
 }
 
-export function ChiThucTeClient({ projectId, rows, counterparties, suppliers, canCreate, canEdit }: Props) {
+export function ChiThucTeClient({ projectId, rows, counterparties, suppliers, canCreate, canEdit, initialFilters }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [filters, setFilters] = useUrlState(initialFilters, CHI_THUC_TE_URL);
   const refresh = () => startTransition(() => router.refresh());
 
   const totals = rows.reduce((t, r) => ({ bank: t.bank + r.bankVnd, cash: t.cash + r.cashVnd }), { bank: 0, cash: 0 });
@@ -102,15 +115,16 @@ export function ChiThucTeClient({ projectId, rows, counterparties, suppliers, ca
 
   const columns: DataGridColumn<GridRow>[] = [
     { id: "date", title: "Ngày", kind: "text", width: 100, readonly: locked },
-    { id: "content", title: "Nội dung", kind: "text", width: 260, readonly: locked },
+    { id: "content", title: "Nội dung", kind: "text", width: 260, readonly: locked, filterable: true },
     { id: "bankVnd", title: "Chuyển khoản", kind: "currency", width: 130, readonly: locked },
     { id: "cashVnd", title: "Tiền mặt", kind: "currency", width: 130, readonly: locked },
     { id: "totalVnd", title: "Cộng", kind: "currency", width: 130, readonly: true },
     { id: "section", title: "Mục", kind: "select", width: 80, options: sectionOptions, readonly: locked },
-    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 180, options: cpOptions, readonly: locked },
-    { id: "supplierId", title: "NCC", kind: "select", width: 180, options: supplierOptions, readonly: locked },
+    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 180, options: cpOptions, readonly: locked, ...noneFilterable<GridRow>("counterpartyId", cpOptions) },
+    { id: "supplierId", title: "NCC", kind: "select", width: 180, options: supplierOptions, readonly: locked, ...noneFilterable<GridRow>("supplierId", supplierOptions) },
     { id: "note", title: "Ghi chú", kind: "text", width: 180, readonly: locked },
   ];
+  const gridRows = rows.map(toGrid);
 
   const handlers: DataGridHandlers<GridRow> = {
     // Lỗi ném ra ở đây: lưới hiện thông điệp và trả ô về giá trị cũ.
@@ -201,10 +215,13 @@ export function ChiThucTeClient({ projectId, rows, counterparties, suppliers, ca
       <DataGrid<GridRow>
         key={rows.map((r) => r.id).join(",")}
         columns={columns}
-        rows={rows.map(toGrid)}
+        rows={gridRows}
         handlers={canEdit ? handlers : {}}
         height={560}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
+      <GridStateHook name="chi-thuc-te" filters={filters} rows={gridRows} columns={columns} synced={SYNCED} />
     </div>
   );
 }
