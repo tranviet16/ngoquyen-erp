@@ -122,13 +122,43 @@ Meet criterion 4 while the print output stays unchanged:
 
 ## Todo
 
-- [ ] `outsideReason` added; golden and export tests unchanged and green
-- [ ] Screen model and tests, with literal values for every derived figure
-- [ ] Client screen with expand, filters and URL state through `useUrlState`
-- [ ] Phần B split, with exact-key links into Ánh xạ
-- [ ] `dt-hd` builder in `screen-links.ts` with round-trip tests; `dt-hd` marked ready
-- [ ] Page order with the print view as the last child
-- [ ] Measure `dt-hd` green; size and time gate met; baseline compare exits 0
+- [x] `outsideReason` added; golden and export tests unchanged and green
+- [x] Screen model and tests, with literal values for every derived figure
+- [x] Client screen with expand, filters and URL state through `useUrlState`
+- [x] Phần B split, with exact-key links into Ánh xạ
+- [x] `dt-hd` builder in `screen-links.ts` with round-trip tests; `dt-hd` marked ready
+- [x] Page order with the print view as the last child
+- [x] Measure `dt-hd` green; size and time gate met; baseline compare exits 0
+
+## Run log (2026-11-23), phases 5 and 6 on one build
+
+- **Branch:** `feat/du-an-ui-redesign-p6-dt-hd`, stacked on phase 5. The build contains phases 1–6.
+- **Static gate:** unit tests 1601 passed. `tsc`, `lint`, `risk:verify` and `build` are green. These files have no diff: the print snapshot, the three report views and the ACL contract test.
+- **Browser measures on `127.0.0.1:3003`:**
+  - `measure dt-hd`:
+    - project 4 shows 29 summary rows, and the collapsed page is 1683 px tall (limit 2000; before the redesign it was 16 466 px);
+    - `mo` survives a reload, and `loc=vuot` filters to 18 blocks and 43 of 342 lines;
+    - Back after a Phần B link restores the state;
+    - the document is 1.19× the baseline, and server time is 215 ms (limit 575).
+  - `measure dashboard` (phase 5): project 4's book card equals Tổng quan's Phần III thực tế, with tone warning because of untagged receipts and a đầu mối chưa chốt. The control project's cards equal the phase-1 capture, and the server time is 59 ms (limit 340).
+  - `measure todos` and `measure nav` pass.
+- **Baseline `compare` with `--expect-changed-card "Thực tế (đã nhập)=>Thực tế (sổ DT-HĐ-TT)"`:** exits 0. Print text, PDF pages, Excel and Dashboard are identical, apart from that one expected card. Server times:
+
+  | Page | Baseline | This build |
+  |---|---|---|
+  | dt-hd | 275 ms | 223 ms (×1.19 size) |
+  | dt-tt | 116 ms | 128 ms |
+  | hd-tt | 82 ms | 77 ms |
+  | Dashboard | 40 ms | 59 ms |
+
+- **Tooling fixes found while running:**
+  - **`capturePrint` retries the click on "In".** It clicks up to 15 times, waiting 2 s each time, until the print mode turns on. The heavier DT-HĐ page can show the button before it hydrates, and a click at that moment does nothing.
+  - **`measure dashboard` no longer declares a named function inside `page.evaluate`.** tsx (esbuild keepNames) injects `__name(...)`, which does not exist in the browser.
+- **Decisions:**
+  - The full `DtHdReport` goes to the client, with no trimmed projection, because the 1.19× size is well inside 2.0×.
+  - `mo=` with an empty value means "all closed".
+  - The name search is client-only.
+  - Item keys are read only for the "Chưa gán" Phần B lines, with one query in the page after the guard.
 
 ## Verification
 

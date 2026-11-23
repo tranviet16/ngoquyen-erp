@@ -107,7 +107,7 @@ Meet criterion 9. On a project that uses the team book, the Dashboard "Thực t�
 - [x] `bookActualCard` with the literal-expectation cases
 - [x] `loadBookHeadline` in `load-report-page.ts`: ACL first, fallback on failure, unit-tested
 - [x] Dashboard page wired; entrypoint test green
-- [ ] Measure `dashboard`: project 4 equals Tổng quan, the control project equals the phase-1 capture, within the time budget. Run on the phase 6 build, which contains this phase; see phase 6's run log.
+- [x] Measure `dashboard`: project 4 equals Tổng quan, the control project equals the phase-1 capture, within the time budget. Run on the phase 6 build, which contains this phase; see phase 6's run log.
 
 ## Run log (2026-11-23)
 
