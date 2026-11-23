@@ -1,9 +1,13 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProjectDashboard } from "@/lib/du-an/dashboard-service";
 import { formatVND, formatDate, formatNumber } from "@/lib/utils/format";
 import { AlertTriangle } from "lucide-react";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { StatCard } from "@/components/du-an/stat-card";
+import { loadBookHeadline } from "@/components/du-an/dt-hd-tt/load-report-page";
+import { figureDataValue } from "@/components/du-an/dt-hd-tt/tong-quan-view";
+import { tongQuanPath } from "@/lib/du-an/dt-hd-tt/overview";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -18,7 +22,9 @@ export default async function ProjectDashboardPage({ params }: Props) {
     scope: { kind: "project", projectId },
   });
 
-  const dash = await getProjectDashboard(projectId);
+  // Công trình dùng sổ DT-HĐ-TT: thẻ "Thực tế" đọc Phần III của sổ (null = công trình không dùng sổ hoặc
+  // đọc sổ lỗi → giữ nguyên thẻ cũ).
+  const [dash, book] = await Promise.all([getProjectDashboard(projectId), loadBookHeadline(projectId)]);
 
   const totalTasks = Object.values(dash.schedule).reduce((a, b) => a + b, 0);
   const doneTasks = dash.schedule.done;
@@ -48,12 +54,26 @@ export default async function ProjectDashboardPage({ params }: Props) {
           sub="Tổng giá trị HĐ đã thu thập"
           tone="info"
         />
-        <StatCard
-          label="Thực tế (đã nhập)"
-          value={formatVND(dash.transactionTotalTt)}
-          sub={`Biến động: ${isOverBudget ? "+" : ""}${variancePct}%`}
-          tone={isOverBudget ? "danger" : "success"}
-        />
+        {book ? (
+          // Hook cho lệnh đo `dashboard`: data-book-card, data-value (số đồng, cùng dạng với Tổng quan), data-tone.
+          <Link
+            href={tongQuanPath(projectId)}
+            title="Mở Tổng quan Đối chiếu DT-HĐ-TT"
+            data-book-card={projectId}
+            data-value={figureDataValue(book.actual)}
+            data-tone={book.tone}
+            className="block h-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&>div]:h-full hover:[&>div]:border-primary/60"
+          >
+            <StatCard label={book.label} value={book.value} sub={book.sub} tone={book.tone} />
+          </Link>
+        ) : (
+          <StatCard
+            label="Thực tế (đã nhập)"
+            value={formatVND(dash.transactionTotalTt)}
+            sub={`Biến động: ${isOverBudget ? "+" : ""}${variancePct}%`}
+            tone={isOverBudget ? "danger" : "success"}
+          />
+        )}
         <StatCard
           label="CĐT đã trả"
           value={formatVND(cdtReceived)}
