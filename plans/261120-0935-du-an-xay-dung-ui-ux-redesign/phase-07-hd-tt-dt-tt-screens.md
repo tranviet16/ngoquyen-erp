@@ -190,16 +190,48 @@ dependencies: [1, 3, 4]
 
 ## Todo
 
-- [ ] `linkId` added; golden and export tests unchanged and green; split-rule cases documented
-- [ ] Screen table: 13 grouped money columns, sticky axes, badges, `loc` filters, number links
-- [ ] `canTypeSplit`, reason titles and the Σ T explanation naming the S row
-- [ ] Per-field parsing; drafts keyed by link and field; failure keeps the draft; no extra refresh
-- [ ] Đầu mối grid H / S / X on the money parser, with the parity test
-- [ ] `canEditFrom` in the page, with a unit test of the request it makes
-- [ ] DT-TT screen: jump bar, collapsible groups, warning links
-- [ ] `hd-tt` and `dt-tt` builders; both targets ready; `measure todos` green
-- [ ] `measure hd-tt` per account and the manual sessions inside the session protocol; dump restored
-- [ ] Baseline compare exits 0
+- [x] `linkId` added; golden and export tests unchanged and green; split-rule cases documented
+- [x] Screen table: 13 grouped money columns, sticky axes, badges, `loc` filters, number links
+- [x] `canTypeSplit`, reason titles and the Σ T explanation naming the S row
+- [x] Per-field parsing; drafts keyed by link and field; failure keeps the draft; no extra refresh
+- [x] Đầu mối grid H / S / X on the money parser, with the parity test
+- [x] `canEditFrom` in the page, with a unit test of the request it makes
+- [x] DT-TT screen: jump bar, collapsible groups, warning links
+- [x] `hd-tt` and `dt-tt` builders; both targets ready; `measure todos` green
+- [ ] `measure hd-tt` per account and the manual sessions inside the session protocol; dump restored. Moved to phase 9's single session, together with the write checks of phases 3 and 8.
+- [x] Baseline compare exits 0
+
+## Run log (2026-11-23)
+
+- **Branch:** `feat/du-an-ui-redesign-p7-hd-tt`, stacked on phase 6.
+- **Static gate:** unit tests 1665 passed (19 skipped). `tsc`, `lint`, `risk:verify` and `build` are green. These files have no diff: the print snapshot, the three report views, `export-sheet-hd-tt.ts`, the ACL contract test, `entry-write-guards.ts`, `counterparty-service.ts` and the entrypoint test. No `"use server"` file was added.
+- **Browser measures on `127.0.0.1:3003`, signed in as admin (an edit user):**
+  - `measure hd-tt` passes:
+    - 28 rows and 13 money column headers;
+    - NCC names take at most 2 lines, and none is cut off without its full name in `title`;
+    - the box scrolls both ways (300 px down, 600 px across), and the header, NCC column and total row hold position;
+    - the print view is the last child;
+    - the edit toggle is present, and edit mode shows 4 inputs on each of the 28 linked rows. Nothing was typed;
+    - DT-TT has the 3-link jump bar and an anchor for every đầu mối.
+  - `measure todos` passes. Tổng quan's links into DT-TT land on their anchors, and the Σ U and Σ Y links land filtered on HĐ-TT.
+  - `measure dashboard`, `dt-hd`, `filters` and `nav` still pass.
+- **Baseline `compare` with `--expect-changed-card "Thực tế (đã nhập)=>Thực tế (sổ DT-HĐ-TT)"`:** exits 0. Print text, PDF pages, Excel and Dashboard are identical apart from that card. Server times:
+
+  | Page | Baseline | This build |
+  |---|---|---|
+  | dt-hd | 275 ms | 283 ms (×1.19 size) |
+  | dt-tt | 116 ms | 124 ms (×1.22 size) |
+  | hd-tt | 82 ms | 87 ms (×1.44 size) |
+  | Dashboard | 40 ms | 61 ms |
+
+- **Not yet run:** `measure hd-tt --as read` and `--as edit` with non-admin accounts, and the named manual typing checks. They need the dump / restore session, which phase 9 runs once for phases 3, 7 and 8.
+- **Deviations:**
+  - `supplierCellPatch` keeps a raw number as it is, and only text goes through the money parser. Otherwise a grid that passes 1500.5 as a number would be read as 15 005.
+  - Edit mode is client state; it is not written to the URL.
+  - Phần I groups start collapsed, except groups that hold a broken check, and there is a "Mở tất cả / Thu gọn tất cả" button.
+  - The Tổng quan landing check with `loc` requires the rows shown to equal the chip's count, not only "at least one".
+  - Extra modules keep files small: `hd-tt-edit-model.ts`, `hd-tt-dt-tt-url.ts`, `hd-tt-screen-checks.tsx` and `scripts/dt-hd-tt-baseline/hd-tt-screen-hooks.ts`.
+  - Phase 4's `overview-todos.test.ts` changed: it asserted that the "có việc" link carried no filter while HĐ-TT was not ready. It now checks the landing rows with the screen's own `buildHdTtView`.
 
 ## Verification
 
