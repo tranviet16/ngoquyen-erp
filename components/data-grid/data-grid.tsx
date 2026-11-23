@@ -263,8 +263,10 @@ export function DataGrid<T extends RowWithId>({
   }, [clearSelection, resetFilters]);
 
   const filterBarHeight = columns.some((c) => c.filterable) ? 28 : 0;
+  // Chiều cao dạng chữ (vd. "calc(100dvh - 18rem)"): lưới lấp khung trừ thanh lọc. Không truyền thì
+  // Glide cao bằng toàn bộ dòng và khung `overflow-hidden` cắt mất phần dưới, không cuộn được.
   const gridHeight =
-    typeof height === "number" ? height - filterBarHeight : undefined;
+    typeof height === "number" ? height - filterBarHeight : `calc(100% - ${filterBarHeight}px)`;
 
   return (
     <div className="space-y-2">

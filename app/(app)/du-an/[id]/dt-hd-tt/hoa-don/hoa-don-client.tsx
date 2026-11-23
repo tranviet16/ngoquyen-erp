@@ -1,30 +1,29 @@
 "use client";
 
 /**
- * Sổ Hóa đơn: form thêm dòng (giữ lại ngày / số HĐ / NCC / VAT % cho dòng kế tiếp của cùng hóa đơn)
- * + lưới sửa tại ô. Mỗi lần sửa chỉ gửi ô vừa đổi; server gộp vào dòng đang lưu và tính lại thành
- * tiền / tiền VAT. NCC chỉ chọn trong danh sách NCC đang hoạt động (NCC mới do quản trị tạo).
- * Bộ lọc NCC / số HĐ / Ánh xạ do trang giữ và đồng bộ URL (`filter.<cột>`), nên sống qua lần lưới dựng
- * lại sau "Thêm dòng" và qua Back.
+ * Sổ Hóa đơn: form thêm dòng hai hàng, thu gọn được (`HoaDonAddForm` — giữ lại ngày / số HĐ / NCC / VAT %
+ * cho dòng kế tiếp của cùng hóa đơn) + lưới sửa tại ô cao theo cửa sổ. Mỗi lần sửa chỉ gửi ô vừa đổi;
+ * server gộp vào dòng đang lưu và tính lại thành tiền / tiền VAT. NCC chỉ chọn trong danh sách NCC đang
+ * hoạt động (NCC mới do quản trị tạo). Bộ lọc NCC / số HĐ / Ánh xạ do trang giữ và đồng bộ URL
+ * (`filter.<cột>`), nên sống qua lần lưới dựng lại sau "Thêm dòng" và qua Back.
  */
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState, useTransition, type ComponentProps, type FormEvent, type ReactElement } from "react";
+import { useTransition, type ReactElement } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
 import { GridStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
+import { BOOK_GRID_HEIGHT } from "@/components/du-an/dt-hd-tt/collapsible-add-form";
 import { useUrlState } from "@/components/du-an/dt-hd-tt/use-url-state";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { DateInput } from "@/components/ui/date-input";
 import { vndFormatter } from "@/lib/format";
 import type { InvoiceLinePatch } from "@/lib/du-an/dt-hd-tt/entry-schemas";
-import { formNumber, isoToDmy, parseDateCell, parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import { isoToDmy, parseDateCell, parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
 import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
-import { createInvoiceLine, softDeleteInvoiceLine, updateInvoiceLine, type InvoiceLineRow } from "@/lib/du-an/dt-hd-tt/invoice-service";
+import { softDeleteInvoiceLine, updateInvoiceLine, type InvoiceLineRow } from "@/lib/du-an/dt-hd-tt/invoice-service";
 import { anhXaQuery, HOA_DON_GRID_SPEC, HOA_DON_URL, screenHref, UNMAPPED_TEXT } from "@/lib/du-an/dt-hd-tt/screen-links";
+import { HoaDonAddForm } from "./hoa-don-add-form";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
   columns: DataGridColumn<T>[];
@@ -87,9 +86,6 @@ function cellPatch(col: string, value: unknown): InvoiceLinePatch {
   }
 }
 
-const EMPTY_FORM = { invoiceDate: "", invoiceNo: "", supplierId: "", itemName: "", unit: "", qty: "", unitPrice: "", amountVnd: "", vatPercent: "", vatVnd: "", note: "" };
-type FormState = typeof EMPTY_FORM;
-
 interface Props {
   projectId: number;
   rows: InvoiceLineRow[];
@@ -103,8 +99,6 @@ interface Props {
 export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit, initialFilters }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useUrlState(initialFilters, HOA_DON_URL);
   const refresh = () => startTransition(() => router.refresh());
 
@@ -156,36 +150,6 @@ export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit, i
     },
   };
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!form.supplierId) { toast.error("Chọn NCC"); return; }
-    setSaving(true);
-    try {
-      const vatPercent = formNumber(form.vatPercent, "VAT %");
-      const result = await createInvoiceLine({
-        projectId, supplierId: Number(form.supplierId), invoiceNo: form.invoiceNo, invoiceDate: form.invoiceDate || null, itemName: form.itemName,
-        unit: form.unit, qty: formNumber(form.qty, "SL"), unitPrice: formNumber(form.unitPrice, "Đơn giá"), amountVnd: formNumber(form.amountVnd, "Thành tiền"),
-        vatPct: vatPercent === null ? null : vatPercent / 100, vatVnd: formNumber(form.vatVnd, "Tiền VAT"), note: form.note || null,
-      });
-      if (!result.ok) { toast.error(result.message); return; }
-      toast.success("Đã thêm dòng hóa đơn");
-      // Giữ phần đầu hóa đơn để nhập tiếp dòng hàng kế tiếp của cùng hóa đơn.
-      setForm({ ...EMPTY_FORM, invoiceDate: form.invoiceDate, invoiceNo: form.invoiceNo, supplierId: form.supplierId, vatPercent: form.vatPercent });
-      refresh();
-    } catch (err) {
-      toast.error("Không thêm được: " + (err instanceof Error ? err.message : String(err)));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const field = (key: keyof FormState, label: string, props: ComponentProps<typeof Input> = {}) => (
-    <label className="flex flex-col gap-1 text-xs">
-      <span className="text-muted-foreground">{label}</span>
-      <Input value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} className="h-8" {...props} />
-    </label>
-  );
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -206,38 +170,14 @@ export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit, i
         )}
       </div>
 
-      {canCreate && (
-        <form onSubmit={submit} className="grid grid-cols-2 gap-2 rounded border p-3 md:grid-cols-6">
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">Ngày</span>
-            <DateInput value={form.invoiceDate} onChange={(iso) => setForm({ ...form, invoiceDate: iso })} className="h-8" />
-          </label>
-          {field("invoiceNo", "Số HĐ *", { required: true })}
-          <label className="col-span-2 flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">NCC *</span>
-            <select value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })} required className="h-8 rounded-md border bg-transparent px-2 text-sm">
-              <option value="">— Chọn NCC —</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </label>
-          <div className="col-span-2">{field("itemName", "Tên hàng *", { required: true })}</div>
-          {field("unit", "ĐVT")}
-          {field("qty", "SL", { type: "number", step: "any" })}
-          {field("unitPrice", "Đơn giá", { type: "number", step: "any" })}
-          {field("amountVnd", "Thành tiền chưa VAT", { type: "number", step: "any", placeholder: "= SL × đơn giá" })}
-          {field("vatPercent", "VAT %", { type: "number", step: "any", min: 0, max: 100 })}
-          {field("vatVnd", "Tiền VAT", { type: "number", step: "any", placeholder: "= thành tiền × VAT %" })}
-          <div className="col-span-2 md:col-span-5">{field("note", "Ghi chú")}</div>
-          <div className="flex items-end"><Button type="submit" disabled={saving} className="h-8 w-full">Thêm dòng</Button></div>
-        </form>
-      )}
+      {canCreate && <HoaDonAddForm projectId={projectId} suppliers={suppliers} onAdded={refresh} />}
 
       <DataGrid<GridRow>
         key={rows.map((r) => r.id).join(",")}
         columns={columns}
         rows={gridRows}
         handlers={canEdit ? handlers : {}}
-        height={560}
+        height={BOOK_GRID_HEIGHT}
         filters={filters}
         onFiltersChange={setFilters}
       />
