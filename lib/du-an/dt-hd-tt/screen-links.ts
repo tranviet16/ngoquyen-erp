@@ -11,6 +11,7 @@
  *                 neo #ncc, #ncc-chua-co-dong
  *   anh-xa        tab=dt|hd|tt · status=chua_gan|de_xuat|xac_nhan|ngoai_dt|thieu_he_so · q (≤100 ký tự) · key
  *   du-toan       loai=thieu
+ *   dt-hd         mo=id,…|none (≤30 khối mở) · dauMoi=id|none · loc=con-thieu|vuot|chua-co-hd|thieu-he-so · hd=1
  *
  * Module thuần, an toàn cho bundle client (không Prisma, không module server).
  */
@@ -30,7 +31,7 @@ export type ScreenTarget =
   | "dt-hd" | "dt-tt" | "hd-tt" | "cai-dat";
 
 /** Màn đã nhận bộ lọc / neo từ URL. Link tới màn chưa sẵn sàng mở trang trần (không tham số, không neo). */
-export const READY_TARGETS: readonly ScreenTarget[] = ["hoa-don", "thuc-te-nhap", "chi-thuc-te", "dau-moi", "anh-xa", "du-toan"];
+export const READY_TARGETS: readonly ScreenTarget[] = ["hoa-don", "thuc-te-nhap", "chi-thuc-te", "dau-moi", "anh-xa", "du-toan", "dt-hd"];
 
 /** Màn nằm ngoài nhóm DT-HĐ-TT (tab của công trình). */
 const PROJECT_TABS: readonly ScreenTarget[] = ["du-toan", "cai-dat"];
@@ -208,3 +209,11 @@ export function kindlessEstimateIds(
   const codeOf = new Map(liveCategories.map((c) => [c.id, c.code]));
   return estimates.filter((e) => kindOfCategoryCode(codeOf.get(e.categoryId) ?? "") === null).map((e) => e.id);
 }
+
+// ---------------------------------------------------------------------------
+// DT-HĐ: mo / dauMoi / loc / hd (trạng thái của màn báo cáo) — hợp đồng ở dt-hd-url.ts
+// ---------------------------------------------------------------------------
+
+export {
+  DT_HD_LOCS, DT_HD_OPEN_MAX, DT_HD_URL, dtHdQuery, parseDtHdQuery, patchDtHdQuery, type DtHdBlockKey, type DtHdLoc, type DtHdParams,
+} from "./dt-hd-url";

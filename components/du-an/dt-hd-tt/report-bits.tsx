@@ -86,6 +86,27 @@ export function ReportToolbar({ title, subtitle, projectId, report }: { title: s
   );
 }
 
+/**
+ * Thứ tự của trang báo cáo có màn hình riêng: thanh công cụ, băng cài đặt, màn hình (`print:hidden`), rồi
+ * bản in (`hidden print:block`, `data-print-view`) là con CUỐI. Tailwind v4 `space-y-*` đặt lề dưới cho
+ * mọi con trừ con cuối, và khi in màn hình không có hộp — nên trên giấy khoảng cách y như trang chỉ có
+ * bản in. View in bên trong giữ nguyên từng byte.
+ */
+export function ReportPageLayout({ toolbar, banner, screen, print }: { toolbar: ReactNode; banner: ReactNode; screen: ReactNode; print: ReactNode }) {
+  return (
+    <div className="space-y-4">
+      {toolbar}
+      {banner}
+      <div className="print:hidden" data-report-screen="">
+        {screen}
+      </div>
+      <div className="hidden print:block" data-print-view="">
+        {print}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Mảnh của màn hình (không dùng trong bản in)
 // ---------------------------------------------------------------------------
