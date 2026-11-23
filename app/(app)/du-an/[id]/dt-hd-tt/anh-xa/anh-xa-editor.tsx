@@ -1,15 +1,19 @@
 "use client";
 
 /**
- * Ô gán của một khóa trên màn Ánh xạ: chọn Mã nhóm, Dòng DT (lọc theo Mã nhóm), hệ số (hd / tt) hoặc
- * loại (dt), rồi "Xác nhận", "Lưu đề xuất", "Ngoài DT" (hd / tt) hoặc "Bỏ gán". Khóa chưa gán → tạo
- * alias; alias đang có → chỉ gửi các trường đã đổi (server trộn với bản đọc lại dưới khóa).
+ * Ô gán của một khóa trên màn Ánh xạ: chọn Mã nhóm, Dòng DT (lọc theo Mã nhóm) — hai ô chọn có tìm, bỏ
+ * dấu — hệ số (hd / tt) hoặc loại (dt), rồi "Lưu và sang dòng kế" (Ctrl+Enter), "Xác nhận", "Lưu đề
+ * xuất", "Ngoài DT" (hd / tt) hoặc "Bỏ gán". Khóa chưa gán → tạo alias; alias đang có → chỉ gửi các
+ * trường đã đổi (server trộn với bản đọc lại dưới khóa). "Lưu và sang dòng kế" lưu Xác nhận qua đúng
+ * đường lưu đó (không cần quyền mới) rồi để màn mở khóa kế. Mở ra là con trỏ ở ô chọn chính (Dòng DT,
+ * hoặc Mã nhóm ở tab DT).
  */
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { AliasKeyRow, DtLineOption, GroupOption } from "@/lib/du-an/dt-hd-tt/alias-board";
 import { createAlias, softDeleteAlias, updateAlias } from "@/lib/du-an/dt-hd-tt/alias-service";
 import type { AliasPatch } from "@/lib/du-an/dt-hd-tt/alias-rules";
@@ -24,12 +28,16 @@ interface Props {
   dtLines: DtLineOption[];
   /** Có quyền `edit` — bỏ gán alias đang có. */
   canDelete: boolean;
+  /** Màn đang mở khóa khác (điều hướng chưa xong): khóa các nút. */
+  pending: boolean;
   onDone: () => void;
+  /** Sau khi "Lưu và sang dòng kế" lưu được: màn mở khóa kế. */
+  onAdvance: () => void;
 }
 
 const selectClass = "h-8 w-full rounded-md border bg-transparent px-2 text-sm";
 
-export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone }: Props) {
+export function AliasEditor({ projectId, row, groups, dtLines, canDelete, pending, onDone, onAdvance }: Props) {
   const alias = row.alias;
   const isDt = row.source === "dt";
   const [groupId, setGroupId] = useState(alias?.groupCodeId ? String(alias.groupCodeId) : "");
@@ -45,7 +53,9 @@ export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone
   const dtOptions = [
     ...(staleKey ? [{ key: staleKey, label: `(dòng DT không còn) ${staleKey.split("|").join(" · ")}` }] : []),
     ...(groupId ? dtLines.filter((l) => String(l.groupCodeId) === groupId || l.key === dtKey) : dtLines),
-  ];
+  ].map((l) => ({ value: l.key, label: l.label }));
+  const groupOptions = groups.map((g) => ({ value: String(g.id), label: `${g.code} – ${g.name}` }));
+  const locked = busy || pending;
 
   function pickGroup(value: string) {
     setGroupId(value);
@@ -61,7 +71,8 @@ export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone
     if (line) setGroupId(line.groupCodeId === null ? "" : String(line.groupCodeId)); // nhóm = nhóm của dòng DT
   }
 
-  async function save(status: AliasStatus) {
+  /** `advance`: nút "Lưu và sang dòng kế" — lưu được thì để màn mở khóa kế thay vì đóng. */
+  async function save(status: AliasStatus, advance = false) {
     let factorValue: number | null = null;
     try {
       factorValue = isDt ? null : parseNumberText(factor, "Hệ số", "decimal");
@@ -96,7 +107,8 @@ export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone
         return;
       }
       toast.success(status === "xac_nhan" ? "Đã xác nhận ánh xạ" : status === "ngoai_dt" ? "Đã đánh dấu Ngoài DT" : "Đã lưu đề xuất");
-      onDone();
+      if (advance) onAdvance();
+      else onDone();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -122,14 +134,19 @@ export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone
     }
   }
 
+  /** Ctrl+Enter (⌘+Enter) ở bất kỳ ô nào của ô gán = "Lưu và sang dòng kế". Enter chọn mục trong ô chọn
+   *  đang mở thì ô chọn đã dừng sự kiện, nên không lưu nhầm giá trị cũ. */
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    if (!locked) void save("xac_nhan", true);
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-2 bg-muted/40 p-3 md:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2 bg-muted/40 p-3 md:grid-cols-6" onKeyDown={onKeyDown} data-alias-editor={row.itemKey}>
       <label className="flex flex-col gap-1 text-xs md:col-span-2">
         <span className="text-muted-foreground">Mã nhóm</span>
-        <select value={groupId} onChange={(e) => pickGroup(e.target.value)} className={selectClass}>
-          <option value="">— Không —</option>
-          {groups.map((g) => <option key={g.id} value={g.id}>{g.code} – {g.name}</option>)}
-        </select>
+        <SearchableSelect name="anh-xa-ma-nhom" options={groupOptions} value={groupId} onChange={pickGroup} emptyLabel="— Không —" autoFocus={isDt} />
       </label>
       {isDt ? (
         <label className="flex flex-col gap-1 text-xs">
@@ -142,10 +159,7 @@ export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone
         <>
           <label className="flex flex-col gap-1 text-xs md:col-span-2">
             <span className="text-muted-foreground">Dòng DT {groupId ? "(theo Mã nhóm)" : ""}</span>
-            <select value={dtKey} onChange={(e) => pickDtLine(e.target.value)} className={selectClass}>
-              <option value="">— Chỉ gán tới Mã nhóm —</option>
-              {dtOptions.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-            </select>
+            <SearchableSelect name="anh-xa-dong-dt" options={dtOptions} value={dtKey} onChange={pickDtLine} emptyLabel="— Chỉ gán tới Mã nhóm —" autoFocus />
           </label>
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-muted-foreground">Hệ số (trống = theo giá trị)</span>
@@ -158,11 +172,14 @@ export function AliasEditor({ projectId, row, groups, dtLines, canDelete, onDone
         <Input value={note} onChange={(e) => setNote(e.target.value)} className="h-8" />
       </label>
       <div className="col-span-2 flex flex-wrap gap-2 md:col-span-6">
-        <Button size="sm" disabled={busy} onClick={() => save("xac_nhan")}>Xác nhận</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => save("de_xuat")}>Lưu đề xuất</Button>
-        {!isDt && <Button size="sm" variant="outline" disabled={busy} onClick={() => save("ngoai_dt")}>Ngoài DT</Button>}
-        {alias && canDelete && <Button size="sm" variant="destructive" disabled={busy} onClick={remove}>Bỏ gán</Button>}
-        <Button size="sm" variant="ghost" disabled={busy} onClick={onDone}>Đóng</Button>
+        <Button size="sm" disabled={locked} onClick={() => save("xac_nhan", true)} title="Xác nhận rồi mở khóa kế trong danh sách (Ctrl+Enter)" data-save-next>
+          Lưu và sang dòng kế <kbd className="ml-1 rounded border border-current/30 px-1 text-[10px] font-normal opacity-80">Ctrl+Enter</kbd>
+        </Button>
+        <Button size="sm" variant="outline" disabled={locked} onClick={() => save("xac_nhan")}>Xác nhận</Button>
+        <Button size="sm" variant="outline" disabled={locked} onClick={() => save("de_xuat")}>Lưu đề xuất</Button>
+        {!isDt && <Button size="sm" variant="outline" disabled={locked} onClick={() => save("ngoai_dt")}>Ngoài DT</Button>}
+        {alias && canDelete && <Button size="sm" variant="destructive" disabled={locked} onClick={remove}>Bỏ gán</Button>}
+        <Button size="sm" variant="ghost" disabled={locked} onClick={onDone}>Đóng</Button>
       </div>
     </div>
   );
