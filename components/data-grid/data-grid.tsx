@@ -18,7 +18,7 @@ import type { FilterValue } from "@/lib/table/types";
 import { Plus, Trash2, X } from "lucide-react";
 import { useGlideTheme } from "./theme";
 import { useGridMutation } from "./use-grid-mutation";
-import { sameOrderedRowIds, useGridView } from "./use-grid-view";
+import { filtersChanged, sameOrderedRowIds, useGridView } from "./use-grid-view";
 import { buildCell, isCreateOptionPick, parseCellValue } from "./cells";
 import { FilterBar } from "./filter-bar";
 import type { DataGridColumn, DataGridHandlers, RowWithId } from "./types";
@@ -41,8 +41,15 @@ interface Props<T extends RowWithId> {
   height?: number | string;
   newRowTemplate?: Partial<T>;
   onSelectionChange?: (ids: number[]) => void;
+  /**
+   * Bộ lọc do trang giữ (vd. đồng bộ URL, sống qua lần lưới dựng lại). Không truyền = lưới tự giữ bộ
+   * lọc như trước. Có truyền thì mọi lần bộ lọc từ ngoài vào đổi đều bỏ chọn dòng.
+   */
+  filters?: Record<string, FilterValue>;
+  onFiltersChange?: (filters: Record<string, FilterValue>) => void;
 }
 
+const NO_FILTERS: Record<string, FilterValue> = {};
 
 export function DataGrid<T extends RowWithId>({
   columns,
@@ -52,9 +59,19 @@ export function DataGrid<T extends RowWithId>({
   height = 480,
   newRowTemplate = {},
   onSelectionChange,
+  filters: controlledFilters,
+  onFiltersChange,
 }: Props<T>) {
   const theme = useGlideTheme();
   const [selection, setSelection] = useState<GridSelection | undefined>();
+  // Bộ lọc điều khiển đổi (URL, Back, trang nhận bộ lọc mới) → bỏ chọn ngay trong lần render này, như
+  // handleFilter, để chỉ số chọn cũ không trỏ vào dòng khác của `view` mới. onSelectionChange([]) đi
+  // qua effect báo lựa chọn bên dưới.
+  const [seenFilters, setSeenFilters] = useState(controlledFilters);
+  if (controlledFilters !== undefined && filtersChanged(seenFilters ?? NO_FILTERS, controlledFilters)) {
+    setSeenFilters(controlledFilters);
+    setSelection(undefined);
+  }
   const reportedSelectionRef = useRef<readonly number[]>([]);
   const clearSelection = useCallback(() => {
     setSelection(undefined);
@@ -76,7 +93,7 @@ export function DataGrid<T extends RowWithId>({
     resetFilters,
     view,
     isFiltered,
-  } = useGridView(rows, columns);
+  } = useGridView(rows, columns, { filters: controlledFilters, onFiltersChange });
   const sortSelectId = useId();
 
   const sortableColumns = useMemo(
