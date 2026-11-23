@@ -120,12 +120,48 @@ Finish criterion 6:
 
 ## Todo
 
-- [ ] Combobox Root props read; `SearchableSelect` built, with the Enter guard
-- [ ] Pickers replaced in three books and the Ánh xạ editor
-- [ ] Collapsible two-row add form and fluid grid height
-- [ ] Source-line loader, called only for the opened key; "Lưu và sang dòng kế" with `nextOpenKey`
-- [ ] dt-hd timing within its bound
-- [ ] Named manual checks inside the session protocol; dump restored
+- [x] Combobox Root props read; `SearchableSelect` built, with the Enter guard
+- [x] Pickers replaced in three books and the Ánh xạ editor
+- [x] Collapsible two-row add form and fluid grid height
+- [x] Source-line loader, called only for the opened key; "Lưu và sang dòng kế" with `nextOpenKey`
+- [x] dt-hd timing within its bound
+- [ ] Named manual checks inside the session protocol; dump restored. Moved to phase 9's single session, together with the write checks of phases 3 and 7.
+
+## Run log (2026-11-24)
+
+- **Branch:** `feat/du-an-ui-redesign-p8-entry`, stacked on phase 7.
+- **Static gate:** unit tests 1689 passed (19 skipped). `tsc`, `lint`, `risk:verify` and `build` are green. These files have no diff: the print snapshot, the three report views, the ACL contract test, `entry-write-guards.ts`, `counterparty-service.ts`, `alias-service.ts`, `alias-board.ts`, the entrypoint test, the DT-HĐ-TT layout and its sub-nav. The risk manifest is unchanged (12 API routes, 20 server-action files).
+- **Integration tests:** they could not run on this machine.
+  - No test database runs locally.
+  - A throwaway `postgres:16-alpine` on a loopback port, with CI's public test login, timed out in the per-test table truncation and hit deadlocks on this Docker volume.
+  - The PR's CI `baseline` job runs `npm run test:integration` against its own Postgres service, and is the proof for the new loader test.
+- **Base UI Combobox fit; no fallback was needed.**
+  - The Input already blocks Enter on a highlighted item.
+  - `guardEnter` also blocks Enter while the list is open with no match, so a typo cannot submit the form with the previous NCC.
+- **Read-only browser check on `127.0.0.1:3003`, signed in as admin.** A throwaway script that types no data and saves nothing. It passed:
+  - a search typed without diacritics shows only matching NCC;
+  - Enter on a highlighted item selects it and sends no request;
+  - Enter on a search with no match sends no request;
+  - the add form's collapsed state survives a reload;
+  - all six pickers are present;
+  - opening an Ánh xạ HĐ key puts `key` in the URL, shows its source lines (at most 20) and the "Lưu và sang dòng kế" button, and sends no save.
+- **Measures:** `measure all` passes (dashboard, dt-hd, filters, hd-tt, nav, todos).
+- **Baseline `compare`:** exits 0; print, PDF pages, Excel and Dashboard are unchanged. Server times stay within their bounds:
+
+  | Page | Baseline | This build |
+  |---|---|---|
+  | dt-hd | 275 ms | 309 ms (bound 575) |
+  | dt-tt | 116 ms | 155 ms |
+  | hd-tt | 82 ms | 90 ms |
+  | Dashboard | 40 ms | 93 ms (bound 340) |
+
+  The rise from the phase 7 run is the same pages on a busier machine. This phase adds nothing to the DT-HĐ-TT layout.
+- **Deviations:**
+  - `components/data-grid/data-grid.tsx` changes one expression. With a string `height`, the grid passed `undefined` to Glide, which then grew to the full height of all rows inside an `overflow-hidden` box, so rows below the box could not be reached. A string height now becomes `calc(100% - <filter bar>px)`. Numeric heights, used by every other render site, are unchanged.
+  - Opening a key with Gán / Sửa narrows the Ánh xạ list to that key, because phase 3's `key` parameter filters to the exact key. Đóng, Bỏ lọc and a normal save remove `key` and restore the list. "Lưu và sang dòng kế" walks the list as filtered by tab, status and q, and at the end shows "Đã hết khóa trong danh sách đang lọc".
+  - DT keys show no source lines; there are no estimate lines to list.
+  - Mục in Chi thực tế stays a native select. It has four options and is not one of the four named pickers.
+  - Added: after "Thêm dòng" the cursor returns to the first per-line field. When the Ánh xạ editor opens, the cursor is in Dòng DT, or in Mã nhóm on the DT tab.
 
 ## Verification
 
