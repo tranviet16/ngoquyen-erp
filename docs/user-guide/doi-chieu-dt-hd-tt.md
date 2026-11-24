@@ -395,7 +395,7 @@ Cách gõ số tiền (H, S, X): dấu chấm hoặc khoảng trắng tách ngh�
 
 **Khi lưu không được** (gõ chữ không phải số, mất quyền, dòng NCC vừa bị người khác xóa…):
 - ô viền đỏ, thông báo hiện ngay dưới ô (vd. `S thực tế riêng: "abc" không phải số`);
-- **chữ đã gõ được giữ nguyên** và con trỏ quay về ô đó để sửa lại;
+- **chữ đã gõ được giữ nguyên**. Lưu bằng Enter thì con trỏ ở lại ô để sửa ngay; đã rời ô (Tab, bấm ô khác) thì con trỏ đi theo bạn, ô đỏ vẫn giữ chữ để quay lại sửa sau;
 - trên bảng có dòng "n ô chưa lưu được — xem thông báo dưới ô".
 
 Lưu xong một ô, bảng tự tính lại (vd. T của NCC đầu trong đầu mối). Chữ đang gõ ở các ô khác không bị mất.

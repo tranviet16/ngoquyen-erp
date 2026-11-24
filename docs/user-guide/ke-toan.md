@@ -272,7 +272,7 @@ Cách gõ tiền: dấu chấm hoặc khoảng trắng tách nghìn, dấu phẩ
 
 **Lưu không được** (gõ sai số, mất quyền, dòng NCC vừa bị xóa…):
 - ô viền đỏ, thông báo hiện ngay dưới ô;
-- **chữ đã gõ được giữ nguyên** và con trỏ quay về ô đó;
+- **chữ đã gõ được giữ nguyên**. Lưu bằng Enter thì con trỏ ở lại ô; đã rời ô (Tab, bấm ô khác) thì con trỏ đi theo bạn, ô đỏ vẫn giữ chữ;
 - sửa chữ rồi Enter lại. Nếu thông báo là "Dòng NCC không còn trong công trình này — tải lại trang", hãy chép lại chữ đã gõ rồi tải lại trang.
 
 Dòng NCC chưa có ở trang Đầu mối thì không có ô nhập, mà có link **Thêm dòng NCC ở Đầu mối**.
