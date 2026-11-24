@@ -148,7 +148,8 @@ Dùng **một** cửa sổ PowerShell từ bước 2 tới bước 13, đã dán
 - [ ] Docker Desktop bật; `docker ps` có `docker-postgres-1` và `ngoquyen-erp-3001`.
 - [ ] Người duyệt có mặt. Thư mục `Quản Lý Công Nợ` trên máy là bản mới nhất.
 - [ ] Đã thông báo **toàn bộ người dùng ERP** ngừng dùng hệ thống trong cửa sổ go-live, không riêng 3 module (xem "Rollback vận hành").
-- [ ] Commit deploy có quyền admin ghi sổ trong kỳ khoá (`LedgerService` với `adminOverride`, `refreezeSignedPeriodsFrom`) và script `scripts/vat-tu-bo-sung-mam-non-sau-import.ts`. Bước 12a cần cả hai.
+- [ ] Commit deploy có quyền admin ghi sổ trong kỳ khoá (`LedgerService` với `adminOverride`, `refreezeSignedPeriodsFrom`). Bước 12a cần quyền này.
+- [ ] Có sẵn file `vat-tu-bo-sung-mam-non-sau-import.ts` mang sang riêng, **không nằm trong git** (chứa số tiền và MST thật, repo công khai). SHA-256 của nó phải đúng giá trị đã ghi ở plan phát hành (`plans/261124-0448-production-release-train/phase-01-start.md`) và ở buổi diễn tập.
 
 ### Bước 2 — Đóng module, đóng băng Excel
 
@@ -371,11 +372,15 @@ Người dùng đã đối chiếu file của đội (`Ngo Quyen\Cong Trinh Khoa
 Như bước 12, chỉ làm sau khi người duyệt chấp nhận bước 10–11: dòng sổ mới không thuộc run làm **Hoàn tác** import bị từ chối.
 
 ```powershell
+# Script không nằm trong git: chép file mang sang vào scripts/ của checkout deploy, kiểm SHA-256 trước khi chạy.
+Copy-Item "<thư mục mang sang>\vat-tu-bo-sung-mam-non-sau-import.ts" scripts\
+(Get-FileHash -Algorithm SHA256 scripts\vat-tu-bo-sung-mam-non-sau-import.ts).Hash   # phải đúng giá trị đã ghi; sai thì dừng
 Set-ErpDatabaseUrl .env.local ngoquyyen_erp
 $env:ADMIN_USER_ID = "<id tài khoản admin đang chạy go-live>"
 npx tsx scripts/vat-tu-bo-sung-mam-non-sau-import.ts                       # chạy thử, tự hoàn tác
 $env:APPLY = "1"; npx tsx scripts/vat-tu-bo-sung-mam-non-sau-import.ts     # ghi thật
 Remove-Item Env:APPLY
+Remove-Item scripts\vat-tu-bo-sung-mam-non-sau-import.ts                    # không để file lại trong checkout
 ```
 
 - Script tìm từng dòng cần sửa theo nội dung (NCC, ngày, loại, số tiền cũ). Nếu một dòng không còn đúng như lúc đối chiếu (đã có người sửa Excel trước giờ đóng băng), hoặc dòng sắp thêm đã có, script dừng và không ghi gì. Khi đó so dòng đó với file đội rồi hỏi người dùng, không sửa script cho chạy qua.

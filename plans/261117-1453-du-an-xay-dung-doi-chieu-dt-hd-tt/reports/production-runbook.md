@@ -13,6 +13,8 @@ Kết quả chạy thử trên bản sao: [dry-run-result.md](dry-run-result.md)
 
 ## 1. Sao lưu → dừng app → migrate → chạy build mới
 
+> **Đợt phát hành 11/2026 (`plans/261124-0448-production-release-train/`): bỏ qua mục này và không chạy script.** Bước 7 của go-live công nợ vật tư deploy cùng một image và áp cả `20261117160000_du_an_dt_hd_tt`. Sau go-live, làm tiếp từ mục 2 (vẫn ghi số liệu nền trước khi import). Script dưới đây chỉ dành cho trường hợp deploy riêng DT-HĐ-TT trên DB đã go-live. Nó cố ý dừng khi `20261106090000_vat_tu_pair_scope_and_import_review` còn chờ, để không ai migrate công nợ vật tư mà bỏ qua các bước dọn của go-live.
+
 Script [deploy-erp-3001-du-an-dt-hd-tt.ps1](deploy-erp-3001-du-an-dt-hd-tt.ps1) làm các bước dưới đây theo thứ tự. Chạy trên admin-pc: `powershell -ExecutionPolicy Bypass -File .\deploy-erp-3001-du-an-dt-hd-tt.ps1`.
 - Bước 1.4 (số liệu nền theo công trình) vẫn làm tay trước khi import.
 - Script dừng nếu DB còn chờ migration nào khác `20261117160000_du_an_dt_hd_tt`, và hỏi gõ `DEPLOY` trước khi dừng app.
