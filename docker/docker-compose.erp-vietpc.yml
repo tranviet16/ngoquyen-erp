@@ -1,0 +1,56 @@
+# Production ERP on VIETPC (from 11/2026; see docs/operations/deploy.md).
+#
+# The database is the existing container `ngoquyen-bansao-pg` (volume `ngoquyen-bansao-pgdata`, 127.0.0.1:5433) on the
+# docker network `ngoquyen-bansao`; this file only builds and runs the app. Run it from a clean checkout of the release
+# commit outside OneDrive, with the production env file kept outside git:
+#
+#   docker compose -f docker/docker-compose.erp-vietpc.yml --env-file <prod env> build
+#   docker compose -f docker/docker-compose.erp-vietpc.yml --env-file <prod env> up -d --no-build
+#
+# The env file supplies POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, DATABASE_URL (build secret, same value as the
+# runtime URL), BETTER_AUTH_SECRET (production only, never the copy's or dev's), UPLOAD_HOST_DIR, RELEASE_TAG and,
+# optionally, SENTRY_DSN. Never commit it and never print its values.
+services:
+  erp-vietpc:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://vietpc:3001}"
+        NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://vietpc:3001}"
+        TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-http://vietpc:3001,http://100.77.222.89:3001,https://vietpc.tail8998df.ts.net,http://localhost:3001,http://127.0.0.1:3001}"
+        NEXT_PUBLIC_SENTRY_DSN: "${SENTRY_DSN:-}"
+      secrets:
+        - database_url
+        - better_auth_secret
+    image: "ngoquyen-erp-vietpc:${RELEASE_TAG:?set RELEASE_TAG to the release commit}"
+    container_name: ngoquyen-prod-erp
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@ngoquyen-bansao-pg:5432/${POSTGRES_DB}?schema=public"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+      BETTER_AUTH_URL: "${BETTER_AUTH_URL:-http://vietpc:3001}"
+      NEXT_PUBLIC_BETTER_AUTH_URL: "${NEXT_PUBLIC_BETTER_AUTH_URL:-http://vietpc:3001}"
+      TRUSTED_ORIGINS: "${TRUSTED_ORIGINS:-http://vietpc:3001,http://100.77.222.89:3001,https://vietpc.tail8998df.ts.net,http://localhost:3001,http://127.0.0.1:3001}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      NODE_ENV: production
+      # Task attachments live on the host, outside the container (lost on recreate) and outside OneDrive.
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - "${UPLOAD_HOST_DIR:?set UPLOAD_HOST_DIR to the production uploads folder}:/data/uploads"
+    # Loopback only. Tailnet users reach it through `tailscale serve --tcp=3001`; never open 3001 to the LAN.
+    ports:
+      - "127.0.0.1:3001:3000"
+    networks:
+      - ngoquyen-bansao
+
+networks:
+  ngoquyen-bansao:
+    external: true
+    name: ngoquyen-bansao
+
+secrets:
+  database_url:
+    environment: DATABASE_URL
+  better_auth_secret:
+    environment: BETTER_AUTH_SECRET

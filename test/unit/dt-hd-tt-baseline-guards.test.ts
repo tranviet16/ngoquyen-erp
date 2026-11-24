@@ -8,25 +8,30 @@ describe("baseline guards", () => {
     process.env.DATABASE_URL = savedDbUrl;
   });
 
-  it("requires an explicit loopback base URL and refuses the unpinned 3001 copy", () => {
+  it("requires an explicit loopback base URL and refuses the production app on 3001", () => {
     expect(() => requireLoopbackBaseUrl(undefined)).toThrow(GuardError);
     expect(() => requireLoopbackBaseUrl("http://192.168.1.10:3002")).toThrow(/máy này/);
     expect(() => requireLoopbackBaseUrl("http://localhost:3001")).toThrow(/3001/);
     expect(requireLoopbackBaseUrl("http://127.0.0.1:3003/du-an")).toBe("http://127.0.0.1:3003");
   });
 
-  it("reads only the copy database on loopback port 5433, without echoing the URL", () => {
-    process.env.DATABASE_URL = "postgresql://u:secret@10.0.0.5:5433/db";
+  it("reads only the dev copy database on loopback port 5434, without echoing the URL", () => {
+    process.env.DATABASE_URL = "postgresql://u:secret@10.0.0.5:5434/db";
     expect(() => requireCopyDatabaseUrl()).toThrow(GuardError);
     process.env.DATABASE_URL = "postgresql://u:secret@127.0.0.1:5432/db";
-    expect(() => requireCopyDatabaseUrl()).toThrow(/5433/);
+    expect(() => requireCopyDatabaseUrl()).toThrow(/5434/);
     try {
       requireCopyDatabaseUrl();
     } catch (err) {
       expect(String(err)).not.toContain("secret");
     }
+    process.env.DATABASE_URL = "postgresql://u:secret@127.0.0.1:5434/db";
+    expect(requireCopyDatabaseUrl()).toContain("5434");
+  });
+
+  it("refuses the production database on 5433", () => {
     process.env.DATABASE_URL = "postgresql://u:secret@127.0.0.1:5433/db";
-    expect(requireCopyDatabaseUrl()).toContain("5433");
+    expect(() => requireCopyDatabaseUrl()).toThrow(/5434/);
   });
 });
 

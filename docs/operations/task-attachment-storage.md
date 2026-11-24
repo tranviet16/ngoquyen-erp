@@ -21,9 +21,10 @@ Không có migration và không đổi dữ liệu DB.
 
 | Môi trường | Container | Thư mục host → `/data/uploads` |
 |---|---|---|
-| Production (admin-pc) | `ngoquyen-erp-3001` | `D:\docker-data\ngoquyyen-erp\uploads` |
+| Production trên VIETPC (từ 11/2026) | `ngoquyen-prod-erp` (`docker/docker-compose.erp-vietpc.yml`) | `UPLOAD_HOST_DIR` của file env production: `C:\Users\tranv\.ngoquyen-prod\uploads`, ngoài OneDrive |
+| Bản sao dev (VIETPC) | server dev qua `scripts/serve-local-build.mjs`, CSDL `ngoquyen-dev-pg` cổng 5434 | `UPLOAD_DIR` của file env dev: `C:\Users\tranv\.ngoquyen-dev\uploads` |
+| Production cũ (admin-pc, tới lúc chuyển 11/2026) | `ngoquyen-erp-3001` | `D:\docker-data\ngoquyyen-erp\uploads` |
 | Stack thay thế `docker-compose.prod.yml` (admin-pc) | `ngoquyyen-nextjs` | cùng thư mục trên, vì stack này dùng chung dữ liệu Postgres `D:\docker-data\ngoquyyen-erp\postgres`. Không chạy hai stack cùng lúc. |
-| Bản sao chạy thử (VIETPC) | `ngoquyen-bansao-erp` | `C:\Users\tranv\.ngoquyen-ban-sao\uploads` |
 
 Thư mục đính kèm phải đi cùng DB của nó. Mỗi dòng `task_attachments` trỏ tới một tệp theo đường dẫn tương đối (`task-attachments/<taskId>/<uuid>-<tên>`).
 

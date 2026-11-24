@@ -1,14 +1,15 @@
 /**
  * Chốt an toàn cho các script baseline / đo của tab "Đối chiếu DT-HĐ-TT".
  *
- * - Chỉ nói chuyện với server chạy trên máy này (127.0.0.1 / localhost). Cổng 3001 bị từ chối vì đó là
- *   container bản sao chạy một bản build không ghim commit — so với nó không chứng minh được gì.
- * - Chỉ đọc CSDL bản sao trên loopback cổng 5433. Không bao giờ in DATABASE_URL ra màn hình.
+ * - Chỉ nói chuyện với server chạy trên máy này (127.0.0.1 / localhost). Cổng 3001 bị từ chối: trên VIETPC đó là
+ *   app production (từ 11/2026), không bao giờ là đích của script đo.
+ * - Chỉ đọc CSDL bản sao dev trên loopback cổng 5434 (`ngoquyen-dev-pg`). Cổng 5433 là CSDL production trên VIETPC
+ *   nên bị từ chối. Không bao giờ in DATABASE_URL ra màn hình.
  */
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-const UNPINNED_COPY_PORT = "3001";
-const COPY_DB_PORT = "5433";
+const PRODUCTION_APP_PORT = "3001";
+const DEV_COPY_DB_PORT = "5434";
 
 export class GuardError extends Error {}
 
@@ -22,11 +23,11 @@ export function requireLoopbackBaseUrl(raw: string | undefined): string {
     throw new GuardError(`--base-url không phải URL hợp lệ: ${raw}`);
   }
   if (!LOOPBACK_HOSTS.has(url.hostname)) throw new GuardError(`--base-url phải trỏ về máy này (127.0.0.1), không phải ${url.hostname}.`);
-  if (url.port === UNPINNED_COPY_PORT) throw new GuardError("Không dùng cổng 3001: đó là bản build không ghim commit của container bản sao.");
+  if (url.port === PRODUCTION_APP_PORT) throw new GuardError("Không dùng cổng 3001: đó là app production trên VIETPC.");
   return url.origin;
 }
 
-/** DATABASE_URL phải là CSDL bản sao trên loopback cổng 5433. Chỉ báo lỗi chung, không lộ giá trị. */
+/** DATABASE_URL phải là CSDL bản sao dev trên loopback cổng 5434. Chỉ báo lỗi chung, không lộ giá trị. */
 export function requireCopyDatabaseUrl(): string {
   const raw = process.env.DATABASE_URL;
   if (!raw) throw new GuardError("Thiếu DATABASE_URL — chạy bằng `npx tsx --env-file=.env.local ...`.");
@@ -37,6 +38,6 @@ export function requireCopyDatabaseUrl(): string {
     throw new GuardError("DATABASE_URL không đọc được.");
   }
   if (!LOOPBACK_HOSTS.has(url.hostname)) throw new GuardError("DATABASE_URL không trỏ về máy này — từ chối đọc.");
-  if (url.port !== COPY_DB_PORT) throw new GuardError(`DATABASE_URL không ở cổng ${COPY_DB_PORT} của CSDL bản sao — từ chối đọc.`);
+  if (url.port !== DEV_COPY_DB_PORT) throw new GuardError(`DATABASE_URL không ở cổng ${DEV_COPY_DB_PORT} của CSDL bản sao dev — từ chối đọc.`);
   return raw;
 }

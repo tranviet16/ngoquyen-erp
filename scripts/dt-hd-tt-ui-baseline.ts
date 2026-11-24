@@ -5,7 +5,8 @@
  *   capture   --recheck --base-url http://127.0.0.1:3002 --out <dir>
  *   compare   --base-url http://127.0.0.1:3003 --against <dir> [--checkout .] [--expect-changed-card "<nhãn>"]...
  *
- * Chạy bằng `npx tsx --env-file=.env.local ...` (đọc DATABASE_URL của CSDL bản sao, cổng 5433).
+ * Chạy bằng `npx tsx --env-file=<host-migrate.env của bản dev> ...` (đọc DATABASE_URL của CSDL bản sao dev, cổng 5434;
+ * cổng 5433 là production trên VIETPC và bị từ chối).
  * Mã thoát: 0 đạt; 1 có khác biệt chặn; 2 "cùng bản build"; 3 "dữ liệu đã đổi"; 4 lỗi dùng / chốt an toàn.
  */
 

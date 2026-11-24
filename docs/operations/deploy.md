@@ -1,6 +1,39 @@
 # Production Deployment Runbook
 
-## Current Windows host deployment
+## Production on VIETPC (from the 11/2026 release)
+
+From the 11/2026 cutover (`plans/261124-0448-production-release-train/`), production runs on **VIETPC**, using the data copy that already holds the công nợ vật tư cutover and the DT-HĐ-TT books. Until the cutover is recorded in that plan, the admin-pc section below is still the live production.
+
+- **Address:** `http://vietpc:3001` (also `http://100.77.222.89:3001`, HTTPS fallback `https://vietpc.tail8998df.ts.net`).
+  - The app is bound to `127.0.0.1:3001`.
+  - Tailnet access goes through `tailscale serve --bg --tcp=3001 tcp://127.0.0.1:3001` on VIETPC. Never open 3001 to the LAN.
+- **Containers:**
+  - database: `ngoquyen-bansao-pg` (postgres:16, volume `ngoquyen-bansao-pgdata`, `127.0.0.1:5433`, restart `unless-stopped`);
+  - app: `ngoquyen-prod-erp`, from `docker/docker-compose.erp-vietpc.yml`.
+- **Config outside git and outside OneDrive:** the production env file and uploads in `C:\Users\tranv\.ngoquyen-prod\`. The production `BETTER_AUTH_SECRET` is its own, never the copy's or dev's. The bootstrap admin is managed with `scripts/manage-erp-admin-local.ps1`, as below.
+- **Build and run** from a clean checkout of the release commit, outside OneDrive:
+  - `docker compose -f docker/docker-compose.erp-vietpc.yml --env-file <prod env> build`, then `up -d --no-build`;
+  - `npx prisma migrate status` from that checkout, with the production `DATABASE_URL`, before declaring it healthy. The image carries no Prisma CLI.
+- **Ports on VIETPC:**
+
+  | Port | Use |
+  |---|---|
+  | 5433 | Production database. Dev tools refuse it. |
+  | 3001 | Production app. Dev tools refuse it. |
+  | 5434 | Dev copy `ngoquyen-dev-pg`, env files in `C:\Users\tranv\.ngoquyen-dev\`. |
+  | 3002 / 3003 | Dev servers started by `scripts/serve-local-build.mjs`. |
+  | 5435 | Throwaway integration-test database. |
+
+- **Backups:**
+  - `scripts/backup-erp-vietpc.ps1` runs nightly from Task Scheduler. It writes `pg_dump -Fc` with SHA-256 to `C:\Users\tranv\ngoquyen-prod-backups\` and a verified copy to admin-pc over Tailscale, kept 30 days.
+  - Check `backup.log` there after each change.
+- **Monitoring:** Uptime Kuma on admin-pc watches `http://vietpc:3001/api/health` for `"status":"ok"`, and the app reports to the GlitchTip on admin-pc.
+- **Keeping it up:**
+  - VIETPC must stay on: no sleep on AC, Docker Desktop starts at login, the user stays logged in, and Windows Update active hours cover the working day.
+  - After a restart, check that both containers are up and that `/api/health` is ok.
+- **If VIETPC fails:** restore the latest nightly dump on admin-pc and run the same release image there with admin-pc's address in `BETTER_AUTH_URL` / `TRUSTED_ORIGINS`.
+
+## Previous Windows host deployment (admin-pc, until the 11/2026 cutover)
 
 The active instance is private to the Tailscale network:
 
