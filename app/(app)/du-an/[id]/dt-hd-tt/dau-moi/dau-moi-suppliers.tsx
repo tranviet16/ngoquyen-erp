@@ -4,6 +4,8 @@
  * NCC của đầu mối = các dòng báo cáo HĐ-TT: NCC pháp nhân, đầu mối nó gộp vào (mỗi NCC một dòng trong
  * công trình), và các ô nhập tay H (thực nộp rà soát), S (thực tế riêng NCC), X (đã lấy về), Z (việc cần
  * làm) — sửa cần quyền `edit`. E / I / T là số báo cáo đang tính, để thấy ngay tác động của số nhập.
+ * Bộ lọc tên NCC / đầu mối (cả "không thuộc đầu mối" = 0) do trang giữ và đồng bộ URL; neo `#ncc` ở
+ * mục này, `#ncc-chua-co-dong` ở thông báo NCC chưa có dòng (các NCC đó không nằm trong lưới).
  */
 
 import dynamic from "next/dynamic";
@@ -11,19 +13,27 @@ import { useState, useTransition, type FormEvent, type ReactElement } from "reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { GridStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
+import { useUrlState } from "@/components/du-an/dt-hd-tt/use-url-state";
 import { Button } from "@/components/ui/button";
 import {
   createCounterpartySupplier, softDeleteCounterpartySupplier, updateCounterpartySupplier, type CounterpartySupplierRow,
 } from "@/lib/du-an/dt-hd-tt/counterparty-service";
+import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import type { CounterpartySupplierPatch } from "@/lib/du-an/dt-hd-tt/register-schemas";
 import { parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import { DAU_MOI_ANCHORS, DAU_MOI_SUPPLIER_GRID_SPEC, DAU_MOI_SUPPLIER_URL } from "@/lib/du-an/dt-hd-tt/screen-links";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
   columns: DataGridColumn<T>[];
   rows: T[];
   handlers: DataGridHandlers<T>;
   height?: number | string;
+  filters?: GridFilters;
+  onFiltersChange?: (filters: GridFilters) => void;
 }) => ReactElement;
+
+const SYNCED = Object.keys(DAU_MOI_SUPPLIER_GRID_SPEC.filterable);
 
 /** Số báo cáo HĐ-TT của một NCC: E gồm VAT, I đã trả (H ?? sổ chi), T thực tế. */
 export interface SupplierFigures {
@@ -81,13 +91,16 @@ interface Props {
   withoutRow: string[];
   canCreate: boolean;
   canEdit: boolean;
+  /** Bộ lọc server đọc từ URL — chỉ dùng cho lần render đầu (xem useUrlState). */
+  initialFilters: GridFilters;
 }
 
-export function DauMoiSuppliers({ projectId, links, counterparties, suppliers, figures, withoutRow, canCreate, canEdit }: Props) {
+export function DauMoiSuppliers({ projectId, links, counterparties, suppliers, figures, withoutRow, canCreate, canEdit, initialFilters }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [form, setForm] = useState({ supplierId: "", counterpartyId: "" });
   const [saving, setSaving] = useState(false);
+  const [filters, setFilters] = useUrlState(initialFilters, DAU_MOI_SUPPLIER_URL);
   const refresh = () => startTransition(() => router.refresh());
 
   const order = new Map(counterparties.map((c, i) => [Number(c.id), i]));
@@ -107,8 +120,9 @@ export function DauMoiSuppliers({ projectId, links, counterparties, suppliers, f
   const linkedIds = new Set(links.map((l) => l.supplierId));
 
   const columns: DataGridColumn<GridRow>[] = [
-    { id: "supplierName", title: "NCC", kind: "text", width: 220, readonly: true },
-    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 200, options, readonly: locked },
+    { id: "supplierName", title: "NCC", kind: "text", width: 220, readonly: true, filterable: true },
+    // Ô lọc "— Không thuộc đầu mối —" mang id 0 (NONE), so khớp `equals "0"` không cần quy đổi.
+    { id: "counterpartyId", title: "Đầu mối", kind: "select", width: 200, options, readonly: locked, filterable: true },
     { id: "invoiceTotal", title: "E HĐ gồm VAT", kind: "currency", width: 130, readonly: true },
     { id: "paid", title: "I đã trả", kind: "currency", width: 120, readonly: true },
     { id: "paidOverrideVnd", title: "H thực nộp rà soát", kind: "text", width: 140, readonly: locked, format: moneyCell },
@@ -168,14 +182,17 @@ export function DauMoiSuppliers({ projectId, links, counterparties, suppliers, f
 
   const selectClass = "h-8 w-full rounded-md border bg-transparent px-2 text-sm";
   const figureKey = sorted.map((l) => `${l.id}:${figures[l.supplierId]?.actual ?? ""}:${figures[l.supplierId]?.paid ?? ""}`).join(",");
+  const gridRows = sorted.map(toGrid);
 
   return (
-    <section className="space-y-3">
+    <section id={DAU_MOI_ANCHORS.ncc} data-ncc-without-row={withoutRow.length} className="scroll-mt-4 space-y-3">
       <div>
         <h2 className="text-lg font-semibold">NCC của đầu mối (dòng HĐ-TT)</h2>
         <p className="text-sm text-muted-foreground">Mỗi NCC chỉ một dòng trong công trình. H để trống = theo sổ chi; S để trống = theo quy tắc chia của HĐ-TT.</p>
         {withoutRow.length > 0 && (
-          <p className="text-sm text-amber-800">Có số ở HĐ-TT nhưng chưa có dòng: {withoutRow.join(", ")}.</p>
+          <p id={DAU_MOI_ANCHORS.nccWithoutRow} className="scroll-mt-4 text-sm text-amber-800">
+            Có số ở HĐ-TT nhưng chưa có dòng: {withoutRow.join(", ")}.
+          </p>
         )}
       </div>
 
@@ -199,7 +216,16 @@ export function DauMoiSuppliers({ projectId, links, counterparties, suppliers, f
         </form>
       )}
 
-      <DataGrid<GridRow> key={figureKey} columns={columns} rows={sorted.map(toGrid)} handlers={canEdit ? handlers : {}} height={480} />
+      <DataGrid<GridRow>
+        key={figureKey}
+        columns={columns}
+        rows={gridRows}
+        handlers={canEdit ? handlers : {}}
+        height={480}
+        filters={filters}
+        onFiltersChange={setFilters}
+      />
+      <GridStateHook name="dau-moi-ncc" filters={filters} rows={gridRows} columns={columns} synced={SYNCED} />
     </section>
   );
 }

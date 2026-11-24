@@ -4,6 +4,8 @@
  * Sổ Hóa đơn: form thêm dòng (giữ lại ngày / số HĐ / NCC / VAT % cho dòng kế tiếp của cùng hóa đơn)
  * + lưới sửa tại ô. Mỗi lần sửa chỉ gửi ô vừa đổi; server gộp vào dòng đang lưu và tính lại thành
  * tiền / tiền VAT. NCC chỉ chọn trong danh sách NCC đang hoạt động (NCC mới do quản trị tạo).
+ * Bộ lọc NCC / số HĐ / Ánh xạ do trang giữ và đồng bộ URL (`filter.<cột>`), nên sống qua lần lưới dựng
+ * lại sau "Thêm dòng" và qua Back.
  */
 
 import dynamic from "next/dynamic";
@@ -12,20 +14,28 @@ import { useState, useTransition, type ComponentProps, type FormEvent, type Reac
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, RowWithId, SelectOption } from "@/components/data-grid/types";
+import { GridStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
+import { useUrlState } from "@/components/du-an/dt-hd-tt/use-url-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { vndFormatter } from "@/lib/format";
 import type { InvoiceLinePatch } from "@/lib/du-an/dt-hd-tt/entry-schemas";
 import { formNumber, isoToDmy, parseDateCell, parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import { createInvoiceLine, softDeleteInvoiceLine, updateInvoiceLine, type InvoiceLineRow } from "@/lib/du-an/dt-hd-tt/invoice-service";
+import { anhXaQuery, HOA_DON_GRID_SPEC, HOA_DON_URL, screenHref, UNMAPPED_TEXT } from "@/lib/du-an/dt-hd-tt/screen-links";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
   columns: DataGridColumn<T>[];
   rows: T[];
   handlers: DataGridHandlers<T>;
   height?: number | string;
+  filters?: GridFilters;
+  onFiltersChange?: (filters: GridFilters) => void;
 }) => ReactElement;
+
+const SYNCED = Object.keys(HOA_DON_GRID_SPEC.filterable);
 
 interface GridRow extends RowWithId {
   /** Ô chữ dd/mm/yyyy (hoặc chữ ngày gốc của file khi chưa đọc được). */
@@ -48,7 +58,7 @@ const toGrid = (r: InvoiceLineRow): GridRow => ({
   id: r.id, invoiceDate: r.invoiceDate ? isoToDmy(r.invoiceDate) : r.invoiceDateText ?? "", invoiceNo: r.invoiceNo, supplierId: r.supplierId,
   itemName: r.itemName, unit: r.unit, qty: r.qty, unitPrice: r.unitPrice, amountVnd: r.amountVnd,
   vatPercent: r.vatPct === null ? null : Math.round(r.vatPct * 10_000) / 100, vatVnd: r.vatVnd, totalVnd: r.amountVnd + r.vatVnd,
-  mapping: r.mapped ? "" : "chưa gán", note: r.note ?? "",
+  mapping: r.mapped ? "" : UNMAPPED_TEXT, note: r.note ?? "",
 });
 
 /** Ô vừa sửa → bản sửa một phần gửi server (chữ / số không đọc được thì báo lỗi, không lưu). */
@@ -86,13 +96,16 @@ interface Props {
   suppliers: SelectOption[];
   canCreate: boolean;
   canEdit: boolean;
+  /** Bộ lọc server đọc từ URL — chỉ dùng cho lần render đầu (xem useUrlState). */
+  initialFilters: GridFilters;
 }
 
-export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit }: Props) {
+export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit, initialFilters }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [filters, setFilters] = useUrlState(initialFilters, HOA_DON_URL);
   const refresh = () => startTransition(() => router.refresh());
 
   // NCC đã ngừng dùng vẫn hiện tên ở dòng cũ, nhưng không có trong danh sách chọn cho dòng mới.
@@ -107,8 +120,8 @@ export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit }:
 
   const columns: DataGridColumn<GridRow>[] = [
     { id: "invoiceDate", title: "Ngày", kind: "text", width: 100, readonly: locked },
-    { id: "invoiceNo", title: "Số HĐ", kind: "text", width: 100, readonly: locked },
-    { id: "supplierId", title: "NCC", kind: "select", width: 200, options: gridOptions, readonly: locked },
+    { id: "invoiceNo", title: "Số HĐ", kind: "text", width: 100, readonly: locked, filterable: true },
+    { id: "supplierId", title: "NCC", kind: "select", width: 200, options: gridOptions, readonly: locked, filterable: true },
     { id: "itemName", title: "Tên hàng", kind: "text", width: 240, readonly: locked },
     { id: "unit", title: "ĐVT", kind: "text", width: 60, readonly: locked },
     { id: "qty", title: "SL", kind: "number", width: 90, readonly: locked },
@@ -117,9 +130,10 @@ export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit }:
     { id: "vatPercent", title: "VAT %", kind: "number", width: 70, readonly: locked },
     { id: "vatVnd", title: "Tiền VAT", kind: "currency", width: 120, readonly: locked },
     { id: "totalVnd", title: "Gồm VAT", kind: "currency", width: 130, readonly: true },
-    { id: "mapping", title: "Ánh xạ", kind: "text", width: 80, readonly: true },
+    { id: "mapping", title: "Ánh xạ", kind: "text", width: 80, readonly: true, filterable: true },
     { id: "note", title: "Ghi chú", kind: "text", width: 180, readonly: locked },
   ];
+  const gridRows = rows.map(toGrid);
 
   const handlers: DataGridHandlers<GridRow> = {
     // Lỗi ném ra ở đây: lưới hiện thông điệp và trả ô về giá trị cũ.
@@ -183,7 +197,10 @@ export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit }:
           </p>
         </div>
         {unmapped > 0 && (
-          <Link href={`/du-an/${projectId}/dt-hd-tt/anh-xa`} className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-sm text-amber-900 hover:underline">
+          <Link
+            href={screenHref(projectId, "anh-xa", { query: anhXaQuery({ tab: "hd", status: "chua_gan" }) })}
+            className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-sm text-amber-900 hover:underline"
+          >
             {unmapped} dòng chưa gán — mở Ánh xạ
           </Link>
         )}
@@ -218,10 +235,13 @@ export function HoaDonClient({ projectId, rows, suppliers, canCreate, canEdit }:
       <DataGrid<GridRow>
         key={rows.map((r) => r.id).join(",")}
         columns={columns}
-        rows={rows.map(toGrid)}
+        rows={gridRows}
         handlers={canEdit ? handlers : {}}
         height={560}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
+      <GridStateHook name="hoa-don" filters={filters} rows={gridRows} columns={columns} synced={SYNCED} />
     </div>
   );
 }
