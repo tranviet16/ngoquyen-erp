@@ -13,6 +13,15 @@
  *      được chốt kỳ trong ERP.
  * Run chỉ ghi sổ nhân công / dữ liệu khác không có cặp vật tư → guard luôn qua.
  *
+ * Ngoài cặp vật tư, hoàn tác xóa cứng hợp đồng dự án của run, nên bị chặn khi sẽ âm thầm mất phần
+ * người dùng đã sửa:
+ *   - hợp đồng còn hiệu lực đã được gắn đối tác, nhập giá trị theo TT, hoặc sửa sau commit
+ *     (`updatedAt` > mốc — service tự gán `updatedAt` mỗi lần sửa);
+ *   - hợp đồng (kể cả đã xóa mềm) có bản scan, kể cả scan đã xóa mềm — dòng scan giữ khóa ngoại
+ *     RESTRICT tới hợp đồng. Hợp đồng người dùng đã xóa mềm thì mất cùng lần hoàn tác là đúng ý, chỉ
+ *     scan của nó cần admin xóa vĩnh viễn trước.
+ * Caller khóa `FOR UPDATE` các dòng hợp đồng của run trước khi gọi (`lockRunContracts`).
+ *
  * Caller phải giữ khóa `FOR UPDATE` trên dòng run và `lockSuppliers` cho NCC của các cặp trước khi
  * gọi ("khóa rồi mới kiểm").
  */
@@ -44,13 +53,23 @@ function runPairsSql(runId: number): Prisma.Sql {
      WHERE "importRunId" = ${runId}`;
 }
 
+/** Khóa `FOR UPDATE` các hợp đồng dự án của run: sửa / gắn đối tác đồng thời phải chờ hoàn tác xong. */
+export async function lockRunContracts(db: RawClient, runId: number): Promise<void> {
+  await db.$queryRaw`SELECT id FROM project_contracts WHERE "importRunId" = ${runId} ORDER BY id FOR UPDATE`;
+}
+
 /** Cặp NCC × công trình mà run đã ghi dữ liệu (kể cả dòng đã xóa mềm). */
 export async function collectRunPairs(db: RawClient, runId: number): Promise<RunPair[]> {
   const rows = await db.$queryRaw<RunPair[]>`${runPairsSql(runId)} ORDER BY 1, 2`;
   return rows.map((r) => ({ supplierId: Number(r.supplierId), projectId: Number(r.projectId) }));
 }
 
-type BlockKind = "signed_recon" | "ledger_after_commit" | "opening_after_commit" | "event_on_run_delivery";
+type BlockKind =
+  | "signed_recon"
+  | "ledger_after_commit"
+  | "opening_after_commit"
+  | "event_on_run_delivery"
+  | "contract_edited";
 
 interface BlockRow {
   kind: BlockKind;
@@ -58,11 +77,17 @@ interface BlockRow {
   n: number;
   /** Số cặp vi phạm. */
   np: number;
-  /** Tối đa 3 cặp ví dụ "NCC × công trình". */
+  /** Tối đa 3 cặp ví dụ "NCC × công trình" (với `contract_edited`: tên hợp đồng). */
   pairs: string[] | null;
 }
 
-const KIND_ORDER: BlockKind[] = ["signed_recon", "ledger_after_commit", "opening_after_commit", "event_on_run_delivery"];
+const KIND_ORDER: BlockKind[] = [
+  "signed_recon",
+  "ledger_after_commit",
+  "opening_after_commit",
+  "event_on_run_delivery",
+  "contract_edited",
+];
 
 function describe(row: BlockRow): string {
   const examples = row.pairs ?? [];
@@ -77,6 +102,13 @@ function describe(row: BlockRow): string {
       return `Có ${row.n} số dư ban đầu vật tư ghi sau khi run được commit (tạo mới hoặc sửa) trong cặp của run${where}.`;
     case "event_on_run_delivery":
       return `Có ${row.n} dòng sổ sinh từ phiếu của run (phiếu đã được chốt kỳ trong ERP)${where}.`;
+    case "contract_edited": {
+      const names = examples.join(", ") + more;
+      return (
+        `Có ${row.n} hợp đồng của run đã được sửa sau khi import (gắn đối tác, giá trị theo TT, thông tin) hoặc có bản scan: ${names}. ` +
+        "Sửa tiếp trên màn hình thay vì hoàn tác; hoặc xóa các hợp đồng đó, nhờ admin xóa vĩnh viễn bản scan ở màn chi tiết hợp đồng (đường dẫn kèm theo), rồi hoàn tác."
+      );
+    }
   }
 }
 
@@ -124,7 +156,18 @@ export async function assertRollbackAllowed(
       FROM hits h
       LEFT JOIN suppliers s ON s.id = h."supplierId"
       LEFT JOIN projects pr ON pr.id = h."projectId"
-     GROUP BY h.kind`;
+     GROUP BY h.kind
+    UNION ALL
+    SELECT 'contract_edited', COUNT(*)::int, COUNT(*)::int,
+           (ARRAY_AGG('«' || c."docName" || '» (/du-an/' || c."projectId" || '/hop-dong/' || c.id || ')' ORDER BY c.id))[1:3]
+      FROM project_contracts c
+     WHERE c."importRunId" = ${run.id}
+       AND (
+         (c."deletedAt" IS NULL
+           AND (c."partyKind" IS NOT NULL OR c."supplierId" IS NOT NULL OR c."contractorId" IS NOT NULL
+                OR c."valueTtVnd" IS NOT NULL OR c."updatedAt" > ${since}))
+         OR EXISTS (SELECT 1 FROM project_contract_attachments a WHERE a."contractId" = c.id))
+    HAVING COUNT(*) > 0`;
   if (rows.length === 0) return;
   const ordered = [...rows].sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
   throw new RollbackBlockedError(run.id, ordered.map((r) => describe({ ...r, n: Number(r.n), np: Number(r.np) })));

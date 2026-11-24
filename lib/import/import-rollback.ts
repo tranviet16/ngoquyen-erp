@@ -21,7 +21,7 @@ import {
 } from "./du-an-book-rollback";
 import { hasDbErrorCode, ImportError, RollbackBlockedError } from "./import-errors";
 import { lockRunRow, updateRunIfStatus } from "./import-run-store";
-import { assertRollbackAllowed, collectRunPairs } from "./rollback-guards";
+import { assertRollbackAllowed, collectRunPairs, lockRunContracts } from "./rollback-guards";
 
 /** Postgres: vi phạm khóa ngoại — còn dòng ngoài run trỏ tới dòng sắp xóa. */
 const FK_VIOLATION = new Set(["23503"]);
@@ -200,6 +200,7 @@ export async function rollbackImportRun(id: number): Promise<RollbackResult> {
     await lockSuppliers(tx, pairs.map((p) => p.supplierId));
     const bookProjects = await duAnBookProjects(tx, id);
     await lockProjectDtHdTt(tx, bookProjects);
+    await lockRunContracts(tx, id);
     await assertRollbackAllowed(tx, run);
     await assertDuAnBookRollbackAllowed(tx, run, bookProjects);
 

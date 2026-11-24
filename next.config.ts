@@ -37,13 +37,15 @@ const nextConfig: NextConfig = {
   ],
   experimental: {
     serverActions: {
-      bodySizeLimit: "25mb",
+      // Tệp đính kèm / bản scan tối đa 25 MiB; phần bao multipart (id action, trường form, boundary)
+      // cần thêm chỗ, nên giới hạn body đặt 26mb để tệp đúng 25 MiB không bị chặn ở tầng Next.
+      bodySizeLimit: "26mb",
     },
     // proxy.ts matches every path, so Next buffers each request body for it and silently
     // truncates past this limit (default 10MB), which corrupts larger uploads before the
     // server action sees them. Keep it above serverActions.bodySizeLimit plus multipart
     // overhead so oversized uploads are rejected by the action limit, never truncated.
-    proxyClientMaxBodySize: "26mb",
+    proxyClientMaxBodySize: "27mb",
   },
 };
 

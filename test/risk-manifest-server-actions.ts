@@ -39,6 +39,7 @@ export const SERVER_ACTION_RISK_MANIFEST: readonly RiskManifestRecord[] = [
   action("action-user-grants", "app/(app)/admin/nguoi-dung/actions.ts", "P0", "administration", defined("authorized administrator user and department grant policy")),
   action("action-finance-pr-sync", "app/(app)/tai-chinh/phai-thu-tra/actions.ts", "P0", "finance", defined("finance module edit or administrator policy with audited sync, override, exclusion, and recovery operations")),
   action("action-task-attachments", "app/(app)/van-hanh/cong-viec/attachments-actions.ts", "P0", "operations", defined("task viewer download and task editor delete within resource scope")),
+  action("action-contract-scans", "app/(app)/du-an/[id]/hop-dong/[contractId]/scan-actions.ts", "P0", "operations", defined("du-an project editor upload and soft delete, administrator purge, project taken from the contract record, audited")),
   action("action-task-comments", "app/(app)/van-hanh/cong-viec/comments-actions.ts", "P1", "operations", defined("task collaborator policy")),
   action("action-task-subtasks", "app/(app)/van-hanh/cong-viec/subtasks-actions.ts", "P1", "operations", defined("task collaborator policy")),
   action("action-task-workflow", "app/(app)/van-hanh/cong-viec/actions.ts", "P1", "operations", defined("task workflow policy")),
