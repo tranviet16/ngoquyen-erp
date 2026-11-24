@@ -7,7 +7,8 @@
  * Người có quyền `edit` bật "Nhập H / S / X / Z" để gõ ngay trên bảng:
  *   - đọc ô theo từng trường (`hdTtCellPatch`), lưu bằng action sẵn có `updateCounterpartySupplier(linkId, …)`;
  *   - nháp khóa theo `${linkId}:${ô}`, giữ qua các lần render lại cho tới khi giá trị server bằng nháp (`mergeDrafts`);
- *   - lưu lỗi (cả dòng NCC đã bị xóa) → giữ nháp, đánh dấu ô kèm thông báo, đưa con trỏ về ô đó;
+ *   - lưu lỗi (cả dòng NCC đã bị xóa) → giữ nháp, đánh dấu ô kèm thông báo; con trỏ ở lại ô khi lưu bằng Enter,
+ *     còn khi rời ô (Tab, bấm ô khác) thì đi theo người dùng — không nhốt con trỏ trong ô lỗi;
  *   - lưu xong → Enter xuống dòng dưới. Không gọi `router.refresh()`: action đã revalidate trang đang xem.
  * Hook đo: `data-hd-tt-screen`, `data-hd-tt-state` (JSON trạng thái URL), `data-hd-tt-rows`, `data-visible-rows`,
  * `data-can-edit`, `data-editing`, `data-loc-chip` (+ `data-count`), `data-hd-tt-edit-toggle`.
@@ -96,9 +97,11 @@ export function HdTtScreen({ projectId, report, initialParams, canEdit }: HdTtSc
       focusCell(next);
       return;
     }
+    // Enter lưu lỗi → con trỏ ở lại ô để sửa. Rời ô (Tab, bấm ô khác) mà lưu lỗi → không kéo con trỏ về: ô vẫn
+    // viền đỏ và giữ chữ để quay lại sửa sau. Kéo về ở đây sẽ nhốt con trỏ trong ô lỗi, vì mỗi lần rời ô lại lưu lỗi.
     const fail = (message: string) => {
       setDrafts((d) => ({ ...d, [key]: { text, error: message } }));
-      focusCell(key);
+      if (move === "down") focusCell(key);
     };
     let patch;
     try {
