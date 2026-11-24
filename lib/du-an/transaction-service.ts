@@ -7,6 +7,19 @@ import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { Prisma } from "@prisma/client";
 import { transactionSchema, type TransactionInput } from "./schemas";
 
+const WRITABLE_SELECT = { projectId: true, deletedAt: true, sourceInvoiceLineId: true } as const;
+
+/**
+ * Dòng giao dịch được phép sửa / xóa: đúng công trình, chưa xóa mềm (dòng bị import "Đối chiếu
+ * DT-HĐ-TT" thay cũng là dòng đã xóa mềm — sửa nó sẽ làm hoàn tác khôi phục số sai), và không phải
+ * dòng sinh từ sổ Hóa đơn (sửa ở sổ Hóa đơn).
+ */
+function assertNotDerivedFromInvoice(existing: { sourceInvoiceLineId: number | null }) {
+  if (existing.sourceInvoiceLineId != null) {
+    throw new Error("Dòng này sinh từ sổ Hóa đơn — sửa ở tab Đối chiếu DT-HĐ-TT › Hóa đơn.");
+  }
+}
+
 export async function listTransactions(projectId: number) {
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
   return prisma.projectTransaction.findMany({
@@ -50,8 +63,9 @@ export async function createTransaction(input: TransactionInput) {
 
 export async function updateTransaction(id: number, input: TransactionInput) {
   const data = transactionSchema.parse(input);
-  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: { projectId: true } });
-  if (!existing || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: WRITABLE_SELECT });
+  if (!existing || existing.deletedAt || existing.projectId !== data.projectId) throw new Error("Forbidden");
+  assertNotDerivedFromInvoice(existing);
   await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const qtyDecimal = new Prisma.Decimal(data.qty);
   const amountHd = new Prisma.Decimal(data.qtyHd ?? data.qty).mul(new Prisma.Decimal(data.unitPriceHd));
@@ -90,8 +104,9 @@ export async function adminPatchTransaction(
   patch: Partial<{ amountHd: number; amountTt: number }>,
   projectId: number,
 ) {
-  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: { projectId: true } });
-  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: WRITABLE_SELECT });
+  if (!existing || existing.deletedAt || existing.projectId !== projectId) throw new Error("Forbidden");
+  assertNotDerivedFromInvoice(existing);
   await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId: existing.projectId } });
   await requireActiveAdmin();
   const data: Record<string, unknown> = {};
@@ -104,8 +119,9 @@ export async function adminPatchTransaction(
 }
 
 export async function softDeleteTransaction(id: number, projectId: number) {
-  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: { projectId: true } });
-  if (!existing || existing.projectId !== projectId) throw new Error("Forbidden");
+  const existing = await prisma.projectTransaction.findUnique({ where: { id }, select: WRITABLE_SELECT });
+  if (!existing || existing.deletedAt || existing.projectId !== projectId) throw new Error("Forbidden");
+  assertNotDerivedFromInvoice(existing);
   await requireReleasedModuleRequest("du-an", { minLevel: "edit", scope: { kind: "project", projectId: existing.projectId } });
   const record = await prisma.projectTransaction.update({
     where: { id, projectId },

@@ -8,6 +8,7 @@
 - PostgreSQL database (`ngoquyyen_erp`) — full pg_dump, gzip compressed
 - Stored locally at `/opt/ngoquyyen-erp/backups/` (retained 30 days)
 - Uploaded to Backblaze B2 via rclone (remote: `b2:ngoquyyen-erp-backup/`)
+- Task attachments live outside the database, in the host directory mounted at `UPLOAD_DIR` (`D:\docker-data\ngoquyyen-erp\uploads` on admin-pc). Back it up on the same schedule as the database and restore both from the same point in time; see [task-attachment-storage.md](task-attachment-storage.md).
 
 ### Backup Schedule
 - **Daily:** 02:00 AM — via cron

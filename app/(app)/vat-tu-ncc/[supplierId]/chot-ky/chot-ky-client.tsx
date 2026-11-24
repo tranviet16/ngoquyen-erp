@@ -8,6 +8,7 @@ import { DateInput } from "@/components/ui/date-input";
 import type { PeriodClosePreview, PeriodRangeInput } from "@/lib/vat-tu-ncc/period-close-service";
 import { commitPeriodCloseAction, previewPeriodCloseAction } from "@/lib/vat-tu-ncc/period-close-actions";
 import { formatVND } from "@/lib/utils/format";
+import { nextDay26 } from "@/lib/vat-tu-ncc/period-bounds";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
 
@@ -38,6 +39,14 @@ export function ChotKyClient({ supplierId, projectId, canEdit, initialPreview }:
   const router = useRouter();
   const [from, setFrom] = useState(initialPreview.periodFrom);
   const [to, setTo] = useState(initialPreview.periodTo);
+  // Kỳ chốt theo tháng: chọn "Từ ngày" thì "Đến ngày" tự nhảy về ngày 26 kế tiếp.
+  const changeFrom = (value: string) => {
+    setFrom(value);
+    const day = new Date(`${value}T00:00:00Z`);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(day.getTime())) {
+      setTo(nextDay26(day).toISOString().slice(0, 10));
+    }
+  };
   const [preview, setPreview] = useState<PeriodClosePreview | null>(initialPreview);
   const [prices, setPrices] = useState<Record<number, string>>(() => initialPrices(initialPreview));
   const [loading, setLoading] = useState(false);
@@ -152,13 +161,13 @@ export function ChotKyClient({ supplierId, projectId, canEdit, initialPreview }:
           <h2 className="text-lg font-semibold tracking-tight">Chốt kỳ vật tư</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             Chọn biên kỳ (mặc định 27 → 26), gắn đơn giá cho phiếu trong kỳ rồi chốt để sinh phát
-            sinh vào công nợ vật tư. Kỳ mới phải bắt đầu ngay sau kỳ gần nhất.
+            sinh vào công nợ vật tư. Kỳ chốt theo tháng (27 → 26) và phải bắt đầu ngay sau kỳ gần nhất.
           </p>
         </div>
         <div className="flex items-end gap-2 flex-wrap">
           <label className="text-sm space-y-1">
             <span className="block text-muted-foreground">Từ ngày</span>
-            <DateInput value={from} onChange={setFrom} aria-label="Từ ngày" />
+            <DateInput value={from} onChange={changeFrom} aria-label="Từ ngày" />
           </label>
           <label className="text-sm space-y-1">
             <span className="block text-muted-foreground">Đến ngày</span>

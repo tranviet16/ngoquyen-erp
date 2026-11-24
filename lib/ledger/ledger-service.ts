@@ -34,6 +34,7 @@ import {
   resolveMaterialEntityId,
   type MaterialWriteGuardOptions,
 } from "@/lib/vat-tu-ncc/pair-scope";
+import { ensureMonthlyPeriodFor } from "@/lib/vat-tu-ncc/auto-monthly-period";
 import { AUTO_GENERATED_GUARD } from "./transaction-classification";
 import { toBusinessDateFromInput } from "./business-date";
 
@@ -43,10 +44,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * Client ghi sổ cái: `prisma` gốc hoặc client transaction. Cần `$executeRaw` để lấy khoá
  * advisory theo NCC, `supplierReconciliation` + `$queryRaw` để kiểm khoá kỳ / mốc chuyển đổi
  * và `project` / `$queryRaw` để suy Chủ thể (đọc công trình FOR SHARE) — tất cả trong cùng transaction.
+ * `supplierDeliveryDaily`: tự tạo kỳ tháng thì ghi luôn phiếu chờ của tháng đó (auto-monthly-period.ts).
  */
 export type LedgerWriteClient = Pick<
   typeof prisma,
-  "ledgerTransaction" | "ledgerOpeningBalance" | "supplierReconciliation" | "project" | "$queryRaw" | "$executeRaw"
+  | "ledgerTransaction"
+  | "ledgerOpeningBalance"
+  | "supplierReconciliation"
+  | "supplierDeliveryDaily"
+  | "project"
+  | "$queryRaw"
+  | "$executeRaw"
 >;
 
 /** Đầu vào sinh event lay_hang từ phiếu ngày (chốt kỳ). Chủ thể suy từ công trình. */
@@ -92,6 +100,17 @@ export class LedgerService {
   ) {
     if (this.ledgerType !== "material") return;
     await assertMaterialTypeWritable(transactionType, partyId, requireProjectId(projectId), date, client, this.materialGuard);
+  }
+
+  /**
+   * Sổ vật tư: phát sinh sau mốc rơi vào tháng chưa có kỳ của cặp → tự tạo kỳ tháng (chưa ký) và ghi
+   * phiếu chờ của tháng đó (auto-monthly-period.ts). Run import chuyển đổi không tự tạo kỳ.
+   */
+  private async ensureMaterialMonth(partyId: number, projectId: number | null | undefined, date: Date, client: LedgerWriteClient) {
+    if (this.ledgerType !== "material" || this.materialGuard?.cutoverImportRunId !== undefined) return;
+    await ensureMonthlyPeriodFor(client, partyId, requireProjectId(projectId), date, (input) =>
+      this.upsertFromDelivery(input, client),
+    );
   }
 
   /**
@@ -186,6 +205,7 @@ export class LedgerService {
         toBusinessDateFromInput(scoped.date),
         c,
       );
+      await this.ensureMaterialMonth(scoped.partyId, scoped.projectId, toBusinessDateFromInput(scoped.date), c);
       return this.createRow(scoped, c);
     });
   }
@@ -255,6 +275,7 @@ export class LedgerService {
         toBusinessDateFromInput(scoped.date),
         c,
       );
+      await this.ensureMaterialMonth(scoped.partyId, scoped.projectId, toBusinessDateFromInput(scoped.date), c);
       return this.updateRow(id, scoped, c);
     });
   }

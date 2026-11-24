@@ -19,6 +19,7 @@ import {
   softDeleteMaterialTransactionAction,
 } from "@/lib/cong-no-vt/material-ledger-actions";
 import { transactionSchema, type TransactionInput } from "@/lib/cong-no-vt/schemas";
+import type { ActionResult } from "@/lib/vat-tu-ncc/action-result";
 import { TRANSACTION_TYPE_LABELS } from "@/lib/ledger/transaction-classification";
 import { formatDate, formatNumber } from "@/lib/utils/format";
 
@@ -57,7 +58,16 @@ interface Props {
   canEdit: boolean;
   /** Mốc chuyển đổi (YYYY-MM-DD, bao gồm) khi đã có run chuyển đổi được commit: ngày ≤ mốc không ghi được. */
   cutoverDate: string | null;
+  /** Admin: được xác nhận để ghi / sửa / xoá trong kỳ đã ký / giai đoạn chuyển đổi (server kiểm lại). */
+  canOverrideLocked?: boolean;
 }
+
+/** Lỗi khoá kỳ mà admin được phép xác nhận để vẫn ghi / sửa / xoá. */
+const isLockedRefusal = (r: ActionResult) => !r.ok && (r.code === "signed_period" || r.code === "cutover_locked");
+
+const LOCK_CONFIRM_TAIL =
+  "Công nợ, báo cáo và bảng đối chiếu đã ký của kỳ này và các kỳ sau sẽ được cập nhật theo " +
+  "(có ghi lại người sửa).";
 
 type FormInput = z.input<typeof transactionSchema>;
 
@@ -86,6 +96,7 @@ export function ThanhToanClient({
   canCreate,
   canEdit,
   cutoverDate,
+  canOverrideLocked = false,
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -167,20 +178,34 @@ export function ThanhToanClient({
     setSaving(true);
     try {
       // Action trả { ok, … }: lỗi khoá kỳ / mốc chuyển đổi hiện trên toast cả ở bản production.
-      const result =
+      const save = (overrideLocked: boolean): Promise<ActionResult> =>
         editingId != null
-          ? await patchMaterialTransactionAction(editingId, {
-              date: payload.date,
-              transactionType: payload.transactionType,
-              entityId: payload.entityId,
-              projectId: payload.projectId,
-              amountTt: payload.amountTt,
-              amountHd: payload.amountHd,
-              invoiceNo: payload.invoiceNo,
-              invoiceDate: payload.invoiceDate,
-              content: payload.content,
-            })
-          : await createMaterialTransactionAction(payload);
+          ? patchMaterialTransactionAction(
+              editingId,
+              {
+                date: payload.date,
+                transactionType: payload.transactionType,
+                entityId: payload.entityId,
+                projectId: payload.projectId,
+                amountTt: payload.amountTt,
+                amountHd: payload.amountHd,
+                invoiceNo: payload.invoiceNo,
+                invoiceDate: payload.invoiceDate,
+                content: payload.content,
+              },
+              { overrideLocked },
+            )
+          : createMaterialTransactionAction(payload, { overrideLocked });
+      let result = await save(false);
+      // Ngày thuộc kỳ đã ký / giai đoạn chuyển đổi: admin xác nhận thì ghi lại với cờ bỏ qua khoá.
+      if (canOverrideLocked && isLockedRefusal(result) && !result.ok) {
+        const verb = editingId != null ? "sửa" : "ghi";
+        if (!window.confirm(`${result.message}\n\nBạn là admin: vẫn ${verb} dòng này? ${LOCK_CONFIRM_TAIL}`)) {
+          toast.info(`Đã huỷ ${verb} trong kỳ khoá.`);
+          return;
+        }
+        result = await save(true);
+      }
       if (!result.ok) {
         toast.error(result.message);
         return;
@@ -196,9 +221,14 @@ export function ThanhToanClient({
   };
 
   async function handleDelete(r: PaymentTxRow) {
-    if (!confirm("Xóa giao dịch này khỏi sổ cái?")) return;
+    // Dòng trong kỳ khoá (chỉ admin thấy nút Xóa): hỏi một lần rồi xoá với cờ bỏ qua khoá.
+    const question = r.locked
+      ? `Dòng này thuộc ${r.lockReason === "cutover" ? "giai đoạn đã chuyển đổi từ Excel" : "kỳ NCC đã ký"}.\n\n` +
+        `Bạn là admin: vẫn xóa khỏi sổ cái? ${LOCK_CONFIRM_TAIL}`
+      : "Xóa giao dịch này khỏi sổ cái?";
+    if (!confirm(question)) return;
     try {
-      const result = await softDeleteMaterialTransactionAction(r.id);
+      const result = await softDeleteMaterialTransactionAction(r.id, { overrideLocked: r.locked && canOverrideLocked });
       if (!result.ok) {
         toast.error(result.message);
         return;
@@ -221,7 +251,7 @@ export function ThanhToanClient({
           <h2 className="text-lg font-semibold tracking-tight">Thanh toán và thuế hoá đơn</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             Ghi chuyển khoản và thuế hoá đơn của NCC vào sổ cái công nợ vật tư. Thuế hoá đơn làm tăng nợ; kỳ đã ký
-            không ghi/sửa được.
+            {canOverrideLocked ? " chỉ admin ghi/sửa được (có hỏi xác nhận)." : " không ghi/sửa được."}
           </p>
         </div>
         <div className="rounded-md border px-4 py-2 text-right">
@@ -297,7 +327,9 @@ export function ThanhToanClient({
               </p>
               {cutoverDate && (
                 <p className={date && date <= cutoverDate ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-                  Ngày ghi sổ phải sau {isoToDmy(cutoverDate)} — giai đoạn tới mốc đã chuyển đổi từ Excel, không ghi/sửa được.
+                  {canOverrideLocked
+                    ? `Ngày ghi sổ tới hết ${isoToDmy(cutoverDate)} thuộc giai đoạn đã chuyển đổi từ Excel — chỉ admin ghi/sửa được, sẽ hỏi xác nhận.`
+                    : `Ngày ghi sổ phải sau ${isoToDmy(cutoverDate)} — giai đoạn tới mốc đã chuyển đổi từ Excel, không ghi/sửa được.`}
                 </p>
               )}
             </div>
@@ -342,7 +374,8 @@ export function ThanhToanClient({
               </td></tr>
             )}
             {sortedRows.map((r) => {
-              const manual = !r.fromRound && !r.locked;
+              // Dòng nhập tay; dòng trong kỳ khoá chỉ admin sửa/xoá được (có hỏi xác nhận).
+              const manual = !r.fromRound && (!r.locked || canOverrideLocked);
               return (
                 <tr key={r.id} className={editingId === r.id ? "border-t bg-muted/40" : "border-t"}>
                   <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date)}</td>

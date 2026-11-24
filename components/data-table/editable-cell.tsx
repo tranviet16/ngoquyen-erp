@@ -10,12 +10,17 @@ interface EditOption {
   name: string;
 }
 
+/** Giá trị của mục "+ Tạo mới…" — không bao giờ được lưu. */
+const CREATE_EDIT_OPTION = "__create_option__";
+
 interface EditableCellProps<T extends Record<string, unknown>> {
   row: T;
   colKey: string;
   editKind?: "text" | "number" | "boolean" | "select";
   editOptions?: EditOption[];
   parseEdit?: (raw: string) => unknown;
+  /** Select: mục "+ Tạo mới…" — tạo bản ghi rồi lưu id của nó vào ô. */
+  onCreateOption?: () => Promise<EditOption | null>;
   onCellEdit: (row: T, key: string, value: unknown) => Promise<T | void>;
   onPendingChange: (delta: number) => void;
   children: React.ReactNode;
@@ -28,6 +33,7 @@ export function EditableCell<T extends Record<string, unknown>>({
   editKind = "text",
   editOptions,
   parseEdit,
+  onCreateOption,
   onCellEdit,
   onPendingChange,
   children,
@@ -59,7 +65,11 @@ export function EditableCell<T extends Record<string, unknown>>({
     if (committingRef.current) return;
     committingRef.current = true;
     setEditing(false);
-    const raw = inputVal;
+    await save(inputVal);
+  };
+
+  /** Lưu giá trị thô của ô; nơi gọi đã đặt `committingRef` (chặn commit lặp khi mất focus). */
+  const save = async (raw: string) => {
     const parsed: unknown = parseEdit
       ? parseEdit(raw)
       : editKind === "number"
@@ -110,7 +120,20 @@ export function EditableCell<T extends Record<string, unknown>>({
         <select
           ref={inputRef as React.RefObject<HTMLSelectElement>}
           value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
+          onChange={(e) => {
+            if (onCreateOption && e.target.value === CREATE_EDIT_OPTION) {
+              // Đóng ô (không lưu sentinel) rồi mở hộp thoại tạo; chỉ lưu khi đã có bản ghi.
+              committingRef.current = true;
+              setEditing(false);
+              void onCreateOption()
+                .then((option) => (option ? save(option.id) : undefined))
+                .finally(() => {
+                  committingRef.current = false;
+                });
+              return;
+            }
+            setInputVal(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           onBlur={commit}
           className={sharedInputClass}
@@ -121,6 +144,7 @@ export function EditableCell<T extends Record<string, unknown>>({
               {o.name}
             </option>
           ))}
+          {onCreateOption && editKind === "select" && <option value={CREATE_EDIT_OPTION}>+ Tạo mới…</option>}
         </select>
       );
     }

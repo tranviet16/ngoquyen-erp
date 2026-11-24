@@ -45,6 +45,7 @@ export default async function SoDuBanDauPage() {
         partyOptions={suppliers}
         projects={projects}
         partyLabel="Nhà cung cấp"
+        partyKind="supplier"
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: suppliers[0]?.id ?? 0 }}
         actions={{
           // Action trả { ok, … } — lỗi nghiệp vụ hiện trên toast cả ở bản production.

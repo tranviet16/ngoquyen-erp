@@ -1,27 +1,27 @@
 import { z } from "zod";
 
 export const entitySchema = z.object({
-  name: z.string().min(1, "Tên không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   type: z.enum(["company", "person"]),
   note: z.string().optional(),
 });
 
 export const supplierSchema = z.object({
-  name: z.string().min(1, "Tên không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   taxCode: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
 });
 
 export const contractorSchema = z.object({
-  name: z.string().min(1, "Tên không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   leader: z.string().optional(),
   contact: z.string().optional(),
 });
 
 export const projectSchema = z.object({
-  code: z.string().min(1, "Mã dự án không được để trống"),
-  name: z.string().min(1, "Tên không được để trống"),
+  code: z.string().trim().min(1, "Mã dự án không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   ownerInvestor: z.string().optional(),
   contractValue: z
     .string()
@@ -46,13 +46,13 @@ export const projectEntityIdSchema = z
 
 export const categorySchema = z.object({
   code: z.string().min(1, "Mã hạng mục không được để trống"),
-  name: z.string().min(1, "Tên không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   sortOrder: z.number().int().default(0),
 });
 
 export const itemSchema = z.object({
-  code: z.string().min(1, "Mã không được để trống"),
-  name: z.string().min(1, "Tên không được để trống"),
+  code: z.string().trim().min(1, "Mã không được để trống"),
+  name: z.string().trim().min(1, "Tên không được để trống"),
   unit: z.string().min(1, "Đơn vị không được để trống"),
   type: z.enum(["material", "labor", "machine"]),
   note: z.string().optional(),

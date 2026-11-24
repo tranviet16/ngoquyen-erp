@@ -39,6 +39,11 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "25mb",
     },
+    // proxy.ts matches every path, so Next buffers each request body for it and silently
+    // truncates past this limit (default 10MB), which corrupts larger uploads before the
+    // server action sees them. Keep it above serverActions.bodySizeLimit plus multipart
+    // overhead so oversized uploads are rejected by the action limit, never truncated.
+    proxyClientMaxBodySize: "26mb",
   },
 };
 
