@@ -9,6 +9,7 @@ const KNOWN = [
   "tai-chinh-nq",
   "sl-dt",
   "vat-tu-chuyen-doi",
+  "du-an-dt-hd-tt",
 ];
 
 /** Adapter nhận cả thư mục (gói .xlsx/.csv). */

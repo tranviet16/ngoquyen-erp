@@ -60,6 +60,8 @@ export default async function NhapLieuPage() {
         projects={projects}
         items={items}
         partyLabel="Nhà cung cấp"
+        partyKind="supplier"
+        itemTypes={["material"]}
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: suppliers[0]?.id ?? 0 }}
         actions={{
           // Action trả { ok, … } — lỗi nghiệp vụ hiện trên toast cả ở bản production.

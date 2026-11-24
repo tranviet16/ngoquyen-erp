@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
@@ -42,15 +43,35 @@ export async function getProjectById(id: number) {
   return queryProjectById(id);
 }
 
+/**
+ * Mã dự án là duy nhất trong các dự án chưa xoá (index `projects_code_active_unique`). Kiểm trước để
+ * báo tên dự án đang giữ mã; nếu hai người lưu cùng lúc thì index vẫn chặn (P2002, xem
+ * `projectEditFailure`).
+ */
+async function assertProjectCodeFree(code: string, exceptId?: number) {
+  const other = await prisma.project.findFirst({
+    where: { code, deletedAt: null, ...(exceptId !== undefined ? { id: { not: exceptId } } : {}) },
+    select: { name: true },
+  });
+  if (other) throw new Error(`Mã dự án "${code}" đã được dùng cho dự án "${other.name}"`);
+}
+
+/** Không sửa dự án đã xoá mềm (nó không còn hiện ở danh sách nào). */
+async function assertProjectActive(id: number) {
+  const project = await prisma.project.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+  if (!project) throw new Error(`Dự án #${id} không tồn tại hoặc đã bị xoá`);
+}
+
 export async function createProject(input: ProjectInput) {
   await requireReleasedModuleRequest("master-data");
   await requireActiveAdmin();
   const data = projectSchema.parse(input);
+  await assertProjectCodeFree(data.code);
   const project = await prisma.project.create({
     data: {
       code: data.code,
       name: data.name,
-      ownerInvestor: data.ownerInvestor,
+      ownerInvestor: data.ownerInvestor?.trim() || null,
       contractValue: data.contractValue && data.contractValue !== "" ? data.contractValue : undefined,
       startDate: data.startDate ? new Date(data.startDate) : undefined,
       endDate: data.endDate ? new Date(data.endDate) : undefined,
@@ -66,12 +87,15 @@ export async function updateProject(id: number, input: ProjectInput) {
   await requireReleasedModuleRequest("master-data");
   await requireActiveAdmin();
   const data = projectSchema.parse(input);
+  await assertProjectActive(id);
+  await assertProjectCodeFree(data.code, id);
   const project = await prisma.project.update({
     where: { id },
     data: {
       code: data.code,
       name: data.name,
-      ownerInvestor: data.ownerInvestor,
+      // Ô trống = chưa có chủ đầu tư (NULL), không lưu chuỗi rỗng.
+      ownerInvestor: data.ownerInvestor?.trim() || null,
       contractValue: data.contractValue !== undefined && data.contractValue !== "" ? data.contractValue : null,
       startDate: data.startDate ? new Date(data.startDate) : null,
       endDate: data.endDate ? new Date(data.endDate) : null,
@@ -81,6 +105,7 @@ export async function updateProject(id: number, input: ProjectInput) {
   revalidatePath(`/master-data/projects/${id}`);
   revalidatePath("/master-data/projects");
   revalidatePath("/master-data");
+  revalidatePath("/du-an");
   return project;
 }
 
@@ -101,8 +126,8 @@ import { z } from "zod";
 const PROJECT_PATCH_WHITELIST = ["code", "name", "status", "entityId"] as const;
 
 const patchProjectSchema = z.object({
-  code: z.string().min(1, "Mã không được để trống").optional(),
-  name: z.string().min(1, "Tên không được để trống").optional(),
+  code: z.string().trim().min(1, "Mã không được để trống").optional(),
+  name: z.string().trim().min(1, "Tên không được để trống").optional(),
   status: z.enum(["active", "completed", "paused"]).optional(),
   entityId: projectEntityIdSchema.optional(),
 });
@@ -188,6 +213,9 @@ export async function patchProject(id: number, patch: Record<string, unknown>) {
 
   const data = patchProjectSchema.parse(patch);
   const entityId = data.entityId;
+  // Đổi Chủ thể tự kiểm dự án còn tồn tại dưới khoá FOR UPDATE; các trường khác kiểm ở đây.
+  if (entityId === undefined) await assertProjectActive(id);
+  if (data.code !== undefined) await assertProjectCodeFree(data.code, id);
   const updated =
     entityId === undefined
       ? await prisma.project.update({ where: { id }, data })
@@ -203,24 +231,56 @@ export async function patchProject(id: number, patch: Record<string, unknown>) {
   return updated;
 }
 
-export type ProjectEntityPatchResult = { ok: true } | { ok: false; message: string };
+export type ProjectEditResult = { ok: true } | { ok: false; message: string };
+/** Giữ tên cũ cho chỗ gọi sửa Chủ thể. */
+export type ProjectEntityPatchResult = ProjectEditResult;
 
 /**
- * Sửa nhanh Chủ thể ở danh sách dự án. Trả kết quả thay vì ném lỗi nghiệp vụ: bản production chỉ
- * gửi `digest` của lỗi ném từ server action, nên lý do từ chối ("đã có dữ liệu vật tư") sẽ mất.
- * Lỗi không phải nghiệp vụ (DB, hạ tầng) vẫn được ném lại như cũ.
+ * Đổi lỗi nghiệp vụ thành kết quả hiển thị được: bản production chỉ gửi `digest` của lỗi ném từ
+ * server action, nên lý do từ chối (trùng mã, đã có dữ liệu vật tư…) sẽ mất. Guard nghiệp vụ ném
+ * `new Error(...)` thuần; trùng mã do hai người lưu cùng lúc rơi vào index (P2002). Lỗi khác (DB,
+ * hạ tầng) vẫn được ném lại như cũ.
  */
-export async function patchProjectEntity(id: number, entityId: number | null): Promise<ProjectEntityPatchResult> {
-  await requireReleasedModuleRequest("master-data");
+function projectEditFailure(err: unknown): ProjectEditResult {
+  if (err instanceof z.ZodError) return { ok: false, message: err.issues.map((i) => i.message).join("; ") };
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+    return { ok: false, message: "Mã dự án đã được dùng cho dự án khác" };
+  }
+  if (err instanceof Error && err.constructor === Error) return { ok: false, message: err.message };
+  throw err;
+}
+
+async function toEditResult(action: () => Promise<unknown>): Promise<ProjectEditResult> {
   try {
-    await patchProject(id, { entityId });
+    await action();
     return { ok: true };
   } catch (err) {
-    if (err instanceof z.ZodError) return { ok: false, message: err.issues.map((i) => i.message).join("; ") };
-    // Guard nghiệp vụ ném `new Error(...)` thuần; lỗi Prisma là lớp con riêng → ném lại.
-    if (err instanceof Error && err.constructor === Error) return { ok: false, message: err.message };
-    throw err;
+    return projectEditFailure(err);
   }
+}
+
+/** Thêm dự án từ form, trả lý do từ chối thay vì ném lỗi. */
+export async function createProjectAction(input: ProjectInput): Promise<ProjectEditResult> {
+  await requireReleasedModuleRequest("master-data");
+  return toEditResult(() => createProject(input));
+}
+
+/** Lưu form "Sửa dự án", trả lý do từ chối thay vì ném lỗi. */
+export async function updateProjectAction(id: number, input: ProjectInput): Promise<ProjectEditResult> {
+  await requireReleasedModuleRequest("master-data");
+  return toEditResult(() => updateProject(id, input));
+}
+
+/** Sửa nhanh một ô (mã, tên, trạng thái, Chủ thể) ở danh sách dự án, trả lý do từ chối. */
+export async function patchProjectAction(id: number, patch: Record<string, unknown>): Promise<ProjectEditResult> {
+  await requireReleasedModuleRequest("master-data");
+  return toEditResult(() => patchProject(id, patch));
+}
+
+/** Sửa nhanh Chủ thể ở danh sách dự án (lý do từ chối như "đã có dữ liệu vật tư" được trả về). */
+export async function patchProjectEntity(id: number, entityId: number | null): Promise<ProjectEditResult> {
+  await requireReleasedModuleRequest("master-data");
+  return patchProjectAction(id, { entityId });
 }
 
 // patchDuAn aliases patchProject — same Prisma model, both paths revalidated

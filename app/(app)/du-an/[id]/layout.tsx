@@ -1,23 +1,14 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { isAdmin } from "@/lib/rbac";
 import { queryProjectById } from "@/lib/master-data/project-query";
 import { requireModuleAccess } from "@/lib/acl/guards";
-
-const TABS = [
-  { href: "", label: "Dashboard" },
-  { href: "/tien-do", label: "Tiến Độ" },
-  { href: "/nghiem-thu", label: "Nghiệm Thu" },
-  { href: "/du-toan", label: "Dự Toán" },
-  { href: "/du-toan-dieu-chinh", label: "DT Điều Chỉnh" },
-  { href: "/phat-sinh", label: "Phát Sinh (CO)" },
-  { href: "/dinh-muc", label: "Định Mức" },
-  { href: "/giao-dich", label: "Giao Dịch" },
-  { href: "/can-doi-vat-tu", label: "Cân Đối VT" },
-  { href: "/hop-dong", label: "Hợp Đồng" },
-  { href: "/dong-tien-3-ben", label: "Dòng Tiền 3 Bên" },
-  { href: "/cong-no", label: "Công Nợ NCC" },
-  { href: "/cai-dat", label: "Cài Đặt" },
-];
+import { ProjectEditButton } from "@/components/master-data/project-edit-button";
+import { ProjectNav } from "@/components/du-an/project-nav";
+import { BookNote } from "@/components/du-an/book-note";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -37,36 +28,52 @@ export default async function ProjectLayout({ params, children }: Props) {
 
   const project = await queryProjectById(projectId);
   if (!project) notFound();
+  // Sửa thông tin dự án là quyền admin (server kiểm lại khi lưu); người khác không thấy nút.
+  const session = await auth.api.getSession({ headers: await headers() });
+  const canEdit = isAdmin(session?.user?.role);
 
   const basePath = `/du-an/${projectId}`;
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-          <Link href="/du-an" className="hover:underline">Dự án</Link>
-          <span>/</span>
-          <span>{project.code}</span>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <Link href="/du-an" className="hover:underline">Dự án</Link>
+            <span>/</span>
+            <span>{project.code}</span>
+          </div>
+          <h1 className="text-xl font-bold">{project.name}</h1>
+          {project.ownerInvestor && (
+            <p className="text-sm text-muted-foreground">CĐT: {project.ownerInvestor}</p>
+          )}
         </div>
-        <h1 className="text-xl font-bold">{project.name}</h1>
-        {project.ownerInvestor && (
-          <p className="text-sm text-muted-foreground">CĐT: {project.ownerInvestor}</p>
+        {canEdit && (
+          <ProjectEditButton
+            project={{
+              id: project.id,
+              code: project.code,
+              name: project.name,
+              ownerInvestor: project.ownerInvestor,
+              contractValue: project.contractValue,
+              startDate: project.startDate,
+              endDate: project.endDate,
+              status: project.status,
+            }}
+          />
         )}
       </div>
 
-      {/* Tab bar */}
-      <div className="border-b overflow-x-auto">
-        <nav className="flex gap-0 min-w-max">
-          {TABS.map((tab) => (
-            <Link
-              key={tab.href}
-              href={`${basePath}${tab.href}`}
-              className="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-primary hover:text-primary transition-colors whitespace-nowrap text-muted-foreground"
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+      {/* Điều hướng hai hàng: 7 nhóm, rồi tab của nhóm đang mở. Ghi chú sổ đội tải riêng (Suspense). */}
+      <div className="border-b">
+        <ProjectNav
+          basePath={basePath}
+          bookNote={
+            <Suspense fallback={null}>
+              <BookNote projectId={projectId} />
+            </Suspense>
+          }
+        />
       </div>
 
       <div>{children}</div>

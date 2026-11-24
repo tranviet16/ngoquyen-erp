@@ -63,7 +63,11 @@ import {
   patchProject,
   patchDuAn,
   patchProjectEntity,
+  patchProjectAction,
+  updateProjectAction,
+  createProjectAction,
 } from "@/lib/master-data/project-service";
+import { Prisma } from "@prisma/client";
 
 // loan-service has a slightly different getRole() name — same pattern
 import {
@@ -82,6 +86,10 @@ beforeEach(() => {
   // The explicit "rejects viewer role" tests override this per-test.
   mockAuth.getSession.mockResolvedValue({ user: { role: "admin" } });
   mockDb.$transaction.mockImplementation(async (fn: (tx: typeof mockDb) => unknown) => fn(mockDb));
+  // Dự án đang sửa còn tồn tại; không dự án nào khác giữ mã mới (lookup có `id: { not }`).
+  mockDb.project.findFirst.mockImplementation(async ({ where }: { where: { id?: unknown } }) =>
+    typeof where.id === "number" ? { id: where.id } : null,
+  );
 });
 
 // ─── patchEntity ────────────────────────────────────────────────────────────
@@ -217,6 +225,77 @@ describe("patchProject", () => {
     mockDb.project.update.mockResolvedValue(row);
     const result = await patchProject(2, { code: "DA02", name: "Dự án mới" });
     expect(result).toEqual(row);
+  });
+
+  it("trims code and name and checks the new code against other active projects", async () => {
+    mockDb.project.update.mockResolvedValue({ id: 2 });
+    await patchProject(2, { code: "  DA02 ", name: " Dự án mới  " });
+    expect(mockDb.project.findFirst).toHaveBeenCalledWith({
+      where: { code: "DA02", deletedAt: null, id: { not: 2 } },
+      select: { name: true },
+    });
+    expect(mockDb.project.update).toHaveBeenCalledWith({ where: { id: 2 }, data: { code: "DA02", name: "Dự án mới" } });
+  });
+
+  it("rejects a code already used by another active project, naming that project", async () => {
+    mockDb.project.findFirst.mockImplementation(async ({ where }: { where: { id?: unknown } }) =>
+      typeof where.id === "number" ? { id: where.id } : { name: "Trại Chuối" },
+    );
+    await expect(patchProject(2, { code: "TC" })).rejects.toThrow(/Mã dự án "TC" đã được dùng cho dự án "Trại Chuối"/);
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects editing a soft-deleted project", async () => {
+    mockDb.project.findFirst.mockResolvedValue(null);
+    await expect(patchProject(2, { name: "X" })).rejects.toThrow(/Dự án #2 không tồn tại hoặc đã bị xoá/);
+    expect(mockDb.project.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Kết quả trả về thay vì ném (form Sửa / Thêm dự án, sửa nhanh ô) ────────────
+describe("project edit result actions", () => {
+  const formInput = {
+    code: "TC", name: "Trại Chuối", ownerInvestor: "", contractValue: "1500000",
+    startDate: "2026-01-05", endDate: "", status: "active" as const,
+  };
+
+  it("updateProjectAction keeps the fields the form sends (contract value, dates)", async () => {
+    mockDb.project.update.mockResolvedValue({ id: 1 });
+    await expect(updateProjectAction(1, formInput)).resolves.toEqual({ ok: true });
+    const { data } = mockDb.project.update.mock.calls[0][0] as { data: Record<string, unknown> };
+    expect(data.contractValue).toBe("1500000");
+    expect(data.startDate).toEqual(new Date("2026-01-05"));
+    expect(data.endDate).toBeNull();
+    expect(data.ownerInvestor).toBeNull();
+  });
+
+  it("returns the duplicate-code reason instead of throwing", async () => {
+    mockDb.project.findFirst.mockImplementation(async ({ where }: { where: { id?: unknown } }) =>
+      typeof where.id === "number" ? { id: where.id } : { name: "Tân Lộc CDC" },
+    );
+    const result = await updateProjectAction(1, formInput);
+    expect(result).toEqual({ ok: false, message: 'Mã dự án "TC" đã được dùng cho dự án "Tân Lộc CDC"' });
+    const created = await createProjectAction(formInput);
+    expect(created.ok).toBe(false);
+  });
+
+  it("maps a unique-index race (P2002) to a readable message and rethrows other DB errors", async () => {
+    mockDb.project.update.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError("dup", { code: "P2002", clientVersion: "test" }),
+    );
+    await expect(patchProjectAction(1, { code: "TC" })).resolves.toEqual({
+      ok: false,
+      message: "Mã dự án đã được dùng cho dự án khác",
+    });
+
+    class DbError extends Error {}
+    mockDb.project.update.mockRejectedValue(new DbError("connection reset"));
+    await expect(patchProjectAction(1, { name: "X" })).rejects.toThrow(/connection reset/);
+  });
+
+  it("returns validation messages (empty name) as a result", async () => {
+    const result = await patchProjectAction(1, { name: "   " });
+    expect(result).toEqual({ ok: false, message: "Tên không được để trống" });
   });
 });
 
