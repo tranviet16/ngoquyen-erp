@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Phase 3: Clean and freeze the copy"
-status: pending
+status: in-progress
 priority: P1
 effort: "2–3h, plus the reviewer's time"
 dependencies: [2]
@@ -46,11 +46,36 @@ Remove every test artifact from the copy's database, settle the accounts, and ha
    - `after.sql` of the DT-HĐ-TT runbook passes.
 4. **Accounts.**
    - Deactivate `import-bansao` and `upload-test`. Do not delete them: their rows are referenced by import runs and audit.
-   - Rotate the admin password through `scripts/manage-erp-admin-local.ps1`.
-   - Create the staff accounts the user lists, with project rights (kế toán: `edit` on their projects; others: `read`).
+   - The user rotates the admin password at `/ho-so` → "Đổi mật khẩu". `scripts/manage-erp-admin-local.ps1` only bootstraps a missing admin: with no DPAPI store it refuses an existing one ("Admin already exists").
+   - ~~Create the staff accounts the user lists, with project rights.~~ Moved to phase 5 step 0: no list exists yet.
    - Sign every session out.
 5. **Reviewer sign-off.** The kế toán in charge confirms that the copy's figures stand as the go-live figures: the 09/11 dry-run checks V1–V4, step 11 and step 12a. Record it in `go-live-result.md`, with the decision to reuse the dry-run data.
 6. **Freeze:** after sign-off, no more writes to the copy until cutover.
+
+## Run log (2026-11-24)
+
+- **Step 1, backup:** `C:\Users\tranv\ngoquyen-prod-backups\erp-prod-20261124-1814.dump`, with its SHA-256, taken before any change.
+- **Step 2, the list:** the user confirmed the scope as "the data Claude created for testing", which is exactly the list above. The user signed in as admin in the app's browser pane, and Claude made every change through the app, from 18:32 to 18:36.
+  - Task #1: both attachments were deleted first, so their files left the uploads folder, then the task itself.
+  - Alias #1431: "Bỏ gán".
+  - Invoice line #559: deleted. Its derived transaction #676 was soft-deleted with it.
+  - Receipt #515 and payment #237: deleted.
+  - Link #30: H was cleared. Every business field now equals the `beforeJson` of the 17/11 edit, and H was the only field that edit changed.
+  - The browser pane dismisses native `confirm()` dialogs. Before each click that asks, Claude replaced `window.confirm` for that one call and checked the dialog text afterwards.
+- **Step 3, checks:**
+  - `audit_logs` holds one entry per change (11 rows).
+  - The scan of every table for live test markers ("chạy thử", "CHAYTHU", the attachment names) finds only `import_runs` #8–#10. Their file name contains "chay thu", because the DT-HĐ-TT book import ran on this copy. Run #10 is the import kept as the go-live data, so these rows stay.
+  - Import run #9 is still a `preview` of the same file. It cannot be committed, because the engine refuses a file hash that is already committed.
+  - `after.sql` equals the dry-run's "after run #10" column on every count and sum. The register screens show the same row counts.
+  - DT-HĐ shows 30 ✓ (29 blocks and the total) and no ✗. DT-TT shows ✓ on all 47 lines. HĐ-TT shows both checks ✓ and one "tạm = HĐ" line, as in the dry run.
+  - `tasks` and `task_attachments` are empty, and no file is left under `uploads\task-attachments`.
+- **Step 4, accounts (partly):** `import-bansao` and `upload-test` were already inactive, with no live session. Still to do:
+  - the user rotates the admin password at `/ho-so`;
+  - sign every session out.
+- **Staff accounts: moved to phase 5.** The user has no staff list yet, so the copy goes to cutover with the admin as its only active account.
+  - The copy has no staff account, no project grant, and only one role ("Giám Đốc", 11 module rights). Other roles are created at `/admin/permissions/roles`.
+  - Each initial password is typed by the user, never by Claude, and must be at least 12 characters.
+- **Not yet done:** the reviewer sign-off (step 5) and the freeze (step 6).
 
 ## Verification
 

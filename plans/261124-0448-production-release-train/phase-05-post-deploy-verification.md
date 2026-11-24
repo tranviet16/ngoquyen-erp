@@ -15,6 +15,10 @@ Prove every module works on VIETPC with real users, bring the công nợ entries
 
 ## Tasks & Steps
 
+0. **Staff accounts (moved here from phase 3: no list existed before cutover).** Steps 1 and 2 need them, so this comes first.
+   - The user gives one line per person: name, username, email, department, job, projects to edit, projects to read.
+   - Create the roles the jobs need at `/admin/permissions/roles`. The user guides name four: Kế toán, Cán bộ vật tư, Chỉ huy công trường, Xem báo cáo. Show the user each role's module rights before creating it.
+   - Create each account at `/admin/nguoi-dung`, then its department access and project rights. The user types every initial password.
 1. **Smoke checks, as a non-admin user per area:**
    - login and Dashboard;
    - công nợ vật tư (`/vat-tu-ncc/cong-trinh`, `/cong-no-vt/tong-hop-cong-trinh`);
