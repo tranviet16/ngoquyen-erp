@@ -13,7 +13,7 @@ import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request"
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { toBusinessDateUtc } from "@/lib/ledger/business-date";
 import { periodLabel } from "./period";
-import { addDays } from "./period-bounds";
+import { addDays, monthlySlices } from "./period-bounds";
 import { requireProjectId } from "./pair-scope";
 import {
   assertPeriodBounds,
@@ -55,13 +55,23 @@ export interface ReconView extends ReconComputed {
   fromSnapshot: boolean;
   /** Marker kỳ chuyển đổi từ Excel — không gỡ ký/sửa/xoá được. */
   cutoverMarker: boolean;
+  /**
+   * Đang xem MỘT THÁNG (27→26) của kỳ dài hơn một tháng (vd. kỳ chuyển đổi 01/01 – 26/10): nhãn kỳ
+   * gốc. null khi xem nguyên kỳ.
+   */
+  parentPeriodLabel: string | null;
 }
 
 export interface ReconListItem {
   id: number;
   projectId: number;
+  /** Tháng hiển thị (27→26; kỳ lẻ đầu tiên có thể ngắn hơn). */
   periodFrom: string;
   periodTo: string;
+  /** Dòng là một tháng của kỳ dài hơn một tháng — mở bảng đối chiếu của riêng tháng đó. */
+  monthOfLongerPeriod: boolean;
+  /** Tháng cuối của kỳ (nơi đặt thao tác Xoá / Gỡ ký của cả kỳ). */
+  lastMonthOfPeriod: boolean;
   opening: number;
   totalIn: number;
   totalPaid: number;
@@ -143,53 +153,123 @@ export async function getReconciliationView(id: number): Promise<ReconView> {
     note: recon.note,
     fromSnapshot,
     cutoverMarker: isCutoverMarker(recon),
+    parentPeriodLabel: null,
   };
 }
 
-/** Danh sách kỳ của cặp kèm số: kỳ đã ký đọc cột snapshot, kỳ chưa ký tính động. */
+/**
+ * Bảng đối chiếu của MỘT THÁNG thuộc kỳ dài hơn một tháng (vd. kỳ chuyển đổi 01/01 – 26/10): số tính
+ * từ sổ cho đúng tháng đó (chỉ xem / in; trạng thái ký là của kỳ gốc). `from`/`to` phải đúng một
+ * tháng trong `monthlySlices` của kỳ.
+ */
+export async function getReconciliationMonthView(id: number, from: string, to: string): Promise<ReconView> {
+  await requireReleasedModuleRequest("vat-tu-ncc");
+  const recon = await loadRecon(id);
+  const month = monthlySlices(recon.periodFrom, recon.periodTo).find(
+    (m) => isoDate(m.from) === from && isoDate(m.to) === to,
+  );
+  if (!month) throw new Error(`Tháng ${from} – ${to} không thuộc kỳ đối chiếu #${id}`);
+  const [supplier, computed, names] = await Promise.all([
+    prisma.supplier.findFirst({ where: { id: recon.supplierId }, select: { name: true, taxCode: true, address: true } }),
+    computeReconciliation(recon.supplierId, recon.projectId, month.from, month.to),
+    headerNames(recon.supplierId, recon.projectId, month.from, month.to),
+  ]);
+  return {
+    ...computed,
+    taxRows: computed.taxRows ?? [],
+    totalTax: computed.totalTax ?? 0,
+    id: recon.id,
+    supplierId: recon.supplierId,
+    projectId: recon.projectId,
+    supplierName: supplier?.name ?? `NCC #${recon.supplierId}`,
+    supplierTaxCode: supplier?.taxCode ?? null,
+    supplierAddress: supplier?.address ?? null,
+    periodFrom: isoDate(month.from),
+    periodTo: isoDate(month.to),
+    periodLabel: periodLabel(month.from, month.to),
+    entityNames: names.entityNames,
+    projectNames: names.projectNames,
+    signedBySupplier: recon.signedBySupplier,
+    signedDate: recon.signedDate ? isoDate(recon.signedDate) : null,
+    note: recon.note,
+    fromSnapshot: false,
+    cutoverMarker: isCutoverMarker(recon),
+    parentPeriodLabel: periodLabel(recon.periodFrom, recon.periodTo),
+  };
+}
+
+const isEmptyRow = (r: Pick<ReconListItem, "opening" | "totalIn" | "totalPaid" | "otherAmount" | "closing">) =>
+  r.opening === 0 && r.totalIn === 0 && r.totalPaid === 0 && r.otherAmount === 0 && r.closing === 0;
+
+/**
+ * Danh sách kỳ của cặp, luôn theo tháng 27→26: kỳ đúng một tháng đọc như cũ (đã ký → cột snapshot,
+ * chưa ký → tính động); kỳ dài hơn (kỳ chuyển đổi, kỳ cũ gộp tháng) tách thành từng tháng, số tính từ
+ * sổ cho từng tháng (cùng sổ nên tháng cuối khớp số cuối kỳ). Bỏ các tháng trống trước tháng đầu tiên
+ * có phát sinh. Mới nhất trước.
+ */
 export async function listReconciliationsDerived(supplierId: number, projectId: number): Promise<ReconListItem[]> {
   await requireReleasedModuleRequest("vat-tu-ncc");
   assertSupplierId(supplierId);
   const pid = requireProjectId(projectId);
   const recons = await prisma.supplierReconciliation.findMany({
     where: { supplierId, projectId: pid, deletedAt: null },
-    orderBy: { periodFrom: "desc" },
+    orderBy: { periodFrom: "asc" },
   });
-  return Promise.all(
-    recons.map(async (r) => {
+  const perMarker = await Promise.all(
+    recons.map(async (r): Promise<ReconListItem[]> => {
       const base = {
         id: r.id,
         projectId: r.projectId,
-        periodFrom: isoDate(r.periodFrom),
-        periodTo: isoDate(r.periodTo),
         note: r.note,
         cutoverMarker: isCutoverMarker(r),
+        signedBySupplier: r.signedBySupplier,
+        signedDate: r.signedDate ? isoDate(r.signedDate) : null,
       };
-      if (r.signedBySupplier && r.openingBalance != null) {
-        return {
-          ...base,
-          opening: num(r.openingBalance),
-          totalIn: num(r.totalIn),
-          totalPaid: num(r.totalPaid),
-          closing: num(r.closingBalance),
-          otherAmount: num(r.closingBalance) - num(r.openingBalance) - num(r.totalIn) + num(r.totalPaid),
-          signedBySupplier: true,
-          signedDate: r.signedDate ? isoDate(r.signedDate) : null,
-        };
+      const months = monthlySlices(r.periodFrom, r.periodTo);
+      if (months.length === 1) {
+        const whole = { ...base, periodFrom: isoDate(r.periodFrom), periodTo: isoDate(r.periodTo), monthOfLongerPeriod: false, lastMonthOfPeriod: true };
+        if (r.signedBySupplier && r.openingBalance != null) {
+          return [{
+            ...whole,
+            opening: num(r.openingBalance),
+            totalIn: num(r.totalIn),
+            totalPaid: num(r.totalPaid),
+            closing: num(r.closingBalance),
+            otherAmount: otherAmountOf(num(r.closingBalance), num(r.openingBalance), num(r.totalIn), num(r.totalPaid)),
+          }];
+        }
+        const c = await computeReconciliation(supplierId, pid, r.periodFrom, r.periodTo);
+        return [{ ...whole, signedBySupplier: false, signedDate: null, ...amountsOf(c) }];
       }
-      const c = await computeReconciliation(supplierId, pid, r.periodFrom, r.periodTo);
-      return {
-        ...base,
-        opening: c.opening,
-        totalIn: c.totalIn,
-        totalPaid: c.totalPaid,
-        closing: c.closing,
-        otherAmount: c.closing - c.opening - c.totalIn + c.totalPaid,
-        signedBySupplier: false,
-        signedDate: null,
-      };
+      return Promise.all(
+        months.map(async (m, i) => ({
+          ...base,
+          periodFrom: isoDate(m.from),
+          periodTo: isoDate(m.to),
+          monthOfLongerPeriod: true,
+          lastMonthOfPeriod: i === months.length - 1,
+          ...amountsOf(await computeReconciliation(supplierId, pid, m.from, m.to)),
+        })),
+      );
     }),
   );
+  const rows = perMarker.flat();
+  const firstActive = rows.findIndex((row) => !isEmptyRow(row));
+  return (firstActive < 0 ? [] : rows.slice(firstActive)).reverse();
+}
+
+/** Thuế/ĐC suy ra bằng phép trừ số thực — làm tròn tới đồng và bỏ "-0". */
+const otherAmountOf = (closing: number, opening: number, totalIn: number, totalPaid: number) =>
+  Math.round(closing - opening - totalIn + totalPaid) || 0;
+
+function amountsOf(c: ReconComputed) {
+  return {
+    opening: c.opening,
+    totalIn: c.totalIn,
+    totalPaid: c.totalPaid,
+    closing: c.closing,
+    otherAmount: otherAmountOf(c.closing, c.opening, c.totalIn, c.totalPaid),
+  };
 }
 
 /** NCC ký xác nhận: đông cứng số + dòng chi tiết của cặp, khóa mọi ghi mới trong kỳ của cặp. */
@@ -212,7 +292,8 @@ export async function signReconciliation(id: number) {
     const to = toBusinessDateUtc(current.periodTo);
     const label = periodLabel(from, to);
 
-    await assertPeriodBounds(recon.supplierId, current.projectId, { from, to }, tx, id);
+    // Ký marker đã có: không bắt chuẩn tháng (marker cũ lệch tháng vẫn ký được); kỳ mới / sửa kỳ mới bắt.
+    await assertPeriodBounds(recon.supplierId, current.projectId, { from, to }, tx, id, { requireMonthly: false });
 
     // Ký sẽ khoá vĩnh viễn ngày trong kỳ của cặp — phiếu của cặp chưa có phát sinh trong sổ cái
     // lúc này sẽ không bao giờ vào sổ được nữa, nên bắt buộc chốt đủ.

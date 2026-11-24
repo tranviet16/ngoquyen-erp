@@ -24,6 +24,7 @@ import {
   standardPeriodContaining,
   suggestNextPeriod,
   validatePeriodBounds,
+  type PeriodBoundsOptions,
   type PeriodBoundsContext,
   type PeriodRangeDates,
 } from "./period-bounds";
@@ -208,8 +209,9 @@ export async function assertPeriodBounds(
   range: PeriodRangeDates,
   client: BoundsClient = prisma,
   selfId?: number,
+  opts: PeriodBoundsOptions = {},
 ) {
-  const error = validatePeriodBounds(range, await loadPeriodBoundsContext(supplierId, projectId, client), selfId);
+  const error = validatePeriodBounds(range, await loadPeriodBoundsContext(supplierId, projectId, client), selfId, opts);
   if (error) throw new Error(error);
 }
 
