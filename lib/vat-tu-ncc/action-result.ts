@@ -10,9 +10,10 @@
 
 import { ZodError } from "zod";
 import { ModuleRequestError } from "@/lib/acl/released-module-request";
-import { MaterialScopeError } from "./pair-scope";
+import { MaterialScopeError, type MaterialScopeErrorCode } from "./pair-scope";
 
-export type ActionFailure = { ok: false; message: string };
+/** `code`: mã lỗi nghiệp vụ của MaterialScopeError (vd. `signed_period`, `cutover_locked`) nếu có. */
+export type ActionFailure = { ok: false; message: string; code?: MaterialScopeErrorCode };
 export type ActionResult<T extends object = object> = ({ ok: true } & T) | ActionFailure;
 
 export const GENERIC_ACTION_MESSAGE = "Lỗi hệ thống — thử lại hoặc liên hệ admin.";
@@ -43,6 +44,6 @@ export async function runAction<T extends object>(
   } catch (err) {
     const message = userFacingMessage(err, generic);
     if (message === generic) console.error(`[${logTag}]`, err);
-    return { ok: false, message };
+    return err instanceof MaterialScopeError ? { ok: false, message, code: err.code } : { ok: false, message };
   }
 }

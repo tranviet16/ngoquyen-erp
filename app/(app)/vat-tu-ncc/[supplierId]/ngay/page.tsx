@@ -24,14 +24,17 @@ export default async function NgayPage({ params, searchParams }: Props) {
   // Có `?projectId=` thì chỉ xem phiếu của cặp; không có thì mọi công trình của NCC.
   const projectId = parseProjectIdParam((await searchParams).projectId) ?? undefined;
 
-  const [deliveries, items, projects, quotes, canCreate, canEdit] = await Promise.all([
+  const [deliveries, items, projects, quotes, canCreate, canEdit, user] = await Promise.all([
     listDeliveries(id, { projectId }),
     prisma.item.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
     prisma.project.findMany({ where: { deletedAt: null }, orderBy: { code: "asc" } }),
     listPriceQuotes(id),
     canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "create", scope: "module" }),
     canAccessEntitlement(userId, "vat-tu-ncc", { minLevel: "edit", scope: "module" }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true, isActive: true } }),
   ]);
+  // Admin được xác nhận sửa phiếu trong kỳ đã ký / kỳ chuyển đổi; server kiểm lại khi lưu.
+  const canOverrideLocked = canEdit && user?.role === "admin" && user.isActive === true;
   // `?projectId=` trỏ tới công trình không tồn tại / đã xoá → 404 thay vì khoá form vào công trình lỗi.
   if (projectId !== undefined && !projects.some((p) => p.id === projectId)) notFound();
 
@@ -51,6 +54,7 @@ export default async function NgayPage({ params, searchParams }: Props) {
         canCreate={canCreate}
         canEdit={canEdit}
         canDelete={canEdit}
+        canOverrideLocked={canOverrideLocked}
         lockedProjectId={projectId}
       />
     </Suspense>

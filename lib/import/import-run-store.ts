@@ -122,6 +122,14 @@ export const IMPORT_TAGGED_TABLES = [
   "sl_dt_payment_plans",
   "sl_dt_monthly_inputs",
   "sl_dt_progress_statuses",
+  // Sổ "Đối chiếu DT-HĐ-TT" (dự án xây dựng) — xem du-an-book-rollback.ts.
+  "project_group_codes",
+  "project_item_aliases",
+  "project_counterparties",
+  "project_counterparty_suppliers",
+  "project_invoice_lines",
+  "project_actual_receipts",
+  "project_cash_payments",
 ] as const;
 
 /** Tập id run (trong `ids`) còn ít nhất một dòng dữ liệu mang `importRunId` của nó. Một truy vấn. */

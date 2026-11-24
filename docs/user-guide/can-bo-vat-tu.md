@@ -77,15 +77,32 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
 5. Khi nhập phiếu ngày → form **tự điền đơn giá** theo báo giá hiệu lực tại ngày phiếu
    - Nếu không có báo giá hiệu lực → để trống (bắt buộc ghi đè bằng tay)
    - Khi sửa phiếu cũ → đơn giá không bị ghi đè (giữ giá cũ)
+6. **Báo giá tự tạo từ phiếu**: khi lưu phiếu (thêm, sửa, sửa nhanh trên lưới) với đơn giá **khác** báo giá đang hiệu lực ở ngày phiếu, hệ thống tự thêm một dòng báo giá hiệu lực từ ngày phiếu, ghi chú «Tự tạo từ phiếu ngày #…». Lần sau nhập phiếu vật tư đó (từ ngày đó trở đi) form tự điền giá này, cho tới khi có giá mới.
+   - Báo giá tính theo **NCC × vật tư** (không theo công trình): nếu hai công trình có giá khác nhau, giá gợi ý là giá nhập gần nhất.
+   - Báo giá tự tạo **đi theo phiếu**: sửa đơn giá / ngày / vật tư của chính phiếu đó thì báo giá được sửa theo (không sinh thêm dòng); giá sửa về bằng báo giá đang hiệu lực, xoá giá hoặc xoá phiếu thì dòng báo giá đó bị xoá.
+   - Sửa ghi chú, cán bộ, số lượng không đụng tới báo giá. Phiếu không có giá (hoặc giá 0) không tạo báo giá.
+   - Sửa tay một dòng báo giá tự tạo ở tab Báo giá → dòng đó thôi đi theo phiếu và được giữ nguyên.
+   - Giá điền lúc **Chốt kỳ** không tạo báo giá.
 
 ### 3.4 Sửa & Xóa phiếu giao nhận
 
 1. Tìm phiếu trong tab **Vật tư ngày**
-2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu**
-   - Phiếu trong kỳ đã ký → từ chối
+2. Click icon bút chì → sửa số lượng/đơn giá → **Lưu** (Đơn giá, Thành tiền hiển thị dạng số tiền)
+   - Phiếu trong kỳ đã ký hoặc trước mốc chuyển đổi → từ chối với người dùng thường (thêm, sửa, xoá)
+   - **Admin**: hiện cảnh báo kỳ khoá; bấm OK để vẫn **thêm, sửa (mọi ô, kể cả ngày, công trình, vật tư) hoặc xoá** phiếu. Hệ thống gỡ tiền của phiếu ở chỗ cũ và ghi vào chỗ mới:
+     - Kỳ NCC đã ký: dòng công nợ của phiếu đi theo phiếu (ngày, công trình, số tiền mới); xoá phiếu thì gỡ dòng đó. Phiếu trong kỳ đã ký phải có đơn giá.
+     - Kỳ chuyển đổi từ Excel (công nợ tính từ Nhập Liệu): tiền của phiếu đi qua dòng **lấy hàng chênh lệch** (có thể âm, nội dung «Chênh lệch do admin sửa phiếu ngày #…») — trừ tiền cũ ở ngày / công trình cũ, cộng tiền mới ở ngày / công trình mới (cùng chỗ thì chỉ ghi phần chênh). Số này nằm ở cột **Cộng P/S** của bảng đối chiếu và cột lấy hàng của báo cáo, không vào cột Thuế/ĐC.
+     - Dời phiếu ra kỳ chưa chốt: phiếu chờ chốt kỳ như phiếu thường; dời vào kỳ đã chốt chưa ký: vào công nợ ngay.
+     - Bảng đối chiếu đã ký của công trình cũ và công trình mới, từ kỳ bị đụng tới trở đi, được tính lại số, giữ ngày ký; hệ thống ghi lại người sửa và nội dung thay đổi.
    - Phiếu từ phiếu ngày đã chốt kỳ hoặc từ thanh toán → không sửa/xóa (dòng tự sinh)
 3. Xóa: Click icon thùng rác → xác nhận
-   - Chỉ xóa được phiếu chưa chốt kỳ / chưa thanh toán
+   - Người dùng thường chỉ xóa được phiếu ngoài kỳ đã ký / trước mốc chuyển đổi; admin xoá được sau khi xác nhận (như trên)
+4. Phiếu vào công nợ lúc nào (thông báo sau khi lưu nói rõ):
+   - **Kỳ đã chốt, chưa ký** và phiếu có đơn giá: thêm hoặc sửa phiếu (ngày, công trình, vật tư, số lượng, đơn giá) thì công nợ, bảng đối chiếu và báo cáo công nợ cập nhật **ngay**, không phải chốt lại kỳ.
+   - **Kỳ đã chốt nhưng phiếu chưa có đơn giá**: chưa vào công nợ; nhập đơn giá cho phiếu (hoặc chốt lại kỳ) để vào.
+   - **Kỳ chưa chốt**: phiếu vào công nợ khi kế toán chốt kỳ (gán giá hàng loạt).
+   - Dời phiếu sang kỳ chưa chốt thì phiếu rời công nợ, chờ chốt kỳ mới.
+   - Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi công nợ.
 
 ---
 
@@ -146,6 +163,8 @@ Tab **Đối chiếu công nợ** (`/vat-tu-ncc/[NCC]/doi-chieu?projectId=…`) 
 3. Xem lịch sử: ngày, loại (nợ/trả), số tiền, số dư lũy kế
 
 > Cán bộ vật tư chỉ xem được, không nhập liệu công nợ (kế toán nhập).
+
+> Sổ hóa đơn, thực tế nhập, chi thực tế và ánh xạ của từng công trình nhập ở tab **Đối chiếu DT-HĐ-TT**: xem [hướng dẫn riêng](doi-chieu-dt-hd-tt.md).
 
 ---
 

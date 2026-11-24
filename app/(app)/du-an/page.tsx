@@ -6,6 +6,7 @@ import { getViewableProjectIds } from "@/lib/acl";
 import { prisma } from "@/lib/prisma";
 import { parseTableQuery, buildPrismaArgs, hasDisplayOrderSort, applyDisplayOrderPage } from "@/lib/table/query-params";
 import { DU_AN_SPEC } from "@/lib/master-data/du-an/table-spec";
+import { isAdmin } from "@/lib/rbac";
 import { DuAnListClient } from "./du-an-list-client";
 
 interface Props {
@@ -17,6 +18,8 @@ export default async function DuAnPage({ searchParams }: Props) {
   if (!session?.user?.id) redirect("/login");
 
   const v = await getViewableProjectIds(session.user.id);
+  // Sửa thông tin dự án là quyền admin (server kiểm lại khi lưu).
+  const canEdit = isAdmin(session.user.role);
 
   const sp = await searchParams;
   const params = new URLSearchParams();
@@ -32,6 +35,7 @@ export default async function DuAnPage({ searchParams }: Props) {
       <Suspense>
         <DuAnListClient
           data={[]}
+          canEdit={canEdit}
           total={0}
           page={state.page}
           pageSize={state.pageSize}
@@ -65,6 +69,7 @@ export default async function DuAnPage({ searchParams }: Props) {
     code: p.code,
     name: p.name,
     ownerInvestor: p.ownerInvestor,
+    contractValue: p.contractValue == null ? null : p.contractValue.toNumber(),
     status: p.status,
     startDate: p.startDate,
     endDate: p.endDate,
@@ -75,6 +80,7 @@ export default async function DuAnPage({ searchParams }: Props) {
     <Suspense>
       <DuAnListClient
         data={items}
+        canEdit={canEdit}
         total={total}
         page={state.page}
         pageSize={state.pageSize}

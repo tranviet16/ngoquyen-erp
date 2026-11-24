@@ -10,6 +10,7 @@
  * Bulk insert via $executeRaw bypasses audit middleware (intentional historical migration).
  */
 
+import { legacyImportBlocking } from "./du-an-dt-hd-tt/legacy-import-guard";
 import * as XLSX from "xlsx";
 import {
   parseExcelDate,
@@ -493,6 +494,10 @@ export const DuAnXayDungAdapter: ImportAdapter = {
       }
     }
     return { valid: errors.length === 0, errors };
+  },
+
+  async review(data, _mapping, db) {
+    return { payload: null, blocking: await legacyImportBlocking(db, String(data.meta.projectCode ?? "DA001")), requiredAcks: [] };
   },
 
   async apply(data, _mapping, tx, importRunId): Promise<ImportSummary> {
