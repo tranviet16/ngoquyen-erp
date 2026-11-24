@@ -29,8 +29,10 @@ describe("assertRollbackAllowed", () => {
     const sql = strings.join("?").replace(/\s+/g, " ");
     expect(sql).toContain(`AND (t."createdAt" > ? OR t."updatedAt" > ?)`);
     expect(sql).toContain(`AND (o."createdAt" > ? OR o."updatedAt" > ?)`);
-    // Mốc so sánh là committedAt của run (không phải createdAt khi đã có committedAt).
-    expect(values.filter((v) => v instanceof Date && v.getTime() === COMMITTED_AT.getTime())).toHaveLength(4);
+    // Hợp đồng dự án còn hiệu lực của run sửa sau commit cũng bị chặn.
+    expect(sql).toContain(`c."updatedAt" > ?`);
+    // Mốc so sánh là committedAt của run (không phải createdAt khi đã có committedAt): 4 mốc sổ / số dư + 1 hợp đồng.
+    expect(values.filter((v) => v instanceof Date && v.getTime() === COMMITTED_AT.getTime())).toHaveLength(5);
   });
 
   it("run cũ không có committedAt → so với createdAt (chặt hơn)", async () => {
@@ -38,7 +40,7 @@ describe("assertRollbackAllowed", () => {
     const { tx, $queryRaw } = client([]);
     await assertRollbackAllowed(tx, { id: 9, committedAt: null, createdAt });
     const values = ($queryRaw.mock.calls[0] as unknown[]).slice(1);
-    expect(values.filter((v) => v instanceof Date && v.getTime() === createdAt.getTime())).toHaveLength(4);
+    expect(values.filter((v) => v instanceof Date && v.getTime() === createdAt.getTime())).toHaveLength(5);
   });
 
   it("có vi phạm → RollbackBlockedError liệt kê lý do theo thứ tự cố định", async () => {

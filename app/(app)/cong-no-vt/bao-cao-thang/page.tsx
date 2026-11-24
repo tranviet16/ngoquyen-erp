@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
-import { getMaterialWindowReport, firstMaterialEntityWithActivity } from "@/lib/cong-no-vt/material-ledger-service";
+import {
+  getMaterialWindowReport,
+  firstMaterialEntityWithActivity,
+  latestMaterialActivityDate,
+} from "@/lib/cong-no-vt/material-ledger-service";
 import { prisma } from "@/lib/prisma";
 import { resolveReportPeriod } from "@/lib/ledger/report-period";
+import { toBusinessDateUtc } from "@/lib/ledger/business-date";
 import { MonthlyReport } from "@/components/ledger/monthly-report";
 import { BaoCaoThangFilter } from "./bao-cao-thang-filter";
 import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
@@ -17,8 +22,16 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
   const params = await searchParams;
   const now = new Date();
   const options = { defaultPreset: "month", legacyMode: "month", today: now } as const;
-  // Mặc định tháng hiện tại; `?year=&month=` cũ vẫn là cửa sổ tháng.
-  const requested = resolveReportPeriod(params, options);
+  // `?year=&month=` cũ vẫn là cửa sổ tháng. Khi URL không chọn mốc nào: mở tháng gần nhất có phát sinh
+  // (không sau hôm nay) thay vì tháng hiện tại, để đầu tháng chưa nhập liệu không ra bảng toàn số 0.
+  const hasExplicitPeriod = params.period !== undefined || params.year !== undefined;
+  const latest = hasExplicitPeriod ? null : await latestMaterialActivityDate(toBusinessDateUtc(now));
+  const requested = latest
+    ? resolveReportPeriod(
+        { period: "month", y: String(latest.getUTCFullYear()), m: String(latest.getUTCMonth() + 1) },
+        options,
+      )
+    : resolveReportPeriod(params, options);
   const periodError = "error" in requested ? requested.error : null;
   const period = "error" in requested ? resolveReportPeriod({}, options) : requested;
   if ("error" in period) throw new Error(period.error);
@@ -54,12 +67,12 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Báo cáo tháng - Vật tư</h1>
           <p className="text-sm text-muted-foreground">Phải Trả Đầu Kỳ / PS / Phải Trả Cuối Kỳ theo nhà cung cấp</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <ExcelExportButton
             template="cong-no-monthly"
             params={{ ledgerType: "material", ...period.params, entityId }}

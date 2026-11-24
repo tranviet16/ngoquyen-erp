@@ -1,0 +1,7 @@
+[Vật tư] 99/99 cặp khớp
+[Nhân công] 0/0 cặp khớp
+(lần 1: 2026-11-18 sau Phase 4, bản sao localhost:3001, exit 0)
+
+[Vật tư] 99/99 cặp khớp
+[Nhân công] 1/1 cặp khớp
+(lần 2: 2026-11-18 16:0x sau dry-run Phase 6 — có 1 cặp nhân công nhập thử, exit 0)

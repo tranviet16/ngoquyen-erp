@@ -20,7 +20,7 @@ interface Props {
   selectedEntityIds: number[];
 }
 
-const SELECT_CLS = "h-10 rounded-md border border-input bg-background text-foreground px-3 text-sm";
+const SELECT_CLS = "h-9 rounded-md border border-input bg-background text-foreground px-3 text-sm shadow-sm";
 
 /** Bộ lọc tổng hợp theo công trình: mốc thời gian, chiều nhóm, Chủ thể; chỉ ghi URL khi bấm Áp dụng. */
 export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selectedEntityIds }: Props) {
@@ -48,7 +48,7 @@ export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selec
 
   return (
     <div className="rounded-md border bg-muted/20 p-4 space-y-4 no-print">
-      <div className="flex flex-wrap items-start gap-4">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
         <ReportPeriodSelector value={period} onChange={setPeriod} />
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="tong-hop-cong-trinh-group">Nhóm theo</Label>
@@ -64,7 +64,7 @@ export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selec
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium">Chủ thể</label>
+          <Label>Chủ thể</Label>
           <ControlledMultiSelect options={entities} selected={entityIds} label="chủ thể" onChange={setEntityIds} />
         </div>
       </div>

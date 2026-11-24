@@ -8,7 +8,9 @@
  *   - Mã nhóm / đầu mối / Dòng DT của công trình khác bị từ chối;
  *   - quyền: `read` chỉ xem, `create` thêm được nhưng không sửa / xóa / nhập H-S-X-Z, `edit` làm được hết;
  *   - mỗi NCC một dòng, tên đầu mối / mã nhóm trùng → thông điệp tiếng Việt; xác nhận hàng loạt ghi đúng
- *     một dòng audit.
+ *     một dòng audit;
+ *   - dòng nguồn của khóa đang mở (`loadAliasSourceLines`): tối đa 20 dòng, chỉ trong công trình, người
+ *     không có quyền đọc công trình bị từ chối.
  */
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import { authMock, clearSession, mockSession } from "@/test/helpers/session-mock";
@@ -27,6 +29,7 @@ import { truncateAll, closeTestDb } from "@/test/helpers/test-db";
 import { dtLineKeyOf, itemKeyOf } from "@/lib/du-an/dt-hd-tt/keys";
 import { syncDerivedTransactions } from "@/lib/du-an/dt-hd-tt/invoice-transaction-sync";
 import { confirmAliases, createAlias, listAliasBoard, softDeleteAlias, updateAlias } from "@/lib/du-an/dt-hd-tt/alias-service";
+import { loadAliasSourceLines } from "@/lib/du-an/dt-hd-tt/alias-source-lines";
 import { createGroupCode, listGroupCodes, softDeleteGroupCode, updateGroupCode } from "@/lib/du-an/dt-hd-tt/group-code-service";
 import {
   createCounterparty, createCounterpartySupplier, listCounterparties, updateCounterparty, updateCounterpartySupplier,
@@ -347,5 +350,46 @@ describe("màn Ánh xạ, Đầu mối, Mã nhóm của Đối chiếu DT-HĐ-TT
     expectOk(await updateCounterpartySupplier(link.id, w.projectId, { paidOverrideVnd: 1 }));
     const audits = await prisma.auditLog.findMany({ where: { tableName: "ProjectItemAlias", recordId: String(alias.id) } });
     expect(audits.map((a) => [a.action, a.userId]).sort()).toEqual([["create", CREATOR], ["update", EDITOR]]);
+  });
+
+  it("dòng nguồn của khóa đang mở: tối đa 20 dòng, chỉ trong công trình, người không có quyền đọc bị từ chối", async () => {
+    // Tên / số bịa cho test. 22 dòng cùng khóa trong công trình, ngày tăng dần; thêm một dòng đã xóa mềm
+    // và một dòng cùng khóa ở công trình khác, cả hai ngày sớm hơn — lọt phạm vi thì sẽ đứng đầu danh sách.
+    const key = itemKeyOf("Gạch mẫu thử", "viên");
+    const line = (projectId: number, n: number, day: Date, deletedAt: Date | null = null) =>
+      prisma.projectInvoiceLine.create({
+        data: {
+          projectId, supplierId: w.supplierId, invoiceNo: `T-${n}`, invoiceDate: day, itemName: "Gạch mẫu thử", unit: "viên", itemKey: key,
+          qty: 10, unitPrice: 1_000, amountVnd: 10_000, deletedAt,
+        },
+      });
+    for (let i = 0; i < 22; i++) await line(w.projectId, 100 + i, new Date(Date.UTC(2026, 10, 1 + i)));
+    const deleted = await line(w.projectId, 900, new Date(Date.UTC(2026, 9, 1)), new Date());
+    const foreign = await line(w.otherProjectId, 901, new Date(Date.UTC(2026, 9, 2)));
+    await prisma.user.create({ data: { id: "map-outsider", name: "map-outsider", email: "map-outsider@test.local", role: "viewer" } });
+    await prisma.modulePermission.create({ data: { userId: "map-outsider", moduleKey: "du-an", level: "edit" } });
+
+    as(READER);
+    const hd = await loadAliasSourceLines(w.projectId, "hd", key);
+    expect(hd).toMatchObject({ source: "hd", itemKey: key });
+    expect(hd.lines).toHaveLength(20);
+    expect(hd.lines.map((l) => l.invoiceNo)).toEqual(Array.from({ length: 20 }, (_, i) => `T-${100 + i}`));
+    const ids = hd.lines.map((l) => l.id);
+    expect(ids).not.toContain(deleted.id);
+    expect(ids).not.toContain(foreign.id);
+    const stored = await prisma.projectInvoiceLine.findMany({ where: { id: { in: ids } }, select: { projectId: true, deletedAt: true } });
+    expect(stored.every((r) => r.projectId === w.projectId && r.deletedAt === null)).toBe(true);
+    const supplier = await prisma.supplier.findUniqueOrThrow({ where: { id: w.supplierId } });
+    expect(hd.lines[0]).toMatchObject({ party: supplier.name, supplierId: w.supplierId, qty: 10, unitPrice: 1_000, amount: 10_000 });
+
+    // Khóa thực tế nhập của seed: một dòng, gắn đầu mối của công trình.
+    const tt = await loadAliasSourceLines(w.projectId, "tt", itemKeyOf("Cát vàng", "m3"));
+    const cp = await prisma.projectCounterparty.findUniqueOrThrow({ where: { id: w.counterpartyId } });
+    expect(tt.lines).toEqual([expect.objectContaining({ party: cp.name, supplierId: null, invoiceNo: null, amount: 3_000_000 })]);
+
+    // Không có quyền đọc công trình (READER ở công trình khác; người chỉ có quyền module): bị từ chối.
+    await expect(loadAliasSourceLines(w.otherProjectId, "hd", key)).rejects.toThrow("Forbidden");
+    as("map-outsider");
+    await expect(loadAliasSourceLines(w.projectId, "hd", key)).rejects.toThrow("Forbidden");
   });
 });

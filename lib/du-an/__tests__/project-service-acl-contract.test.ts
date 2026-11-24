@@ -7,6 +7,7 @@ const serviceFiles = [
   "cashflow-service.ts",
   "change-order-service.ts",
   "contract-service.ts",
+  "cdt-invoice-service.ts",
   "estimate-service.ts",
   "norm-service.ts",
   "schedule-service.ts",

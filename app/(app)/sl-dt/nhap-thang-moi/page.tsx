@@ -155,7 +155,7 @@ export default async function NhapThangMoiPage({ searchParams }: Props) {
       <form className="flex gap-2 items-center flex-wrap">
         <label className="text-sm text-muted-foreground">Kỳ:</label>
         <MonthYearPicker year={tgt.year} month={tgt.month} yearOptions={yearOptions} />
-        <button type="submit" className="h-10 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Mở</button>
+        <button type="submit" className="h-9 px-4 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">Mở</button>
       </form>
 
       {isEmpty ? (
