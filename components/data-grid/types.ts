@@ -34,6 +34,11 @@ export interface DataGridColumn<T> {
   sortAccessor?: (row: T) => unknown;
   /** Data columns are sortable by default; set false only for non-orderable columns. */
   sortable?: boolean;
+  /**
+   * Giá trị dùng để lọc `text` / `equals` thay cho giá trị ô (như `sortAccessor` cho sắp xếp). Dùng khi
+   * giá trị lọc khác giá trị lưu, vd. ô trống ↔ lựa chọn "none" (`""` đã là "Tất cả" ở ô lọc).
+   */
+  filterAccessor?: (row: T) => string;
   /** Show a filter widget in the filter bar for this column. */
   filterable?: boolean;
   /** Widget kind to render in filter bar. Defaults to column `kind` if omitted. */

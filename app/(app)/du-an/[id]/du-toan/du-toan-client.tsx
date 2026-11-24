@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { ScreenStateHook } from "@/components/du-an/dt-hd-tt/screen-state-hook";
 import { Button } from "@/components/ui/button";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useGroupedSortableRows } from "@/components/grouped-table/use-grouped-sortable-rows";
@@ -22,6 +24,7 @@ import {
   type HmGroup,
   type SectionGroup,
 } from "@/lib/du-an/category-tree";
+import { DU_TOAN_KINDLESS, screenHref } from "@/lib/du-an/dt-hd-tt/screen-links";
 import { EstimateForm } from "./du-toan-form";
 
 type EstimateRow = {
@@ -47,6 +50,10 @@ interface Props {
   canEdit: boolean;
   canDelete: boolean;
   isAdmin?: boolean;
+  /** Dòng có hạng mục chưa có loại VL / NC / MTC (cùng quy tắc báo cáo, tính ở server). */
+  kindlessIds: number[];
+  /** `?loai=thieu`: chỉ hiện các dòng đó (lọc chỉ xem, bỏ lọc = về trang trần). */
+  kindlessOnly: boolean;
 }
 
 function fmt(n: number): string {
@@ -171,6 +178,8 @@ export function DuToanClient({
   canEdit,
   canDelete,
   isAdmin = false,
+  kindlessIds,
+  kindlessOnly,
 }: Props) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
@@ -183,8 +192,15 @@ export function DuToanClient({
     () => new Map<number, CategoryLite>(categories.map((c) => [c.id, c])),
     [categories],
   );
+  // Dòng có hạng mục đã xóa vẫn hiện: buildCategoryTree đưa chúng vào nhóm "Không xác định".
+  const shownData = useMemo(() => {
+    if (!kindlessOnly) return initialData;
+    const kindless = new Set(kindlessIds);
+    return initialData.filter((r) => kindless.has(r.id));
+  }, [initialData, kindlessIds, kindlessOnly]);
+  const shownTotal = useMemo(() => shownData.reduce((sum, r) => sum + Number(r.totalVnd), 0), [shownData]);
   const { sort, sortedRows, toggleSort } = useGroupedSortableRows(
-    initialData,
+    shownData,
     sortColumns,
     (row) => String(row.categoryId),
   );
@@ -346,6 +362,18 @@ export function DuToanClient({
         &quot;Sửa&quot; từng dòng. Thành tiền = SL × Đơn giá (tự tính).
       </p>
 
+      {kindlessOnly && (
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-0.5 text-amber-900">
+            Đang lọc: hạng mục chưa có loại VL / NC / MTC · {shownData.length} dòng · {vndFormatter(shownTotal)}
+          </span>
+          <Link href={screenHref(projectId, "du-toan")} className="text-muted-foreground underline hover:text-foreground">
+            Bỏ lọc
+          </Link>
+          <span className="text-xs text-muted-foreground">Sửa hạng mục của dòng sang mã có hậu tố -VL / -NC / -MAY để báo cáo xếp loại.</span>
+        </p>
+      )}
+
       <div className="overflow-x-auto rounded border">
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="sticky top-0 z-10 bg-background">
@@ -382,13 +410,19 @@ export function DuToanClient({
           </tbody>
           <tfoot>
             <tr className="sticky bottom-0 bg-muted font-bold">
-              <td colSpan={5} className="px-2 py-1.5">TỔNG CỘNG</td>
-              <td className="px-2 py-1.5 text-right">{fmt(grandTotal)}</td>
+              <td colSpan={5} className="px-2 py-1.5">{kindlessOnly ? "CỘNG CÁC DÒNG ĐANG LỌC" : "TỔNG CỘNG"}</td>
+              <td className="px-2 py-1.5 text-right">{fmt(kindlessOnly ? shownTotal : grandTotal)}</td>
               <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
       </div>
+      <ScreenStateHook
+        name="du-toan"
+        state={kindlessOnly ? { loai: DU_TOAN_KINDLESS } : {}}
+        visibleRows={shownData.length}
+        samples={{ loai: kindlessIds.length > 0 ? [DU_TOAN_KINDLESS] : [] }}
+      />
 
       <CrudDialog title="Thêm hạng mục dự toán" open={createOpen} onOpenChange={setCreateOpen}>
         <EstimateForm projectId={projectId} categories={categories} onSubmit={handleCreate} />

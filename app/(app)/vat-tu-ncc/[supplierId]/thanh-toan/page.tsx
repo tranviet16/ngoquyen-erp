@@ -35,7 +35,7 @@ export default async function ThanhToanPage({ params, searchParams }: Props) {
   });
   if (!project) notFound();
 
-  const [txResult, entities, signedPeriods, cutoverDate, currentDebt, canCreate, canEdit] = await Promise.all([
+  const [txResult, entities, signedPeriods, cutoverDate, currentDebt, canCreate, canEdit, user] = await Promise.all([
     listMaterialTransactions({ partyId: id, projectId, transactionTypes: ["thanh_toan", "thue_hd"], pageSize: 500 }),
     // Chủ thể của ghi vật tư = Chủ thể của công trình (server luôn suy lại); chưa gán thì liệt kê đủ
     // để form hợp lệ — server sẽ báo lỗi "Công trình chưa gán Chủ thể" khi lưu.
@@ -54,7 +54,10 @@ export default async function ThanhToanPage({ params, searchParams }: Props) {
     pairBalanceAsOf(id, projectId, toBusinessDateUtc(new Date())),
     canAccessEntitlement(userId, "cong-no-vt", { minLevel: "create", scope: "module" }),
     canAccessEntitlement(userId, "cong-no-vt", { minLevel: "edit", scope: "module" }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true, isActive: true } }),
   ]);
+  // Admin được xác nhận ghi / sửa / xoá trong kỳ đã ký / giai đoạn chuyển đổi; server kiểm lại khi lưu.
+  const canOverrideLocked = user?.role === "admin" && user.isActive === true;
 
   const rows: PaymentTxRow[] = txResult.items.map((t) => {
     const day = toBusinessDateUtc(t.date).getTime();
@@ -96,6 +99,7 @@ export default async function ThanhToanPage({ params, searchParams }: Props) {
         cutoverDate={cutoverDate ? isoDay(cutoverDate) : null}
         canCreate={canCreate}
         canEdit={canEdit}
+        canOverrideLocked={canOverrideLocked}
       />
     </Suspense>
   );

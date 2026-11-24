@@ -120,6 +120,56 @@ export function effectiveGroupResolver(aliases: readonly GroupedAlias[], dtLineK
   return (a) => (a.source !== "dt" && a.dtKey !== null && dtLineKeys.has(a.dtKey) ? dtGroup.get(a.dtKey) ?? null : a.groupCodeId);
 }
 
+/** Trạng thái của một khóa như báo cáo hiểu nó: "chua_gan" hoặc trạng thái alias đang lưu. */
+export type EffectiveAliasStatus = AliasStatus | "chua_gan";
+
+export interface StatusAlias {
+  status: AliasStatus;
+  dtKey: string | null;
+  /** Mã nhóm ĐANG LƯU trên alias (không phải nhóm hiệu lực). */
+  groupCodeId: number | null;
+}
+
+/**
+ * Định nghĩa "chưa gán" duy nhất, khớp cách báo cáo xếp dòng (`buildBookIndex`, book-index.ts): khóa
+ * không có alias là chưa gán; alias hd / tt không phải "Ngoài DT", trỏ tới một Dòng DT không còn trong dự
+ * toán (đã đổi tên / xóa) và không có Mã nhóm cũng là chưa gán, vì báo cáo đưa dòng đó xuống Phần B. Mọi
+ * trường hợp khác giữ trạng thái đang lưu; alias dt luôn giữ trạng thái đang lưu. Dùng cho huy hiệu, Tổng
+ * quan, bộ lọc / đầu trang Ánh xạ và link Phần B — để mọi nơi đếm cùng một tập.
+ */
+export function effectiveAliasStatus(source: AliasSource, alias: StatusAlias | null | undefined, liveDtKeys: ReadonlySet<string>): EffectiveAliasStatus {
+  if (!alias) return "chua_gan";
+  if (source === "dt" || alias.status === "ngoai_dt") return alias.status;
+  if (alias.dtKey !== null && liveDtKeys.has(alias.dtKey)) return alias.status;
+  if (alias.groupCodeId !== null) return alias.status;
+  return "chua_gan";
+}
+
+export interface AliasQueueEntry {
+  source: AliasSource;
+  itemKey: string;
+  alias: StatusAlias | null;
+}
+
+export interface AliasQueueSummary {
+  chuaGan: Record<AliasSource, number>;
+  deXuat: Record<AliasSource, number>;
+  /** Tổng số khóa chưa gán của cả ba nguồn (huy hiệu của mục Ánh xạ). */
+  chuaGanTotal: number;
+}
+
+/** Đếm khóa chưa gán / đề xuất theo nguồn, qua `effectiveAliasStatus`. `entries` là các khóa còn dòng nguồn. */
+export function aliasQueueSummary(entries: Iterable<AliasQueueEntry>, liveDtKeys: ReadonlySet<string>): AliasQueueSummary {
+  const chuaGan: Record<AliasSource, number> = { dt: 0, hd: 0, tt: 0 };
+  const deXuat: Record<AliasSource, number> = { dt: 0, hd: 0, tt: 0 };
+  for (const e of entries) {
+    const status = effectiveAliasStatus(e.source, e.alias, liveDtKeys);
+    if (status === "chua_gan") chuaGan[e.source]++;
+    else if (status === "de_xuat") deXuat[e.source]++;
+  }
+  return { chuaGan, deXuat, chuaGanTotal: chuaGan.dt + chuaGan.hd + chuaGan.tt };
+}
+
 function sourceRows(
   source: "hd" | "tt",
   lines: BoardSourceLine[],

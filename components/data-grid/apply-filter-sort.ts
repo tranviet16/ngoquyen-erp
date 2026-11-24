@@ -59,8 +59,8 @@ function passesFilter<T extends RowWithId>(
 
   switch (filter.kind) {
     case "text": {
-      const haystack = getCellText(row, col).toLowerCase();
-      return haystack.includes(filter.value.toLowerCase());
+      const text = col.filterAccessor ? col.filterAccessor(row) : getCellText(row, col);
+      return text.toLowerCase().includes(filter.value.toLowerCase());
     }
     case "range": {
       const n = raw == null ? NaN : Number(raw);
@@ -84,7 +84,8 @@ function passesFilter<T extends RowWithId>(
       return true;
     }
     case "equals": {
-      return String(raw ?? "") === filter.value;
+      const value = col.filterAccessor ? col.filterAccessor(row) : String(raw ?? "");
+      return value === filter.value;
     }
     default:
       return true;

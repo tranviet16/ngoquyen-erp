@@ -13,8 +13,9 @@
 
 import { Prisma } from "@prisma/client";
 import { normVtName } from "@/lib/text/norm-vt-name";
+import { kindOfCategoryCode, type CostKind } from "./cost-kind";
 
-export type CostKind = "VL" | "NC" | "MTC";
+export { kindOfCategoryCode, type CostKind };
 
 /** ĐVT đã chuẩn hóa (sau NFKD + normVtName) → dạng chính tắc. */
 const UNIT_ALIASES: Record<string, string> = {
@@ -38,15 +39,6 @@ export function itemKeyOf(name: string, unit: string | null | undefined): string
 
 export function dtLineKeyOf(name: string, unit: string | null | undefined, kind: CostKind): string {
   return `${itemKeyOf(name, unit)}|${kind}`;
-}
-
-/** Loại chi phí của hạng mục theo hậu tố mã (HM1-VL, HM1-NC, HM1-MAY…); null = không phải VL/NC/MTC. */
-export function kindOfCategoryCode(code: string): CostKind | null {
-  const suffix = code.trim().toUpperCase().split("-").pop();
-  if (suffix === "VL") return "VL";
-  if (suffix === "NC") return "NC";
-  if (suffix === "MAY" || suffix === "MTC") return "MTC";
-  return null;
 }
 
 type Num = Prisma.Decimal | number | string;
