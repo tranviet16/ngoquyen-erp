@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -6,23 +7,8 @@ import { isAdmin } from "@/lib/rbac";
 import { queryProjectById } from "@/lib/master-data/project-query";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { ProjectEditButton } from "@/components/master-data/project-edit-button";
-
-const TABS = [
-  { href: "", label: "Dashboard" },
-  { href: "/tien-do", label: "Tiến Độ" },
-  { href: "/nghiem-thu", label: "Nghiệm Thu" },
-  { href: "/du-toan", label: "Dự Toán" },
-  { href: "/du-toan-dieu-chinh", label: "DT Điều Chỉnh" },
-  { href: "/phat-sinh", label: "Phát Sinh (CO)" },
-  { href: "/dinh-muc", label: "Định Mức" },
-  { href: "/giao-dich", label: "Giao Dịch" },
-  { href: "/can-doi-vat-tu", label: "Cân Đối VT" },
-  { href: "/dt-hd-tt", label: "Đối chiếu DT-HĐ-TT" },
-  { href: "/hop-dong", label: "Hợp Đồng" },
-  { href: "/dong-tien-3-ben", label: "Dòng Tiền 3 Bên" },
-  { href: "/cong-no", label: "Công Nợ NCC" },
-  { href: "/cai-dat", label: "Cài Đặt" },
-];
+import { ProjectNav } from "@/components/du-an/project-nav";
+import { BookNote } from "@/components/du-an/book-note";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -78,19 +64,16 @@ export default async function ProjectLayout({ params, children }: Props) {
         )}
       </div>
 
-      {/* Tab bar */}
-      <div className="border-b overflow-x-auto">
-        <nav className="flex gap-0 min-w-max">
-          {TABS.map((tab) => (
-            <Link
-              key={tab.href}
-              href={`${basePath}${tab.href}`}
-              className="px-4 py-2 text-sm font-medium border-b-2 border-transparent hover:border-primary hover:text-primary transition-colors whitespace-nowrap text-muted-foreground"
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+      {/* Điều hướng hai hàng: 7 nhóm, rồi tab của nhóm đang mở. Ghi chú sổ đội tải riêng (Suspense). */}
+      <div className="border-b">
+        <ProjectNav
+          basePath={basePath}
+          bookNote={
+            <Suspense fallback={null}>
+              <BookNote projectId={projectId} />
+            </Suspense>
+          }
+        />
       </div>
 
       <div>{children}</div>

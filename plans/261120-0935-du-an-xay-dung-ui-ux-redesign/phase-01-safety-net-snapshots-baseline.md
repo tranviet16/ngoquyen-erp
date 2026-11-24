@@ -119,7 +119,7 @@ Before any app file changes, make it detectable when print markup, print text, P
 
 ## Todo
 
-- [ ] View and Excel snapshot test written; snapshot committed
+- [x] View and Excel snapshot test written; snapshot committed
 - [x] Sign-in helper saves a storage state; no credential in any file, env var or command
 - [x] Baseline script with `capture`, `capture --recheck` and `compare`; required `--base-url`, loopback guards, build-id guard and input fingerprint
 - [x] `origin/main` served on `127.0.0.1:3002` with `HOSTNAME` set; SHA and build id in the manifest
