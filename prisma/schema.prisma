@@ -49,10 +49,10 @@ model User {
   projectGrantAll           ProjectGrantAll?    @relation("ProjectGrantAllUser")
   projectGrantAllGranted    ProjectGrantAll[]   @relation("ProjectGrantAllGranter")
 
-  paymentRoundsCreated  PaymentRound[]     @relation("PaymentRoundCreator")
-  paymentRoundsApproved PaymentRound[]     @relation("PaymentRoundApprover")
-  paymentItemsApproved  PaymentRoundItem[] @relation("PaymentItemApprover")
-  financePrSyncBatches FinancePrSyncBatch[] @relation("FinancePrSyncBatchCreator")
+  paymentRoundsCreated  PaymentRound[]       @relation("PaymentRoundCreator")
+  paymentRoundsApproved PaymentRound[]       @relation("PaymentRoundApprover")
+  paymentItemsApproved  PaymentRoundItem[]   @relation("PaymentItemApprover")
+  financePrSyncBatches  FinancePrSyncBatch[] @relation("FinancePrSyncBatchCreator")
 
   @@index([departmentId])
   @@map("users")
@@ -71,8 +71,8 @@ model Department {
   coordinationFormsAsCreator  CoordinationForm[] @relation("CFormCreatorDept")
   coordinationFormsAsExecutor CoordinationForm[] @relation("CFormExecutorDept")
 
-  tasks      Task[]
-  userAccess UserDeptAccess[]
+  tasks         Task[]
+  userAccess    UserDeptAccess[]
   paymentRounds PaymentRound[]
 
   @@map("departments")
@@ -244,6 +244,10 @@ model Supplier {
 
   paymentItems PaymentRoundItem[]
 
+  projectInvoiceLines          ProjectInvoiceLine[]
+  projectCounterpartySuppliers ProjectCounterpartySupplier[]
+  projectCashPayments          ProjectCashPayment[]
+
   // Partial unique enforced via raw SQL: suppliers_name_active_unique WHERE "deletedAt" IS NULL
   @@index([name])
   @@map("suppliers")
@@ -378,31 +382,35 @@ model ProjectAcceptance {
 }
 
 model ProjectEstimate {
-  id         Int       @id @default(autoincrement())
-  projectId  Int
-  categoryId Int
-  itemCode   String
-  itemName   String
-  unit       String
-  qty        Decimal   @db.Decimal(18, 4)
-  unitPrice  Decimal   @db.Decimal(18, 2)
-  totalVnd   Decimal   @default(0) @db.Decimal(18, 2) // qty * unitPrice, computed on write
+  id                          Int       @id @default(autoincrement())
+  projectId                   Int
+  categoryId                  Int
+  itemCode                    String
+  itemName                    String
+  unit                        String
+  qty                         Decimal   @db.Decimal(18, 4)
+  unitPrice                   Decimal   @db.Decimal(18, 2)
+  totalVnd                    Decimal   @default(0) @db.Decimal(18, 2) // qty * unitPrice, computed on write
   // NULL = "Còn phải lấy HĐ" tự tính (totalVnd − Σ amountHd); có giá trị = người dùng ghi đè
-  remainingInvoiceOverrideVnd Decimal? @db.Decimal(18, 2)
+  remainingInvoiceOverrideVnd Decimal?  @db.Decimal(18, 2)
   // Nhóm vật liệu thay thế cho nhau (đánh giá định mức theo nhóm); NULL = không thuộc nhóm
-  materialGroupId Int?
-  note       String?
-  deletedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @default(now())
+  materialGroupId             Int?
+  note                        String?
+  deletedAt                   DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @default(now())
 
-  importRunId Int?
-  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
-  materialGroup ProjectMaterialGroup? @relation(fields: [materialGroupId], references: [id], onDelete: SetNull)
+  importRunId       Int?
+  importRun         ImportRun?            @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  materialGroup     ProjectMaterialGroup? @relation(fields: [materialGroupId], references: [id], onDelete: SetNull)
+  // Run "Đối chiếu DT-HĐ-TT" đã thay dòng này khi đồng bộ dự toán theo file của đội (dòng bị xóa mềm
+  // cùng lúc). Hoàn tác run đó khôi phục đúng tập dòng này; không phải khóa ngoại.
+  supersededByRunId Int?
 
   @@index([projectId, categoryId])
   @@index([importRunId])
   @@index([materialGroupId])
+  @@index([supersededByRunId])
   @@map("project_estimates")
 }
 
@@ -478,11 +486,18 @@ model ProjectTransaction {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now())
 
-  importRunId Int?
-  importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  importRunId         Int?
+  importRun           ImportRun?          @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  // Run "Đối chiếu DT-HĐ-TT" đã thay dòng này (dòng bị xóa mềm cùng lúc); hoàn tác run đó khôi phục.
+  supersededByRunId   Int?
+  // Dòng sinh tự động từ sổ Hóa đơn để các tab cũ vẫn thấy hóa đơn; chỉ xem, sửa ở sổ Hóa đơn.
+  sourceInvoiceLineId Int?
+  sourceInvoiceLine   ProjectInvoiceLine? @relation(fields: [sourceInvoiceLineId], references: [id], onDelete: Restrict)
 
   @@index([projectId, categoryId])
   @@index([importRunId])
+  @@index([supersededByRunId])
+  @@index([sourceInvoiceLineId])
   @@map("project_transactions")
 }
 
@@ -535,17 +550,235 @@ model Project3WayCashflow {
 }
 
 model ProjectSettings {
-  projectId           Int      @id
-  vatPct              Decimal  @default(0.1) @db.Decimal(5, 4)
-  normYellowThreshold Decimal  @default(0.8) @db.Decimal(5, 4)
-  normRedThreshold    Decimal  @default(0.95) @db.Decimal(5, 4)
-  contractWarningDays Int      @default(90)
-  managementFeePct    Decimal  @default(0.05) @db.Decimal(5, 4)
-  teamSharePct        Decimal  @default(0.85) @db.Decimal(5, 4)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @default(now())
+  projectId            Int      @id
+  vatPct               Decimal  @default(0.1) @db.Decimal(5, 4)
+  normYellowThreshold  Decimal  @default(0.8) @db.Decimal(5, 4)
+  normRedThreshold     Decimal  @default(0.95) @db.Decimal(5, 4)
+  contractWarningDays  Int      @default(90)
+  managementFeePct     Decimal  @default(0.05) @db.Decimal(5, 4)
+  teamSharePct         Decimal  @default(0.85) @db.Decimal(5, 4)
+  // Tỷ lệ Phần III báo cáo DT-TT (tổng hợp dự toán theo cấp chi phí); VAT dùng vatPct.
+  generalCostPct       Decimal  @default(0.07) @db.Decimal(5, 4) // chi phí chung, × T
+  tempHousingPct       Decimal  @default(0.01) @db.Decimal(5, 4) // nhà tạm để ở và điều hành, × T
+  unmeasuredPct        Decimal  @default(0.03) @db.Decimal(5, 4) // việc không xác định được KL, × T
+  presumptiveIncomePct Decimal  @default(0.06) @db.Decimal(5, 4) // thu nhập chịu thuế tính trước, × (T + GT)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @default(now())
 
   @@map("project_settings")
+}
+
+// ─── Đối chiếu DT-HĐ-TT: sổ của đội (hóa đơn, thực tế nhập, chi thực tế) ─────
+// Mọi bảng: partial unique viết SQL thô WHERE "deletedAt" IS NULL; updatedAt có @updatedAt để guard
+// hoàn tác nhận ra dòng đã sửa sau commit. Khóa ngoại giữa các bảng dự án dùng Restrict.
+
+// Mã nhóm vật tư dự toán (COC-BTLT, THEP-TRON…) kèm NCC phụ trách (đầu mối).
+model ProjectGroupCode {
+  id             Int       @id @default(autoincrement())
+  projectId      Int
+  code           String
+  name           String
+  counterpartyId Int?
+  // Thuộc Phần I "vật tư chính" của báo cáo DT-TT.
+  isMainMaterial Boolean   @default(false)
+  sortOrder      Int       @default(0)
+  note           String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  importRunId  Int?
+  importRun    ImportRun?           @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  counterparty ProjectCounterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  aliases      ProjectItemAlias[]
+
+  // Partial unique (projectId, code) WHERE "deletedAt" IS NULL — raw SQL
+  @@index([projectId])
+  @@index([importRunId])
+  @@index([counterpartyId])
+  @@map("project_group_codes")
+}
+
+// Ánh xạ tên|ĐVT của dự toán / hóa đơn / thực tế nhập → Mã nhóm, dòng dự toán, hệ số.
+// Dòng chưa có alias = "chưa gán" (không lưu); mapping chỉ quyết định dòng hiện ở đâu.
+model ProjectItemAlias {
+  id          Int       @id @default(autoincrement())
+  projectId   Int
+  source      String // dt | hd | tt
+  itemKey     String // normVtName(tên)|normUnit(ĐVT); alias dt thêm |loại
+  itemName    String
+  unit        String
+  groupCodeId Int?
+  kind        String? // VL | NC | MTC — chỉ alias dt (loại theo từng dòng dự toán)
+  dtKey       String? // khóa dòng dự toán đích — chỉ alias hd / tt
+  // KL theo ĐVT dự toán trên 1 ĐVT nguồn; NULL = theo dõi theo giá trị.
+  factor      Decimal?  @db.Decimal(18, 6)
+  status      String    @default("de_xuat") // xac_nhan | de_xuat | ngoai_dt
+  note        String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  importRunId Int?
+  importRun   ImportRun?        @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  groupCode   ProjectGroupCode? @relation(fields: [groupCodeId], references: [id], onDelete: Restrict)
+
+  // Partial unique (projectId, source, itemKey) WHERE "deletedAt" IS NULL — raw SQL
+  @@index([projectId])
+  @@index([importRunId])
+  @@index([groupCodeId])
+  @@map("project_item_aliases")
+}
+
+// Đầu mối = một dòng Phần II báo cáo DT-TT (NCC gộp, tổ nhân công, khoản khác).
+model ProjectCounterparty {
+  id              Int       @id @default(autoincrement())
+  projectId       Int
+  name            String
+  kind            String // ncc | to_nhan_cong | khac
+  sortGroup       String?
+  sortOrder       Int       @default(0)
+  // Nguồn thực tế: receipts (Σ thực tế nhập gắn đầu mối) | invoices (Σ HĐ × (1+VAT))
+  // | payments (Σ chi thực tế) | manual (số chốt nhập tay).
+  actualBasis     String    @default("manual")
+  actualManualVnd Decimal?  @db.Decimal(18, 2)
+  // Mục sổ chi (I–IV) cộng vào thực tế khi actualBasis = payments.
+  paymentSection  String?
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  importRunId Int?
+  importRun   ImportRun?                    @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  groupCodes  ProjectGroupCode[]
+  suppliers   ProjectCounterpartySupplier[]
+  receipts    ProjectActualReceipt[]
+  payments    ProjectCashPayment[]
+
+  // Partial unique (projectId, name) WHERE "deletedAt" IS NULL — raw SQL
+  @@index([projectId])
+  @@index([importRunId])
+  @@map("project_counterparties")
+}
+
+// Một dòng báo cáo HĐ-TT: NCC pháp nhân (mỗi NCC một dòng / công trình), đầu mối nó gộp vào, và các
+// số nhập tay của dòng. counterpartyId NULL = NCC không thuộc đầu mối nào (vd. xuất HĐ thay NCC khác)
+// — thực tế của dòng = 0 nhưng vẫn giữ được thực nộp rà soát / đã lấy về.
+model ProjectCounterpartySupplier {
+  id              Int       @id @default(autoincrement())
+  projectId       Int
+  counterpartyId  Int?
+  supplierId      Int
+  splitActualVnd  Decimal?  @db.Decimal(18, 2) // S: thực tế riêng NCC khi một đầu mối có nhiều NCC
+  paidOverrideVnd Decimal?  @db.Decimal(18, 2) // H: thực nộp rà soát (để trống = theo sổ chi)
+  recoveredVnd    Decimal?  @db.Decimal(18, 2) // X: đã lấy về
+  todoNote        String? // Z: việc cần làm
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  importRunId  Int?
+  importRun    ImportRun?           @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  counterparty ProjectCounterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  supplier     Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  // Partial unique (projectId, supplierId) WHERE "deletedAt" IS NULL — raw SQL
+  @@index([projectId])
+  @@index([importRunId])
+  @@index([counterpartyId])
+  @@map("project_counterparty_suppliers")
+}
+
+// Một dòng hóa đơn (VAT theo dòng, như sheet Hóa Đơn). Số HĐ / ngày / NCC lặp lại trên mỗi dòng.
+model ProjectInvoiceLine {
+  id              Int       @id @default(autoincrement())
+  projectId       Int
+  supplierId      Int
+  invoiceNo       String
+  invoiceDate     DateTime?
+  invoiceDateText String? // ngày gốc khi không đọc được
+  itemName        String
+  unit            String
+  itemKey         String
+  qty             Decimal?  @db.Decimal(18, 4)
+  unitPrice       Decimal?  @db.Decimal(18, 2)
+  amountVnd       Decimal   @db.Decimal(18, 2) // thành tiền chưa VAT
+  vatPct          Decimal?  @db.Decimal(5, 4)
+  vatVnd          Decimal   @default(0) @db.Decimal(18, 2)
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+
+  importRunId         Int?
+  importRun           ImportRun?           @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  supplier            Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  derivedTransactions ProjectTransaction[]
+
+  @@index([projectId, supplierId])
+  @@index([projectId, invoiceDate])
+  @@index([projectId, itemKey])
+  @@index([importRunId])
+  @@map("project_invoice_lines")
+}
+
+// Một dòng thực tế nhập (thành tiền gồm VAT), gắn đầu mối.
+model ProjectActualReceipt {
+  id             Int       @id @default(autoincrement())
+  projectId      Int
+  date           DateTime?
+  dateText       String?
+  itemName       String
+  unit           String
+  itemKey        String
+  qty            Decimal?  @db.Decimal(18, 4)
+  unitPrice      Decimal?  @db.Decimal(18, 2)
+  amountVnd      Decimal   @db.Decimal(18, 2) // gồm VAT
+  counterpartyId Int?
+  blockNo        Int? // số khối (cột A sheet Thực Tế Nhập) khi nhập từ file
+  note           String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  importRunId  Int?
+  importRun    ImportRun?           @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  counterparty ProjectCounterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, counterpartyId])
+  @@index([projectId, itemKey])
+  @@index([importRunId])
+  @@map("project_actual_receipts")
+}
+
+// Một khoản chi thực tế của đội (sổ chi): chuyển khoản + tiền mặt, mục I–IV.
+model ProjectCashPayment {
+  id             Int       @id @default(autoincrement())
+  projectId      Int
+  date           DateTime?
+  dateText       String?
+  content        String
+  bankVnd        Decimal   @default(0) @db.Decimal(18, 2)
+  cashVnd        Decimal   @default(0) @db.Decimal(18, 2)
+  section        String // I | II | III | IV
+  counterpartyId Int?
+  supplierId     Int?
+  note           String?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  importRunId  Int?
+  importRun    ImportRun?           @relation(fields: [importRunId], references: [id], onDelete: SetNull)
+  counterparty ProjectCounterparty? @relation(fields: [counterpartyId], references: [id], onDelete: Restrict)
+  supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, counterpartyId])
+  @@index([projectId, supplierId])
+  @@index([importRunId])
+  @@map("project_cash_payments")
 }
 
 // ─── Vật tư theo NCC Models (Phase 4) ────────────────────────────────────────
@@ -971,6 +1204,13 @@ model ImportRun {
   slDtPaymentPlans             SlDtPaymentPlan[]
   slDtMonthlyInputs            SlDtMonthlyInput[]
   slDtProgressStatuses         SlDtProgressStatus[]
+  projectGroupCodes            ProjectGroupCode[]
+  projectItemAliases           ProjectItemAlias[]
+  projectCounterparties        ProjectCounterparty[]
+  projectCounterpartySuppliers ProjectCounterpartySupplier[]
+  projectInvoiceLines          ProjectInvoiceLine[]
+  projectActualReceipts        ProjectActualReceipt[]
+  projectCashPayments          ProjectCashPayment[]
 
   @@index([adapter, status])
   @@index([createdAt])
@@ -1002,17 +1242,17 @@ model PayableReceivableAdjustment {
 }
 
 model FinancePrSyncBatch {
-  id              Int       @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   sourceModule    String
   periodYear      Int
   periodMonth     Int
-  status          String    @default("completed")
-  startedAt       DateTime  @default(now())
+  status          String          @default("completed")
+  startedAt       DateTime        @default(now())
   finishedAt      DateTime?
   summaryJson     Json?
   errorMessage    String?
   createdByUserId String?
-  createdByUser   User?     @relation("FinancePrSyncBatchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUser   User?           @relation("FinancePrSyncBatchCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   lines           FinancePrLine[]
 
   @@index([sourceModule, periodYear, periodMonth])
@@ -1021,7 +1261,7 @@ model FinancePrSyncBatch {
 }
 
 model FinancePrLine {
-  id                Int       @id @default(autoincrement())
+  id                Int                 @id @default(autoincrement())
   type              String
   sourceModule      String
   sourceKey         String
@@ -1033,16 +1273,16 @@ model FinancePrLine {
   projectId         Int?
   periodYear        Int?
   periodMonth       Int?
-  sourceAmountVnd   Decimal   @db.Decimal(18, 2)
-  overrideAmountVnd Decimal?  @db.Decimal(18, 2)
+  sourceAmountVnd   Decimal             @db.Decimal(18, 2)
+  overrideAmountVnd Decimal?            @db.Decimal(18, 2)
   dueDate           DateTime?
-  status            String    @default("active")
-  isExcluded        Boolean   @default(false)
-  isStale           Boolean   @default(false)
+  status            String              @default("active")
+  isExcluded        Boolean             @default(false)
+  isStale           Boolean             @default(false)
   note              String?
   deletedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
   syncBatchId       Int?
   syncBatch         FinancePrSyncBatch? @relation(fields: [syncBatchId], references: [id], onDelete: SetNull)
 
@@ -1128,12 +1368,12 @@ model ProjectSupplierDebtSnapshot {
 // Replaces SlDtTarget+PaymentSchedule. Lots no longer reuse Project entity.
 
 model SlDtLot {
-  id            Int       @id @default(autoincrement())
-  code          String    @unique
-  lotName       String
-  phaseCode     String    @default("?")
-  groupCode     String    @default("?")
-  sortOrder     Int       @default(0)
+  id              Int       @id @default(autoincrement())
+  code            String    @unique
+  lotName         String
+  phaseCode       String    @default("?")
+  groupCode       String    @default("?")
+  sortOrder       Int       @default(0)
   activeFromYear  Int?
   activeFromMonth Int?
   showInSanLuong  Boolean   @default(true)
@@ -1141,11 +1381,11 @@ model SlDtLot {
   showInChiTieu   Boolean   @default(true)
   showInTienDoXd  Boolean   @default(true)
   showInNopTien   Boolean   @default(true)
-  estimateValue Decimal   @default(0) @db.Decimal(18, 2)
-  contractValue Decimal?  @db.Decimal(18, 2)
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  estimateValue   Decimal   @default(0) @db.Decimal(18, 2)
+  contractValue   Decimal?  @db.Decimal(18, 2)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   importRunId Int?
   importRun   ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)

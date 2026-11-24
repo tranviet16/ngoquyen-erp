@@ -68,6 +68,8 @@ export default async function NhapLieuNcPage() {
         projects={projects}
         items={items}
         partyLabel="Đội thi công"
+        partyKind="contractor"
+        itemTypes={["labor", "machine"]}
         allowedTypes={LABOR_ALLOWED_TYPES}
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: contractors[0]?.id ?? 0 }}
         actions={{
