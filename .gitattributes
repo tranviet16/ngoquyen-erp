@@ -1,0 +1,4 @@
+# Prisma records a checksum of each migration file when it is applied, and compares it on later runs. Keep migration
+# SQL byte-identical on every machine (Windows checkouts with core.autocrlf=true would otherwise turn LF into CRLF and
+# make applied migrations look modified).
+prisma/migrations/**/*.sql text eol=lf

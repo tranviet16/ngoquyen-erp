@@ -73,7 +73,7 @@ admin-pc's ERP is stopped, not deleted, so it stays the rollback until modules r
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | [Phase 1: Assemble the release commit](./phase-01-start.md) | Completed |
-| 2 | [Phase 2: Prepare VIETPC as the production host](./phase-02-prepare-vietpc-as-production-host.md) | Pending |
+| 2 | [Phase 2: Prepare VIETPC as the production host](./phase-02-prepare-vietpc-as-production-host.md) | Completed (tailnet access and monitoring at cutover) |
 | 3 | [Phase 3: Clean and freeze the copy](./phase-03-clean-and-freeze-the-copy.md) | Pending |
 | 4 | [Phase 4: Cutover on VIETPC](./phase-04-cutover-on-vietpc.md) | Pending |
 | 5 | [Phase 5: Post-deploy verification, Excel catch-up and watch](./phase-05-post-deploy-verification.md) | Pending |

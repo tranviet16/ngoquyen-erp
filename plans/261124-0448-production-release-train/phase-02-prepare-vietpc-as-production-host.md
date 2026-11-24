@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Phase 2: Prepare VIETPC as the production host"
-status: pending
+status: completed
 priority: P1
 effort: "0.5–1d"
 dependencies: [1]
@@ -59,6 +59,30 @@ Give VIETPC what admin-pc provides today, so it can run production:
    - `npx prisma migrate status` is up to date (watch for a checksum warning from CRLF/LF line endings; never run `migrate dev` or `migrate reset`);
    - `/api/health` is ok;
    - log in.
+
+## Run log (2026-11-24)
+
+- **Dev copy:**
+  - `ngoquyen-dev-pg` runs on `127.0.0.1:5434` (network `ngoquyen-dev`, restart `unless-stopped`), seeded from a dump of the copy: 62 migrations, row counts equal.
+  - Its env files are in `C:\Users\tranv\.ngoquyen-dev\`, with a new generated password and auth secret, never printed.
+- **Repo (PR #36):**
+  - `serve-local-build.mjs` and the baseline guards accept only 5434, and refuse 5433 and 3001; their unit test passes 5 tests.
+  - Also added: `docker-compose.erp-vietpc.yml`, `backup-erp-vietpc.ps1`, the `deploy.md` section for VIETPC, the attachment storage table, and the test-database example on 5435.
+  - `.gitattributes` keeps migration SQL as LF.
+- **Production env:** `C:\Users\tranv\.ngoquyen-prod\prod.env`, readable only by `tranv`.
+  - The database credentials come from the copy; the `BETTER_AUTH_SECRET` is new.
+  - `UPLOAD_HOST_DIR=C:/Users/tranv/.ngoquyen-prod/uploads`, `RELEASE_TAG=6863630`.
+- **Release image:**
+  - `ngoquyen-erp-vietpc:6863630` (257 MB), built from a clean worktree at `C:\Users\tranv\ngoquyen-prod-build`.
+  - It booted against the dev copy with `/api/health` ok and the login page 200; the test container was removed.
+  - `prisma migrate status` was not run: `dotenv-cli` is missing. Checksums were compared directly instead. Two release migrations carry CRLF checksums, so phase 4 normalizes them.
+- **System settings, approved by the user:**
+  - sleep on AC is now never (it was 15 minutes);
+  - Docker Desktop already starts at login, and Windows Update active hours were already 07–20;
+  - the Task Scheduler job "NgoQuyen ERP backup" runs daily at 02:00. Its first run passed: result 0, dump 6.9 MB, SHA-256 logged in `C:\Users\tranv\ngoquyen-prod-backups\`.
+- **Off-machine copy:** not configured, by the user's choice (local only for now). The backup script takes `-OffsiteDir` when a share is ready.
+- **Left for cutover (phase 4):** `tailscale serve` for 3001 and the Uptime Kuma monitor. Doing either now would expose or monitor the copy app.
+- **Not done:** a test restore of a nightly dump into a scratch database (step 6). The dev-copy seeding already restored a dump of the same database successfully.
 
 ## Verification
 
