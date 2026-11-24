@@ -3,39 +3,10 @@ import { getProjectDashboard } from "@/lib/du-an/dashboard-service";
 import { formatVND, formatDate, formatNumber } from "@/lib/utils/format";
 import { AlertTriangle } from "lucide-react";
 import { requireModuleAccess } from "@/lib/acl/guards";
+import { StatCard } from "@/components/du-an/stat-card";
 
 interface Props {
   params: Promise<{ id: string }>;
-}
-
-function StatCard({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "default" | "success" | "warning" | "danger" | "info";
-}) {
-  const accent =
-    tone === "success"
-      ? "border-emerald-300 dark:border-emerald-500/40"
-      : tone === "warning"
-      ? "border-amber-300 dark:border-amber-500/40"
-      : tone === "danger"
-      ? "border-red-300 dark:border-red-500/40"
-      : tone === "info"
-      ? "border-sky-300 dark:border-sky-500/40"
-      : "border-border";
-  return (
-    <div className={`rounded-lg border bg-card p-4 shadow-sm space-y-1 ${accent}`}>
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="text-2xl font-bold tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
-    </div>
-  );
 }
 
 export default async function ProjectDashboardPage({ params }: Props) {

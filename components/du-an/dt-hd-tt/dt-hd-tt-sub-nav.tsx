@@ -2,8 +2,9 @@
 
 /**
  * Thanh mục con của tab "Đối chiếu DT-HĐ-TT" — đóng vai hàng 2 của khung dự án. Chín mục chia bốn nhóm:
- * Tổng quan · Báo cáo · Nhập sổ · Thiết lập. Mục nào chưa có trang thì `ready: false` và bị ẩn (Tổng quan
- * bật khi trang Tổng quan ra mắt). Mục Ánh xạ mang huy hiệu "chưa gán" do layout truyền vào (Suspense riêng).
+ * Tổng quan · Báo cáo · Nhập sổ · Thiết lập. Mục nào chưa có trang thì `ready: false` và bị ẩn. Tổng quan
+ * là trang index của tab (segment `null`). Mục Ánh xạ mang huy hiệu "chưa gán" do layout truyền vào
+ * (Suspense riêng).
  */
 
 import Link from "next/link";
@@ -21,7 +22,7 @@ export interface DtHdTtSection {
 }
 
 export const DT_HD_TT_SECTIONS: readonly DtHdTtSection[] = [
-  { segment: null, label: "Tổng quan", group: "Tổng quan", ready: false },
+  { segment: null, label: "Tổng quan", group: "Tổng quan", ready: true },
   { segment: "dt-hd", label: "DT-HĐ", group: "Báo cáo", ready: true },
   { segment: "dt-tt", label: "DT-TT", group: "Báo cáo", ready: true },
   { segment: "hd-tt", label: "HĐ-TT", group: "Báo cáo", ready: true },

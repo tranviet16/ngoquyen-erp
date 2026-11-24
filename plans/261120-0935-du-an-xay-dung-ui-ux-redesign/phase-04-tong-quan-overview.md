@@ -171,11 +171,28 @@ Rows with a zero count are hidden. Each count uses the same predicate as its lan
 
 ## Todo
 
-- [ ] `overview.ts` and `overview-todos.ts`; each count uses its landing predicate
-- [ ] `StatCard` extracted; `report-bits.tsx` extended; Tổng quan views
-- [ ] Index page renders Tổng quan; sub-nav entry visible
-- [ ] Explicit guard on the three report pages; four pages added to `PROJECT_PAGE_FILES`
-- [ ] Measure `todos` on project 4 green for every ready target
+- [x] `overview.ts` and `overview-todos.ts`; each count uses its landing predicate
+- [x] `StatCard` extracted; `report-bits.tsx` extended; Tổng quan views
+- [x] Index page renders Tổng quan; sub-nav entry visible
+- [x] Explicit guard on the three report pages; four pages added to `PROJECT_PAGE_FILES`
+- [x] Measure `todos` on project 4 green for every ready target
+
+## Run log (2026-11-23)
+
+- **Branch:** `feat/du-an-ui-redesign-p4-tong-quan`, stacked on phase 3 (PR #27).
+- **Static gate:** unit tests 1542 passed. `tsc`, `lint`, `risk:verify` and `build` are green. These files have no diff: the print snapshot, the three report views, the ACL contract test and `entry-write-guards.ts`.
+- **`measure todos` on `127.0.0.1:3003`:** passes.
+  - Project 4 shows 9 figures and 9 to-dos, with 36 links in all, of which 12 distinct links were clicked.
+  - Every to-do into Ánh xạ, Thực tế nhập and Đầu mối lands filtered.
+  - The nine figures land bare, because `dt-tt` / `hd-tt` become ready targets in phase 7.
+- **`measure nav`:** still passes at 1366 and 1440 px, with the new Tổng quan entry in the DT-HĐ-TT row.
+- **Baseline `compare`:** exits 0. Print, PDF pages, Excel and Dashboard are identical, including after the `StatCard` extraction. Server times are dt-hd 275 → 167 ms, dt-tt 116 → 125, hd-tt 82 → 88 and Dashboard 40 → 32.
+- **Deviations:**
+  - `buildOverview` takes the counterparty link rows, because the "NCC chưa thuộc đầu mối" to-do needs each link's `counterpartyId`.
+  - The HĐ-TT `loc` predicates and the small-amount to-dos compare after rounding to the đồng, as the cells show.
+  - The DT-HĐ check links carry `dauMoi=<id|none>`, and the HĐ-TT `loc` query is built inline until phases 6 and 7 add their builders.
+  - The phase-2 sub-nav test was updated, because Tổng quan is now visible.
+- **Phases 6 and 7 must** add their targets to `READY_TARGETS` together with landing checks in `scripts/dt-hd-tt-baseline/tong-quan-landing.ts`. Until then `measure todos` fails by design.
 
 ## Verification
 
