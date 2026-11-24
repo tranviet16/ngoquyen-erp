@@ -117,7 +117,13 @@ test.describe("vật tư theo công trình", () => {
     expect(wrong?.status()).toBe(404);
   });
 
-  test("ghi phiếu vào kỳ đã ký thì thấy toast lỗi", async ({ asAdmin: page }) => {
+  test("ghi phiếu vào kỳ đã ký: admin được hỏi xác nhận, huỷ thì không ghi", async ({ asAdmin: page }) => {
+    // Admin được hỏi có vẫn thêm phiếu trong kỳ khoá không (window.confirm nêu lý do khoá) — bấm huỷ.
+    const confirmMessages: string[] = [];
+    page.on("dialog", (d) => {
+      confirmMessages.push(d.message());
+      void d.dismiss();
+    });
     await page.goto(`/vat-tu-ncc/${seeded.supplierId}/ngay?projectId=${seeded.projectId}`);
     await page.getByRole("button", { name: "Thêm phiếu nhập" }).click();
 
@@ -131,8 +137,12 @@ test.describe("vật tư theo công trình", () => {
     await dialog.getByLabel("Vật tư").selectOption(String(seeded.itemId));
     await dialog.getByRole("button", { name: "Lưu" }).click();
 
-    // Kỳ đã ký của cặp (hoặc mốc chuyển đổi nếu DB test có run chuyển đổi) chặn ghi — lý do hiện trên toast.
-    await expect(page.getByText(/Thêm phiếu thất bại: .*(đã được NCC ký|chuyển đổi từ Excel)/)).toBeVisible();
+    // Kỳ đã ký của cặp (hoặc mốc chuyển đổi nếu DB test có run chuyển đổi) chặn ghi — hộp xác nhận nêu
+    // lý do; huỷ thì toast báo đã huỷ.
+    await expect(page.getByText("Thêm phiếu thất bại: Đã huỷ thêm phiếu trong kỳ khoá.")).toBeVisible();
+    expect(confirmMessages).toHaveLength(1);
+    expect(confirmMessages[0]).toMatch(/(đã được NCC ký|chuyển đổi từ Excel)/);
+    expect(confirmMessages[0]).toContain("Bạn là admin: vẫn thêm phiếu này?");
     // Dialog vẫn mở để sửa, không có phiếu mới.
     await expect(dialog).toBeVisible();
     expect(await db.supplierDeliveryDaily.count({ where: { supplierId: seeded.supplierId, deletedAt: null } })).toBe(1);
