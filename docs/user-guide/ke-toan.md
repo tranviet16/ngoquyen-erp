@@ -67,6 +67,8 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
    - Số hoá đơn (bắt buộc khi loại Thuế hoá đơn)
 5. Click **Lưu**
 
+Lưới hiện 200 dòng mỗi trang, mới nhất trước; dùng nút **Trước / Sau** phía trên lưới để xem các dòng cũ hơn (dòng tổng "Hiển thị … / … bản ghi" cho biết tổng số dòng sổ).
+
 **Ghi trong giai đoạn khoá (chỉ admin)**: ở tab **Thanh toán** của NCC, admin ghi / sửa / xoá được chuyển khoản hoặc thuế hoá đơn có ngày ≤ 26/10/2026 hoặc rơi vào kỳ đã ký. Hệ thống hiện thông báo khoá kèm câu hỏi xác nhận; bấm OK thì dòng được ghi đúng ngày nhập, các bảng đối chiếu đã ký của cặp từ ngày đó trở đi được tính lại số (giữ ngày ký, ghi lại người sửa). Dòng sinh từ đợt thanh toán vẫn không sửa tay được; lưới Nhập liệu vẫn từ chối các ngày này.
 
 **Kế hoạch thanh toán** (`/thanh-toan/ke-hoach`): dòng loại vật tư phải chọn **công trình** trước. Chủ thể tự điền theo công trình và bị khoá. Đợt đóng sẽ ghi "Trả tiền" vào sổ của đúng cặp, với ngày là ngày đóng đợt.
@@ -88,7 +90,7 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
    - **Toàn bộ**: mọi giao dịch
    - **Năm**: năm dương lịch (vd. 2026)
    - **Quý**: Q1–Q4 năm chọn
-   - **Tháng**: tháng/năm (mặc định tháng hiện tại)
+   - **Tháng**: tháng/năm. Khi mở trang lần đầu, tháng được chọn là **tháng gần nhất có phát sinh** (không sau hôm nay), nên đầu tháng chưa nhập liệu vẫn thấy số của tháng trước
    - **Tuần ISO**: tuần theo chuẩn ISO (Thứ 2 – CN) — tuần 53 chỉ ở năm có 53 tuần
    - **Kỳ chuẩn 27→26**: cửa sổ 27 tháng trước → 26 tháng chọn (mặc định nếu không chọn)
    - **Tuỳ chọn**: từ ngày → đến ngày (ISO format YYYY-MM-DD)
@@ -104,14 +106,14 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
 
 1. Menu → **Công Nợ VT > Chi Tiết**
 2. Chọn nhà cung cấp
-3. Bộ chọn mốc thời gian (như Báo cáo tháng)
+3. Bộ chọn mốc thời gian (như Báo cáo tháng), mặc định **Năm** hiện tại
 4. Click **Áp dụng**
 5. Xem dòng lịch sử: ngày ghi sổ (ngày nghiệp vụ), loại giao dịch, số tiền TT/HĐ, số dư lũy kế
 
 ### 3.7 Tổng hợp NCC × Chủ thể — Ma trận công nợ
 
 1. Menu → **Công Nợ VT > Tổng hợp NCC × Chủ thể** (`/cong-no-vt/tong-hop`)
-2. Bộ chọn mốc thời gian (mặc định: Toàn bộ)
+2. Bộ chọn mốc thời gian (mặc định: **Năm** hiện tại, khớp sheet "Công Nợ" của Excel; chọn **Toàn bộ** thì LH / Trả cộng cả dòng "Lũy kế chuyển đổi" trước 2026)
 3. Xem ma trận:
    - **Dòng**: Chủ thể (entity) + tất cả NCC của chủ thể → tổng cộng Chủ thể
    - **Cột (per Chủ thể)**: 
@@ -121,6 +123,7 @@ Công nợ vật tư được theo dõi theo **cặp NCC × công trình**. Mỗ
      - LH HĐ (lấy hàng thuế hoá đơn)
      - Trả HĐ (đã trả HĐ)
      - Nợ HĐ (còn nợ HĐ)
+   - LH và Trả chỉ là phát sinh trong kỳ xem, **không cộng đầu kỳ**. Nợ là công nợ còn lại đến cuối kỳ (gồm cả số dư chuyển sang), nên Nợ = Đầu kỳ + LH − Trả
    - **TỔNG CÔNG TY**: cộng tất cả chủ thể
 4. Click **Xuất Excel** → `cong-no-tong-hop-<mốc>.xlsx` (header 2 hàng gộp ô)
    - Mở cho quyền **đọc** `cong-no-vt`

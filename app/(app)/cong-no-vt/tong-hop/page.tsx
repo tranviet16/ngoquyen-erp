@@ -18,7 +18,9 @@ export default async function TongHopPage({ searchParams }: PageProps) {
   await requireModuleAccess("cong-no-vt", { minLevel: "read", scope: "module" });
 
   const sp = await searchParams;
-  const options = { defaultPreset: "all", legacyMode: "cutoff", today: new Date() } as const;
+  // Mặc định xem theo năm hiện tại, khớp sheet "Công Nợ" của Excel: ở "Toàn bộ", cột LH / Trả cộng cả
+  // dòng "Lũy kế chuyển đổi" trước 2026 nên lớn hơn Excel nhiều lần dù Còn nợ bằng nhau.
+  const options = { defaultPreset: "year", legacyMode: "cutoff", today: new Date() } as const;
   const requested = resolveReportPeriod(sp, options);
   const periodError = "error" in requested ? requested.error : null;
   const period = "error" in requested ? resolveReportPeriod({}, options) : requested;
@@ -62,7 +64,8 @@ export default async function TongHopPage({ searchParams }: PageProps) {
         <div>
           <h1 className="text-2xl font-bold">Tổng hợp công nợ vật tư – NCC × Chủ thể</h1>
           <p className="text-sm text-muted-foreground">
-            Kỳ xem: {period.label}. LH = Đầu kỳ + Phát sinh tăng; Nợ = LH − Trả (TT = thực tế, HĐ = hợp đồng).
+            Kỳ xem: {period.label}. LH, Trả = phát sinh trong kỳ (không gồm đầu kỳ); Nợ = công nợ còn lại
+            đến cuối kỳ (TT = thực tế, HĐ = hợp đồng).
           </p>
         </div>
         <div className="flex gap-2">
