@@ -1,70 +1,72 @@
 ---
 phase: 2
-title: "Phase 2: Rehearsal on a fresh copy"
+title: "Phase 2: Prepare VIETPC as the production host"
 status: pending
 priority: P1
-effort: "0.5–1d, plus the user's time to take and move the dump"
+effort: "0.5–1d"
 dependencies: [1]
 ---
 
-# Phase 2: Rehearsal on a fresh copy
+# Phase 2: Prepare VIETPC as the production host
 
 ## Goal
 
-Run the whole release on VIETPC against a copy of today's production database, with the exact release SHA, so the production window holds no surprises.
+Give VIETPC what admin-pc provides today, so it can run production:
+- reachable on the tailnet;
+- always on;
+- backed up off the machine;
+- monitored;
+- with development kept away from the production database.
 
-The 09/11 rehearsal does not cover it: production data has moved since, and the code and the 12a step are new.
+## Context (2026-11-24)
 
-## Context
-
-- The go-live runbook Phần A describes this rehearsal:
-  - restore a SHA-256-checked `pg_dump` into a separate Postgres container;
-  - serve a production build (`npm run build` + start) with its own `DATABASE_URL` and port;
-  - build outside OneDrive.
-- VIETPC already runs a copy stack (`ngoquyen-bansao-pg`, `ngoquyen-bansao-erp` on 127.0.0.1:3001, data from 09/11) and `scripts/serve-local-build.mjs` serves a checkout on loopback.
+- VIETPC is `vietpc` / `vietpc.tail8998df.ts.net` / `100.77.222.89` on the tailnet.
+- The copy stack becomes production:
+  - **database:** `ngoquyen-bansao-pg` (postgres:16, volume `ngoquyen-bansao-pgdata`, 127.0.0.1:5433, restart `unless-stopped`);
+  - **app:** `ngoquyen-bansao-erp` on 127.0.0.1:3001, image built 18/11 with `BETTER_AUTH_URL=http://localhost:3001`, which is not usable as production;
+  - **files:** env files and uploads in `C:\Users\tranv\.ngoquyen-ban-sao\`, outside OneDrive.
+- Dev tools use that same database today: `scripts/serve-local-build.mjs` with the copy's env files, and the redesign's `measure` / `compare` scripts. After cutover they must never touch it.
+- **Risks of a dev workstation as production:** OneDrive checkout, Docker Desktop needing a logged-in user (it has failed to start before), and sleep or updates. Each task below closes one of these.
 
 ## Tasks & Steps
 
-1. **User, on admin-pc (read-only for production):** take a dump and its hash, then move it to VIETPC (Taildrop or a shared folder). Never print a secret.
-   ```powershell
-   $stamp = Get-Date -Format "yyyyMMdd-HHmm"
-   docker exec docker-postgres-1 pg_dump -U nqerp -Fc -d ngoquyyen_erp -f "/tmp/rehearsal-$stamp.dump"
-   docker cp "docker-postgres-1:/tmp/rehearsal-$stamp.dump" "$env:USERPROFILE\rehearsal-$stamp.dump"
-   docker exec docker-postgres-1 rm "/tmp/rehearsal-$stamp.dump"
-   Get-FileHash -Algorithm SHA256 "$env:USERPROFILE\rehearsal-$stamp.dump"
-   ```
-   Also copy:
-   - the current `Quản Lý Công Nợ` folder, as the go-live imports it;
-   - the team's Mầm Non workbook, as phase 4 imports it.
-2. **Claude, on VIETPC:**
-   1. Check the SHA-256.
-   2. Restore into a new database in the copy container (`ngoquyen_rehearsal_<stamp>`); keep the 09/11 copy.
-   3. Confirm `_prisma_migrations` ends at the 08/10 set, which is the expected starting point.
-3. **Build the release SHA** in a clean worktree outside OneDrive, then `npm run build` and `node scripts/post-build.mjs`. Serve it on `127.0.0.1:3003` against the rehearsal database. Never port 3001.
-4. **Run go-live Phần B steps 2–13, including 12a,** against the rehearsal database:
-   - use the runbook's commands, with the database name swapped through `Set-ErpDatabaseUrl`;
-   - time every step;
-   - record V1–V4 and the inventory results.
-5. **Run DT-HĐ-TT runbook sections 2–4** against the same database:
-   - settings, the two NCC, the import through the review screen, then `baseline.sql` / `after.sql` and the three reports ✓;
-   - Excel totals equal the screen.
-6. **Redesign checks** on the rehearsal server:
-   - `npx tsx scripts/dt-hd-tt-ui-measure.ts all --base-url http://127.0.0.1:3003 --project <Mầm Non id>`;
-   - open Tổng quan, DT-HĐ, HĐ-TT and DT-TT; print preview of the three reports;
-   - Dashboard card "Thực tế (sổ DT-HĐ-TT)".
-7. **Checks for the PRs that joined (#11, #14–#19, #24)** on the rehearsal server:
-   - each PR's own test plan, run by hand where it has one;
-   - for #24 (contract catalog): create a contract, bind a partner, open the detail screen, attach a scan, and confirm `20261118120000_du_an_danh_muc_hop_dong` applied cleanly on production data.
-8. **Rollback drill:** restore the step 3 dump of the rehearsal database with the old 08/10 image, as in the runbook's "Khôi phục bản sao lưu bước 3 + build cũ". Confirm the app comes back.
-9. **Write the result:** `reports/rehearsal-result.md` in this plan, holding verdicts, counts, durations and hashes only (the repo is public). Real figures the reviewer needs stay in a local, uncommitted note.
+1. **Separate dev from prod.**
+   - Create a dev copy `ngoquyen-dev-pg` on 127.0.0.1:5434, restored from a dump of the copy.
+   - Move dev env files to a new folder pointing at 5434.
+   - Rename the production containers at cutover (`ngoquyen-prod-pg`, `ngoquyen-prod-erp`) so no dev command can hit them by habit.
+   - Record the rule in `docs/operations/deploy.md`.
+2. **Production compose file.** Add `docker/docker-compose.erp-vietpc.yml`, modeled on `docker-compose.erp-3001.yml`, with no secrets in it:
+   - app bound to `127.0.0.1:3001`;
+   - restart `unless-stopped`;
+   - uploads volume;
+   - `BETTER_AUTH_URL=http://vietpc:3001`, and `TRUSTED_ORIGINS` for `http://100.77.222.89:3001` and `https://vietpc.tail8998df.ts.net`.
+3. **Production secrets.** Set a new `BETTER_AUTH_SECRET`, never the copy's, in an env file outside OneDrive and outside git. Store the bootstrap admin with `scripts/manage-erp-admin-local.ps1`, as on admin-pc. Never print them.
+4. **Network.**
+   - `tailscale serve --bg --tcp=3001 tcp://127.0.0.1:3001` on VIETPC, as `deploy.md` does on admin-pc.
+   - Port 3001 is never opened to the LAN.
+   - Users will open `http://vietpc:3001`.
+5. **Always on.**
+   - Windows power plan: never sleep or hibernate on AC.
+   - Docker Desktop: start at login, and the user stays logged in.
+   - Windows Update active hours cover the working day.
+   - Note in `deploy.md` who restarts it after an outage.
+6. **Backups off the machine.** A Task Scheduler job, daily at 02:00:
+   - `pg_dump -Fc` of the production database to `C:\Users\tranv\ngoquyen-prod-backups\`, kept 30 days;
+   - copy each dump to admin-pc over Tailscale, with its SHA-256;
+   - one test restore into a scratch database before cutover.
+7. **Monitoring.** In Uptime Kuma on admin-pc, add an HTTP keyword monitor on `http://vietpc:3001/api/health` (`"status":"ok"`). Point the app's GlitchTip DSN at the admin-pc GlitchTip, as today.
+8. **Build the release image** from `6863630` in a clean checkout outside OneDrive. Test it once against a scratch restore of the copy:
+   - `npx prisma migrate status` is up to date (watch for a checksum warning from CRLF/LF line endings; never run `migrate dev` or `migrate reset`);
+   - `/api/health` is ok;
+   - log in.
 
 ## Verification
 
-- Every runbook check passes on the rehearsal database, or has a written explanation the user accepts.
-- The measured go-live window (steps 2–13) and DT-HĐ-TT load times are recorded. These set the announced downtime.
-- The rollback drill restores a working app.
+- The dev tools run against 5434, and fail closed against the production container names.
+- `http://vietpc:3001/api/health` answers from another tailnet machine. After a Docker Desktop restart, the containers come back on their own.
+- A backup lands on VIETPC and admin-pc, and its test restore succeeds.
+- The release image passes the scratch check.
 
 ## Risks
 
-- **Production data has drifted since 09/11:** new suppliers, periods signed in the old module, slips. This rehearsal is how it surfaces; fix by runbook rules, never by editing production ad hoc.
-- **Dump transfer exposes production data.** Keep it on the two machines and over Tailscale only. Delete the dump file and rehearsal database after go-live sign-off.
+- **VIETPC is a single machine with a user session.** If it is off, production is down. Mitigation: the backup lands on admin-pc daily, so admin-pc can take over by restoring the last dump with the same image.

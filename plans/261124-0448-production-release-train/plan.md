@@ -1,10 +1,10 @@
 ---
 title: "Production release train: công nợ vật tư go-live, DT-HĐ-TT release 1 and the Dự án redesign"
-description: "Bring admin-pc from its 08/10 build to main: assemble one release commit, rehearse it on a fresh production copy, run the công nợ vật tư go-live, load DT-HĐ-TT release 1, and verify the Dự án redesign."
+description: "Ship release 6863630 as production on VIETPC, using the curated data copy on that machine (công nợ vật tư cutover, step 12a and DT-HĐ-TT books already loaded), and retire the 08/10 ERP on admin-pc."
 status: in-progress
 priority: P1
-effort: "3–5 days elapsed, of which one go-live window of about half a day"
-tags: [deploy, production, go-live, cong-no-vat-tu, dt-hd-tt]
+effort: "2–3 days elapsed, of which one cutover window of 1–2 hours"
+tags: [deploy, production, go-live, cong-no-vat-tu, dt-hd-tt, vietpc]
 created: 2026-11-24
 ---
 
@@ -32,7 +32,30 @@ The user asked to plan the production deploy of the Dự án xây dựng redesig
   - the step 12a script `scripts/vat-tu-bo-sung-mam-non-sau-import.ts`, which exists only, uncommitted, in the #18 worktree on VIETPC. It stays out of git (decision 4).
 - PR #22's deploy script stops unless exactly one migration is pending, so it does not fit a deploy that also carries `20261106090000`.
 
-**Plan:** one release commit (`main` plus the go-live prerequisites), rehearsed end to end on a fresh copy of production, then deployed once, in the go-live window. DT-HĐ-TT release 1 and the redesign ride on that same image. Their data step (the Mầm Non import) runs after the go-live is signed off.
+**Original plan (phases 2–5 before 2026-11-24 15:30):** rehearse the release on a fresh production dump, then re-run the go-live and the DT-HĐ-TT import on admin-pc's data.
+
+**Change of direction (2026-11-24, session 2 below):** the user chose to skip the production dump. The data copy on VIETPC becomes production, and VIETPC becomes the production host.
+
+What the copy already holds, checked read-only:
+- all four release migrations;
+- the công nợ vật tư cutover (import committed 10/11);
+- the bảng cân đối and dự toán imports;
+- DT-HĐ-TT Mầm Non books;
+- the contract tables.
+
+So the go-live steps and the DT-HĐ-TT import are not re-run anywhere.
+
+Why the copy can be trusted as the starting point:
+- Production on admin-pc recorded no audited write between 07/10 and the 09/11 dump.
+- The user confirms nobody used admin-pc's ERP since 09/11.
+
+Phases 2–5 now:
+2. prepare VIETPC as the host;
+3. clean the copy's test artifacts and accounts, and get the reviewer's sign-off;
+4. cut over and reopen the modules;
+5. verify, enter the Excel catch-up, and watch.
+
+admin-pc's ERP is stopped, not deleted, so it stays the rollback until modules reopen on VIETPC.
 
 ## Scope challenge
 
@@ -50,37 +73,41 @@ The user asked to plan the production deploy of the Dự án xây dựng redesig
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | [Phase 1: Assemble the release commit](./phase-01-start.md) | Completed |
-| 2 | [Phase 2: Rehearsal on a fresh copy](./phase-02-rehearsal-on-a-fresh-copy.md) | Pending |
-| 3 | [Phase 3: Go-live công nợ vật tư (deploy window)](./phase-03-go-live-cong-no-vat-tu.md) | Pending |
-| 4 | [Phase 4: DT-HĐ-TT release 1 data go-live](./phase-04-dt-hd-tt-data-go-live.md) | Pending |
-| 5 | [Phase 5: Post-deploy verification and watch](./phase-05-post-deploy-verification.md) | Pending |
+| 2 | [Phase 2: Prepare VIETPC as the production host](./phase-02-prepare-vietpc-as-production-host.md) | Pending |
+| 3 | [Phase 3: Clean and freeze the copy](./phase-03-clean-and-freeze-the-copy.md) | Pending |
+| 4 | [Phase 4: Cutover on VIETPC](./phase-04-cutover-on-vietpc.md) | Pending |
+| 5 | [Phase 5: Post-deploy verification, Excel catch-up and watch](./phase-05-post-deploy-verification.md) | Pending |
 
-Dependencies are strictly sequential: 1 → 2 → 3 → 4 → 5. Phase 3 may not start until phase 2 has a passing rehearsal of the exact release SHA.
+Dependencies are strictly sequential: 1 → 2 → 3 → 4 → 5.
 
 ## Roles
 
-- **Claude, on VIETPC and GitHub:** merges, CI, the release commit, and the rehearsal on the local copy. It also prepares the exact PowerShell blocks for admin-pc, with no secrets printed.
-- **User, on admin-pc:** runs every production command, takes the production dump, decides at each checkpoint and signs off. Production steps are never run from VIETPC.
-- **Reviewer:** the person who confirms business figures at go-live steps 10–12a and the DT-HĐ-TT import review. This is the same role as in the existing runbooks.
+- **Claude, on VIETPC and GitHub:**
+  - host preparation and the release image;
+  - cleaning the copy through the app after the user confirms the list;
+  - the exact PowerShell blocks for admin-pc, with no secrets printed.
+- **User:**
+  - decides at each checkpoint;
+  - runs the admin-pc steps (final archive dump, stopping the old app);
+  - gives the staff account list;
+  - approves the cutover.
+- **Reviewer:** the kế toán in charge. They sign that the copy's figures stand as the go-live figures, and do the Excel catch-up.
 
 ## Success criteria
 
-- [ ] One release SHA on `main`, CI green (baseline, security-contract, e2e-security), containing the go-live prerequisites.
-- [ ] A rehearsal of that SHA on a fresh production copy passes the go-live checks (V1–V4 as in the runbook), the DT-HĐ-TT checks (`baseline.sql`, `after.sql`, three reports ✓) and the redesign checks (`measure all`, e2e spec). Timings are recorded.
-- [ ] On admin-pc, the backup is taken and verified before any write. The release image runs, `npx prisma migrate status` says up to date, and `/api/health` is ok.
-- [ ] The go-live runbook steps 2–13 (including 12a) and the DT-HĐ-TT sections 2–4 are done, with their results recorded in `go-live-result.md` and the DT-HĐ-TT runbook.
-- [ ] Phase 5 smoke checks pass for every module. The previous image is kept tagged, and the pre-go-live dump is kept until sign-off plus 14 days.
+- [ ] One release SHA on `main` with CI green: `6863630`, done in phase 1.
+- [ ] VIETPC is reachable on the tailnet, always on, backed up nightly to admin-pc, and monitored; dev tools no longer touch the production database.
+- [ ] The copy has no active test artifact, only real accounts, and a recorded reviewer sign-off.
+- [ ] Production runs the `6863630` image, `npx prisma migrate status` is up to date, and `/api/health` is ok. The modules are reopened and users are on `http://vietpc:3001`.
+- [ ] Phase 5 smoke checks pass, and the Excel catch-up is announced with its cut-off date. The admin-pc ERP is stopped, and its database is archived for at least 14 days.
 
 ## Rollback summary
 
 | Point reached | How to go back |
 |---|---|
-| Before phase 3 step "stop app" | Nothing changed on production. |
-| Phase 3, before migrate | Restart the old container (`ngoquyen-erp-3001`, old image). Uncommitted cleanup leaves nothing to undo. |
-| Phase 3, migrate failed | The migration rolls itself back. Mark it rolled back, start the old image, fix the data, and repeat (runbook step 7). |
-| Phase 3–4, after migrate, before the go-live's step 13 | Prefer **Hoàn tác import**. To abandon: restore the phase 3 dump **with** the old image tag (runbook "Khôi phục bản sao lưu bước 3 + build cũ"). |
-| After step 13, or after phase 4 import | Do not restore the dump: other modules have written since. Fix forward: an adjustment entry, or Hoàn tác import of the DT-HĐ-TT run. |
-| Redesign-only UI defect | Fix forward. No schema is involved, so a hotfix image is safe. |
+| Phases 2–3 | Production is still the admin-pc ERP. Nothing to undo there. The copy can be restored from its phase 3 dump. |
+| Phase 4, before modules reopen | Start `ngoquyen-erp-3001` on admin-pc again; it was only stopped. |
+| After modules reopen on VIETPC | Fix forward on VIETPC. If VIETPC fails, restore the latest nightly dump on admin-pc with the release image. |
 
 ## Validation log
 
@@ -96,4 +123,14 @@ Dependencies are strictly sequential: 1 → 2 → 3 → 4 → 5. Phase 3 may not
 **Release SHA: `6863630`** (`main` after #22, 2026-11-24 14:49).
 - Its tree equals #22's head, whose push run passed baseline, security-contract and e2e-security.
 - Its code equals #24's head (`dae5385`), where every lane also passed.
-- The tag `release-2026-11-golive` is added only after phase 2 passes.
+- The tag `release-2026-11-golive` is added at cutover (phase 4).
+
+**Session 2 (2026-11-24, after phase 1)**, answered by the user:
+
+| # | Decision | Answer | Effect |
+|---|---|---|---|
+| 5 | Production dump and rehearsal | **Skip.** | The VIETPC copy becomes production. Decisions 1 and 3 no longer apply, and no go-live step re-runs. |
+| 6 | Production host | **VIETPC**, against the recommendation to keep admin-pc. | Phase 2 adds tailnet access, always-on settings, nightly off-machine backups, monitoring and dev/prod separation on VIETPC. |
+| 7 | Writes on admin-pc since 09/11 | **None.** | No merge of admin-pc data. Its database is archived; the read-only measuring query is optional. |
+| 8 | Excel entries after the 10/11 import | **The kế toán enters them after cutover.** | Phase 5, within 2 working days, then "ERP đủ số đến ngày X". |
+| 9 | Suspected test data (task 18/11, project rows 17/11) | **Unsure.** Listed in phase 3: "Thử tải đính kèm", `CHAYTHU-01`, "chạy thử" receipt and payment, a test alias, an edit of link #30. | The user confirms the list before phase 3 removes it through the app. |

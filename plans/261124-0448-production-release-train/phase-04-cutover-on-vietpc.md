@@ -1,54 +1,49 @@
 ---
 phase: 4
-title: "Phase 4: DT-HĐ-TT release 1 data go-live"
+title: "Phase 4: Cutover on VIETPC"
 status: pending
 priority: P1
-effort: "1–2h (from the phase 2 timing)"
+effort: "1–2h window"
 dependencies: [3]
 ---
 
-# Phase 4: DT-HĐ-TT release 1 data go-live
+# Phase 4: Cutover on VIETPC
 
 ## Goal
 
-Load the Mầm Non workbook into DT-HĐ-TT on production, so the redesigned screens show real books.
-
-## Context
-
-- **Runbook:** `plans/261117-1453-du-an-xay-dung-doi-chieu-dt-hd-tt/reports/production-runbook.md`.
-- **Section 0 conditions:**
-  - the go-live, including 12a, is done, which phase 3 covers;
-  - the migration is applied, which phase 3 step 7 covers;
-  - the team workbook is a closed copy.
-- **Section 1 (deploy) is already done** by phase 3 under decision 1. Skip it, but still record `baseline.sql` before the import.
-- **Timing (decision 3):** same window right after phase 3 sign-off, or the next working day.
+Run the release build on VIETPC against the cleaned copy, reopen the modules, retire the admin-pc ERP from daily use, and point users to `http://vietpc:3001`.
 
 ## Tasks & Steps
 
-1. Run `baseline.sql` and save the result. It is the before-state for section 4.
-2. **Section 2:** in Cài đặt, save VAT and the four Phần III ratios **as the file states**; create the two NCC that are missing, with MST.
-3. **Section 3:** in `/admin/import`, choose "Dự án xây dựng – Đối chiếu DT-HĐ-TT" and load a copy of the workbook. Then:
-   1. pick the project and map each NCC (section 6 table);
-   2. "Lưu & tính lại";
-   3. read each confirmation item (`cells`, `replace-ptx` against today's baseline, `dt-sync`);
-   4. section 5 "Kiểm" must say "Tất cả khớp";
-   5. "Ghi dữ liệu".
-4. **Section 4 checks:**
-   - `baseline.sql` again: the ledger is identical, and other projects are unchanged;
-   - `after.sql`;
-   - DT-HĐ, DT-TT and HĐ-TT totals equal the file, every check ✓;
-   - Excel export equals the screen;
-   - the MST count rose by the reviewed number;
-   - the old tabs show the book banner.
-5. **Permissions for the redesign's edit flow.** Kế toán users who type H / S / X / Z on HĐ-TT need `edit` on the project; read-only staff get `read`. Check `/admin/permissions/projects` and grant what the user decides.
+1. **Announce** the window to all users and freeze Excel (go-live runbook step 13, freezing part).
+2. **On admin-pc, the user runs:**
+   - a final `pg_dump` of `ngoquyyen_erp`, with its SHA-256, kept as an archive;
+   - then `docker stop ngoquyen-erp-3001`, so nobody keeps writing to the old system.
+   - Do not delete its database or image.
+3. **On VIETPC:**
+   1. Take a final `pg_dump` of the copy, with its SHA-256.
+   2. Stop `ngoquyen-bansao-erp`.
+   3. Rename the containers to the production names from phase 2.
+   4. Start the release image with `docker-compose.erp-vietpc.yml`.
+4. **Database checks:**
+   - `npx prisma migrate status` is up to date, and nothing is pending. If anything is pending, stop: there is no `migrate deploy` in this phase.
+   - `/api/health` is ok.
+5. **Smoke, with modules still closed:**
+   - admin login;
+   - the công nợ vật tư pages;
+   - the three DT-HĐ-TT reports on Mầm Non, all checks ✓;
+   - upload and delete one file.
+6. **Reopen the modules** at `/admin/permissions/modules`: `vat-tu-ncc`, `cong-no-vt`, `thanh-toan.ke-hoach`, `thanh-toan.tong-hop` (as the runbook), and `du-an`. `cong-no-nc` and `tai-chinh` follow the user's choice. This is the point of no return for writes.
+7. **Network:** enable `tailscale serve` for 3001 on VIETPC. Tell users the new address. Record the time in `go-live-result.md`.
 
 ## Rollback
 
-- Before "Ghi dữ liệu": nothing is written.
-- After: Hoàn tác import of the DT-HĐ-TT run at `/admin/import`. It is safe because the import only replaced Mầm Non project transactions and the DT sync.
-- Never restore the phase 3 dump at this point.
+Before step 6, start `ngoquyen-erp-3001` on admin-pc again. It is untouched, so the old system comes back exactly as it was.
+
+After step 6, fix forward on VIETPC. If VIETPC itself fails, restore the latest backup on admin-pc with the same release image.
 
 ## Verification
 
-- All section 4 checks pass and are recorded in the DT-HĐ-TT runbook.
-- `du-an` is released (`/admin/permissions/modules`) and a kế toán account sees the edit toggle on HĐ-TT.
+- The production app runs the image built from `6863630`, which `docker inspect` records.
+- `http://vietpc:3001` serves users on the tailnet.
+- The admin-pc app is stopped and its database archived.

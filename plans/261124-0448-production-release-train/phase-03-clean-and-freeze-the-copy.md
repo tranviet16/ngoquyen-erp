@@ -1,50 +1,63 @@
 ---
 phase: 3
-title: "Phase 3: Go-live công nợ vật tư (deploy window)"
+title: "Phase 3: Clean and freeze the copy"
 status: pending
 priority: P1
-effort: "One window; length from the phase 2 timings (estimate half a day including reviewer checks)"
+effort: "2–3h, plus the reviewer's time"
 dependencies: [2]
 ---
 
-# Phase 3: Go-live công nợ vật tư (deploy window)
+# Phase 3: Clean and freeze the copy
 
 ## Goal
 
-On admin-pc, the user runs the go-live runbook Phần B, steps 1–13 including 12a, deploying the release image in step 7. Production ends this phase on the release SHA with both migrations applied, and the công nợ vật tư data is cut over and signed off.
+Remove every test artifact from the copy's database, settle the accounts, and have the reviewer accept its figures as the go-live figures.
 
-## Context
+## Context (found 2026-11-24, read-only)
 
-- **Runbook:** `plans/261105-0848-cong-no-vat-tu-theo-cong-trinh/reports/go-live-runbook.md`. It holds the commands, its section 0 rules (one PowerShell window, `Set-ErpDatabaseUrl`, no secrets printed) and its rollback table.
-- **Production:** container `ngoquyen-erp-3001` on 127.0.0.1:3001, database `ngoquyyen_erp` in `docker-postgres-1`, compose file `docker/docker-compose.erp-3001.yml`.
+- **Already in the copy:**
+  - all four release migrations;
+  - the công nợ vật tư cutover (import committed 10/11);
+  - the bảng cân đối and dự toán imports;
+  - DT-HĐ-TT Mầm Non books (280 invoice lines, 42 đầu mối, 716 aliases);
+  - the contract tables.
+- **Not in the copy:** ledger dates after 31/10. The Excel entries after the 10/11 import are re-entered in phase 5.
+- **Test artifacts, all still active:**
+  - task #1 "Thử tải đính kèm", with 2 attachments in `C:\Users\tranv\.ngoquyen-ban-sao\uploads`;
+  - from a 17/11 entry-screen run on project 4:
+    - invoice line #559 (`CHAYTHU-01`) and its derived transaction #676;
+    - actual receipt #515;
+    - cash payment #237 ("Chạy thử: …");
+    - alias #1431 (key "Thép tròn chạy thử D10", confirmed);
+    - an edit of NCC link #30.
+- **Accounts:** `admin@nq.local` (the original admin), plus two temporary copy accounts, `import-bansao@nq.local` and `upload-test@nq.local`. Production staff accounts do not exist yet.
 
 ## Tasks & Steps
 
-1. **Step 1, conditions.** Additions to the runbook's own list:
-   - the commit to deploy is the phase 1 release SHA;
-   - phase 2's `rehearsal-result.md` passed;
-   - all ERP users are told the system is down for the window.
-2. **Steps 2–6** as written: close modules, freeze Excel, back up, inventory, review, clean up.
-   - The step 3 backup is the go-live's point of return. Copy it off admin-pc too (VIETPC over Tailscale) and record its SHA-256.
-3. **Step 7, deploy.** Changes from the runbook:
-   - build from a clean worktree at the release SHA, outside OneDrive;
-   - tag the current image `:truoc-chuyen-doi` before the build, as the runbook says;
-   - `npx prisma migrate status` must list exactly the four migrations recorded in phase 1: công nợ vật tư, price-quote source, DT-HĐ-TT and contract catalog. `migrate deploy` applies them all. Do not use PR #22's script for this step.
-   - If a later migration fails after `20261106090000` succeeded, `migrate deploy` stops there. Do not start the new image; follow the runbook's "after migrate, before step 13" rollback, which restores the step 3 dump with the old image.
-   - Smoke: health ok, admin login, the two công nợ pages, **and** the DT-HĐ-TT tab of the Mầm Non project opens. Its reports are empty until phase 4.
-4. **Steps 8–12a** as written, with the reviewer present. Step 12a runs the now-committed script.
-5. **Step 13:** freeze Excel, reopen modules, announce, and the reviewer signs `go-live-result.md`.
-
-## Rollback
-
-Use the runbook's "Rollback vận hành" table unchanged:
-- before migrate, restart the old container;
-- if migrate fails, it rolls itself back;
-- after migrate and before step 13, prefer Hoàn tác import, else restore the step 3 dump with the `:truoc-chuyen-doi` image;
-- after step 13, fix forward only.
+1. **Back up first:** `pg_dump -Fc` of the copy, with its SHA-256, kept outside OneDrive.
+2. **Remove the test artifacts through the app**, so derived rows and audit follow the normal rules. The user confirms the list first.
+   - Delete task #1 and its 2 attachments.
+   - On project 4: delete invoice line `CHAYTHU-01` (its derived transaction goes with it), receipt #515 and payment #237.
+   - In Ánh xạ, "Bỏ gán" the test key.
+   - Restore NCC link #30 to its values before the 17/11 edit, read from `audit_logs.beforeJson`.
+3. **Check the result:**
+   - no active row mentions "chạy thử" or "CHAYTHU";
+   - the three DT-HĐ-TT reports show every check ✓;
+   - `after.sql` of the DT-HĐ-TT runbook passes.
+4. **Accounts.**
+   - Deactivate `import-bansao` and `upload-test`. Do not delete them: their rows are referenced by import runs and audit.
+   - Rotate the admin password through `scripts/manage-erp-admin-local.ps1`.
+   - Create the staff accounts the user lists, with project rights (kế toán: `edit` on their projects; others: `read`).
+   - Sign every session out.
+5. **Reviewer sign-off.** The kế toán in charge confirms that the copy's figures stand as the go-live figures: the 09/11 dry-run checks V1–V4, step 11 and step 12a. Record it in `go-live-result.md`, with the decision to reuse the dry-run data.
+6. **Freeze:** after sign-off, no more writes to the copy until cutover.
 
 ## Verification
 
-- `npx prisma migrate status` says up to date, on the release SHA's migration list.
-- The image running in `ngoquyen-erp-3001` was built from the release SHA. Record it with `docker inspect`.
-- Runbook V1–V4 and the step 10–12a reviewer checks pass, recorded in `go-live-result.md`.
+- The search for test markers finds nothing active, and the reports tie out.
+- Only real accounts are active, and none of them has a known test password.
+- The sign-off is recorded.
+
+## Rollback
+
+Restore the step 1 dump.

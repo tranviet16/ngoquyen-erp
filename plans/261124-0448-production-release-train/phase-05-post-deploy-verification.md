@@ -1,45 +1,45 @@
 ---
 phase: 5
-title: "Phase 5: Post-deploy verification and watch"
+title: "Phase 5: Post-deploy verification, Excel catch-up and watch"
 status: pending
 priority: P2
-effort: "1h of checks, then 2 working days of watching"
+effort: "1h of checks, 2 working days of catch-up and watching"
 dependencies: [4]
 ---
 
-# Phase 5: Post-deploy verification and watch
+# Phase 5: Post-deploy verification, Excel catch-up and watch
 
 ## Goal
 
-Confirm every module works on the release build with real users, watch errors for two working days, then close the release.
+Prove every module works on VIETPC with real users, bring the công nợ entries made in Excel after 10/11 into the ERP, and watch for two working days.
 
 ## Tasks & Steps
 
 1. **Smoke checks, as a non-admin user per area:**
-   - login, Dashboard;
-   - Công nợ vật tư (`/vat-tu-ncc/cong-trinh`, `/cong-no-vt/tong-hop-cong-trinh`);
-   - payments and tasks, with attachments (#23);
-   - master data quick create (#21);
-   - the vat-tu fixes (#11, #13–#19): monthly periods, payments in locked periods, price quotes from slips, report filters;
-   - the contract catalog (#24): list, detail and scans on one project.
-2. **Redesign checks on Mầm Non:**
-   - the Tổng quan figures equal the three reports;
-   - the Dashboard card "Thực tế (sổ DT-HĐ-TT)" shows the book figure;
-   - HĐ-TT shows the edit toggle for a kế toán account and none for a read-only account;
-   - the pickers search without diacritics;
-   - print of DT-HĐ / DT-TT / HĐ-TT shows the full report.
-   These repeat on production what the 24/11 manual session proved on the copy.
-3. **Watch:** Uptime Kuma (`/api/health`) and GlitchTip for new errors for two working days. A new error in the release's modules opens a fix-forward PR, which the e2e lane now covers for DT-HĐ-TT.
+   - login and Dashboard;
+   - công nợ vật tư (`/vat-tu-ncc/cong-trinh`, `/cong-no-vt/tong-hop-cong-trinh`);
+   - payments and tasks with attachments;
+   - master data quick create;
+   - the vat-tu fixes (monthly periods, payments in locked periods, quotes from slips, report filters);
+   - the contract catalog;
+   - the Dự án redesign (Tổng quan equals the reports, the Dashboard "Thực tế (sổ DT-HĐ-TT)" card, HĐ-TT edit toggle only for edit accounts, pickers, full print).
+2. **Excel catch-up (decided: kế toán, after cutover).**
+   - The kế toán enters, through the app, every công nợ entry made in Excel after the 10/11 import (dated after 26/10), within 2 working days.
+   - Then announce "ERP đủ số đến ngày X" and make the Excel files read-only.
+   - The import cannot be rerun, because the exclusive-import guard blocks a second run.
+3. **Watch** Uptime Kuma and GlitchTip for two working days. A new error opens a fix-forward PR.
 4. **Backups:**
-   - confirm the scheduled production backup ran after the go-live;
-   - keep the step 3 dump and the `:truoc-chuyen-doi` image tag for 14 days after sign-off, then delete them;
-   - delete the rehearsal dump and database on VIETPC.
+   - confirm the nightly job ran and the copy reached admin-pc;
+   - keep the cutover dumps (VIETPC and admin-pc) and the old image for 14 days.
 5. **Close-out:**
-   - one release entry in `docs/project-changelog.md` (behaviour only);
-   - tell users where the guides are (`docs/user-guide/doi-chieu-dt-hd-tt.md`, `ke-toan.md`, `chi-huy-cong-truong.md`);
+   - one release entry in `docs/project-changelog.md`;
+   - `docs/operations/deploy.md` updated for VIETPC as the host;
+   - user guides pointed to the new address;
+   - after 14 days, decide whether to decommission the admin-pc ERP (keep its archive dump);
    - mark this plan done.
 
 ## Verification
 
-- All smoke checks pass, recorded in `reports/post-deploy-check.md` with verdicts only.
-- No unresolved GlitchTip error from the release after two working days.
+- Smoke checks pass, recorded in `reports/post-deploy-check.md` with verdicts only.
+- The catch-up is announced with its cut-off date.
+- No unresolved GlitchTip error after two working days.
