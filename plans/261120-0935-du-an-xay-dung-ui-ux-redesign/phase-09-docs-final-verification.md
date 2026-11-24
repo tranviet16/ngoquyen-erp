@@ -78,13 +78,30 @@ No real figures, names or credentials are committed.
 
 ## Todo
 
-- [ ] User guides updated
-- [ ] Changelog entry
-- [ ] Full gate, integration tests, baseline compare and measure `all` green against `127.0.0.1:3003`; server stopped
-- [ ] Per-account `measure hd-tt` inside the session protocol; dump restored
-- [ ] Final criterion 3 check passes
-- [ ] ACL contract test and risk-manifest files byte-identical to `origin/main`
-- [ ] `final-verification.md` holds verdicts, counts, sizes, durations and hashes only
+- [x] User guides updated
+- [x] Changelog entry
+- [x] Full gate, baseline compare and measure `all` green against `127.0.0.1:3003`; server stopped. Integration tests run in CI only: this machine has no working test database.
+- [x] Per-account `measure hd-tt` inside the session protocol; dump restored. Run together with the write checks of phases 3, 7 and 8; see [final-verification.md](reports/final-verification.md).
+- [x] Final criterion 3 check passes
+- [x] ACL contract test and risk-manifest files byte-identical to `origin/main`
+- [x] `final-verification.md` holds verdicts, counts, sizes, durations and hashes only
+
+## Run log (2026-11-24)
+
+- **Branch:** `feat/du-an-ui-redesign-p9-docs`, stacked on phase 8. It changes only docs and plan files.
+- **The final run reuses phase 8's run.** Phase 9 changes no code, so phase 8's build is the final code. That run covered the static gate, `measure all`, the read-only picker check and the baseline `compare`.
+- **Criterion 3:**
+  - `READY_TARGETS` holds every target Tổng quan links to, and Cài đặt is the only exception;
+  - `overview-todos.test.ts` passes;
+  - `measure todos` passed on the phase 8 build.
+- **Guides:** rewritten from the code and the run logs.
+  - Where the plan text and the code differ, the guides follow the code. Examples: the badge shows only a number; the section is named "Đầu mối vượt dự toán"; the print button is "In".
+  - Only invented example names and figures are used.
+- **Known gap, documented in the guides:** a book's "Ánh xạ" column says "chưa gán" only when a name has no alias. Ánh xạ and Tổng quan also count a name whose Dòng DT was deleted.
+- **Manual session (2026-11-24):** run once for phases 3, 7, 8 and 9 under the plan.md protocol: dump, two non-admin accounts, checks, restore, then `compare`. Every check passed; the S check does not apply on project 4. Details are in [final-verification.md](reports/final-verification.md).
+  - The session found that a HĐ-TT cell whose save failed trapped the cursor. The fix landed on phase 7 (`e21a6c8`) and was merged into phases 8 and 9.
+  - The two guide lines on failed saves now describe the new behaviour. The rest of the typing, per-account and "Lưu và sang dòng kế" text matched what the browser showed.
+  - The restore was proven by `compare`, which exited 0 with every artifact equal to the baseline.
 
 ## Verification
 

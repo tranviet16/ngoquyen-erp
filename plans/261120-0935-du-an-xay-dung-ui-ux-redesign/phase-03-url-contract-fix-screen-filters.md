@@ -201,7 +201,7 @@ The names are fixed here. Each builder, with its round-trip test, is added by th
 - [x] Đầu mối filters on disjoint synced columns; anchors
 - [x] Dự toán `?loai=thieu`
 - [x] Measure `filters` green, including "navigate away, then Back"
-- [ ] Manual write checks done inside the session protocol; dump restored. Moved to the single manual session in phase 9 (see run log).
+- [x] Manual write checks done inside the session protocol; dump restored. Run in the single manual session of phase 9 on 2026-11-24; all passed (see `reports/final-verification.md`).
 
 ## Run log (2026-11-23)
 

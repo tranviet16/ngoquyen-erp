@@ -125,7 +125,7 @@ Finish criterion 6:
 - [x] Collapsible two-row add form and fluid grid height
 - [x] Source-line loader, called only for the opened key; "Lưu và sang dòng kế" with `nextOpenKey`
 - [x] dt-hd timing within its bound
-- [ ] Named manual checks inside the session protocol; dump restored. Moved to phase 9's single session, together with the write checks of phases 3 and 7.
+- [x] Named manual checks inside the session protocol; dump restored. Run in phase 9's single session on 2026-11-24; all passed, with Unikey simulated (see `reports/final-verification.md`).
 
 ## Run log (2026-11-24)
 

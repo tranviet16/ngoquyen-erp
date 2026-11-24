@@ -176,15 +176,17 @@ Rulings with evidence are in [debate-synthesis.md](reports/debate-synthesis.md) 
 <!-- Red team: finding 11 -->
 | # | Phase | Effort | Depends on | Parallel with | Status |
 |---|-------|--------|-----------|---------------|--------|
-| 1 | [Safety net: snapshots and real-data baseline](phase-01-safety-net-snapshots-baseline.md) | 1.25d | – | – | Pending |
-| 2 | [Shell regroup, grouped sub-nav, shared book predicate](phase-02-shell-subnav-book-predicate.md) | 1.25d | 1 | 3 | Pending |
-| 3 | [URL contract and filters on every fix screen](phase-03-url-contract-fix-screen-filters.md) | 2.25d | 1 (merges after 2) | 2 | Pending |
-| 4 | [Tổng quan](phase-04-tong-quan-overview.md) | 2d | 2, 3 | – | Pending |
-| 5 | [Dashboard reads the book](phase-05-dashboard-reads-book.md) | 1d | 2, 4 | 6, 7, 8 | Pending |
-| 6 | [DT-HĐ screen layout](phase-06-dt-hd-screen-layout.md) | 2.5d | 1, 3, 4 | 5, 7, 8 | Pending |
-| 7 | [HĐ-TT screen with in-place H/S/X/Z, and DT-TT screen](phase-07-hd-tt-dt-tt-screens.md) | 3d | 1, 3, 4 (merges after 6) | 5, 6, 8 | Pending |
-| 8 | [Entry speed: pickers, collapsible add form, Ánh xạ flow](phase-08-entry-speed-pickers-anh-xa.md) | 2.5d | 3 | 4–7 | Pending |
-| 9 | [Docs and final verification](phase-09-docs-final-verification.md) | 0.75d | 1–8 | – | Pending |
+| 1 | [Safety net: snapshots and real-data baseline](phase-01-safety-net-snapshots-baseline.md) | 1.25d | – | – | Done, PR #25 open |
+| 2 | [Shell regroup, grouped sub-nav, shared book predicate](phase-02-shell-subnav-book-predicate.md) | 1.25d | 1 | 3 | Done, PR #26 open |
+| 3 | [URL contract and filters on every fix screen](phase-03-url-contract-fix-screen-filters.md) | 2.25d | 1 (merges after 2) | 2 | Done, PR #27 open; write checks passed in the manual session |
+| 4 | [Tổng quan](phase-04-tong-quan-overview.md) | 2d | 2, 3 | – | Done, PR #28 open |
+| 5 | [Dashboard reads the book](phase-05-dashboard-reads-book.md) | 1d | 2, 4 | 6, 7, 8 | Done, PR #29 open |
+| 6 | [DT-HĐ screen layout](phase-06-dt-hd-screen-layout.md) | 2.5d | 1, 3, 4 | 5, 7, 8 | Done, PR #30 open |
+| 7 | [HĐ-TT screen with in-place H/S/X/Z, and DT-TT screen](phase-07-hd-tt-dt-tt-screens.md) | 3d | 1, 3, 4 (merges after 6) | 5, 6, 8 | Done, PR #31 open; per-account and typing checks passed in the manual session, focus fix added |
+| 8 | [Entry speed: pickers, collapsible add form, Ánh xạ flow](phase-08-entry-speed-pickers-anh-xa.md) | 2.5d | 3 | 4–7 | Done, PR #32 open; typing checks passed in the manual session |
+| 9 | [Docs and final verification](phase-09-docs-final-verification.md) | 0.75d | 1–8 | – | Done, PR #33 open; manual session passed and restore proven |
+
+The PRs are stacked in order: each one targets the branch of the phase before it, and #25 targets `main`. They merge in order, #25 first.
 
 The total is 16.5 days. The critical path is about 9.25 days: phases 1 → 3 → 4 → 7 → 9.
 
