@@ -205,7 +205,11 @@ export async function applyCutoverPlan(
   const markerIds: number[] = [];
   for (const pair of plan.markers) {
     const { supplierId, projectId } = ids.pair(pair);
-    await assertPeriodBounds(supplierId, projectId, { from: CUTOVER_MARKER_FROM, to: CUTOVER_DATE }, tx);
+    // Kỳ chuyển đổi gộp cả giai đoạn Excel (01/01 → mốc) — ngoại lệ duy nhất của kỳ theo tháng; danh
+    // sách đối chiếu tách nó thành từng tháng khi hiển thị.
+    await assertPeriodBounds(supplierId, projectId, { from: CUTOVER_MARKER_FROM, to: CUTOVER_DATE }, tx, undefined, {
+      requireMonthly: false,
+    });
     const id = await insertReturningId(tx, Prisma.sql`
       INSERT INTO supplier_reconciliations
         ("supplierId", "projectId", "periodFrom", "periodTo", "signedBySupplier", "signedDate", note, "importRunId", "createdAt", "updatedAt")

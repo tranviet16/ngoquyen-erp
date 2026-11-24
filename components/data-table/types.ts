@@ -49,6 +49,11 @@ export interface ColumnDef<T> {
   editKind?: "text" | "number" | "boolean" | "select";
   editOptions?: { id: string; name: string }[];
   parseEdit?: (raw: string) => unknown;
+  /**
+   * editKind "select": thêm mục "+ Tạo mới…"; ô gọi hàm này rồi lưu id lựa chọn trả về
+   * (null = huỷ, ô giữ nguyên). Lựa chọn mới phải có trong `editOptions` lần render sau.
+   */
+  onCreateOption?: () => Promise<{ id: string; name: string } | null>;
 }
 
 export interface DataTableProps<T extends Record<string, unknown>> {

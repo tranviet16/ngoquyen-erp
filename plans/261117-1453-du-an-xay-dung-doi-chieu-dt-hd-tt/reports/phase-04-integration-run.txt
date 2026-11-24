@@ -1,0 +1,9 @@
+﻿
+ RUN  v4.1.5 C:/Users/tranv/ngoquyen-du-an-dt-hd-tt
+
+
+ Test Files  23 passed (23)
+      Tests  127 passed (127)
+   Start at  16:42:04
+   Duration  63.50s (transform 1.81s, setup 564ms, import 11.85s, tests 47.00s, environment 2ms)
+

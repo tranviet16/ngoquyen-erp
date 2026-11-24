@@ -14,13 +14,12 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
 
   const sp = await searchParams;
 
-  // Mốc thời gian: mặc định Toàn bộ; `?year=&month=` cũ là lũy kế đến hết tháng.
-  const requested = resolveReportPeriod(sp, { defaultPreset: "all", legacyMode: "cutoff", today: new Date() });
+  // Mốc thời gian: mặc định năm hiện tại (ở "Toàn bộ", Phát sinh / Đã trả cộng cả dòng "Lũy kế chuyển
+  // đổi" trước 2026 nên không so được với Excel); `?year=&month=` cũ là lũy kế đến hết tháng.
+  const options = { defaultPreset: "year", legacyMode: "cutoff", today: new Date() } as const;
+  const requested = resolveReportPeriod(sp, options);
   const periodError = "error" in requested ? requested.error : null;
-  const period =
-    "error" in requested
-      ? resolveReportPeriod({}, { defaultPreset: "all", legacyMode: "cutoff", today: new Date() })
-      : requested;
+  const period = "error" in requested ? resolveReportPeriod({}, options) : requested;
   if ("error" in period) throw new Error(period.error);
   const isoDay = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 

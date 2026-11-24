@@ -29,6 +29,11 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://nqerp:${POSTGRES_PASSWORD}@postgres:5432/ngoquyyen_erp?schema=public
+      # Task attachments live on the host beside the database they belong to (same data
+      # directory as the postgres service above); the image runs as uid 1001.
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - D:/docker-data/ngoquyyen-erp/uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy

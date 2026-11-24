@@ -57,6 +57,8 @@ import { commitPeriodClose, previewPeriodClose } from "@/lib/vat-tu-ncc/period-c
 import { createDelivery } from "@/lib/vat-tu-ncc/delivery-service";
 import { getMaterialCutoverDate } from "@/lib/vat-tu-ncc/pair-scope";
 import { pairBalanceAsOf } from "@/lib/vat-tu-ncc/supplier-balance";
+import { getReconciliationMonthView, listReconciliationsDerived } from "@/lib/vat-tu-ncc/reconciliation-derive-service";
+import { monthlySlices } from "@/lib/vat-tu-ncc/period-bounds";
 
 const ADMIN_ID = "cutover-admin";
 const ADAPTER = "vat-tu-chuyen-doi";
@@ -201,7 +203,7 @@ describe("adapter vat-tu-chuyen-doi (integration)", () => {
     const s = await seed();
     await committedRun(s);
 
-    await expect(commitPeriodClose(s.supplier, s.traiChuoi, { from: "2026-10-01", to: "2026-10-26" }, [])).rejects.toThrow(/chồng lấn/);
+    await expect(commitPeriodClose(s.supplier, s.traiChuoi, { from: "2026-09-27", to: "2026-10-26" }, [])).rejects.toThrow(/chồng lấn/);
     const fresh = await prisma.project.create({ data: { code: "MOI", name: "Công trình mới", entityId: s.quanLy } });
     await expect(
       createDelivery({ supplierId: s.supplier, projectId: fresh.id, date: "2026-10-20", itemId: s.m300, qty: 1, unit: "m3" }),
@@ -321,5 +323,35 @@ describe("adapter vat-tu-chuyen-doi (integration)", () => {
     expect(await runRowCounts(runId)).toEqual({ ledger: 0, openings: 0, deliveries: 0, recons: 0 });
     expect((await prisma.importRun.findUniqueOrThrow({ where: { id: runId } })).status).toBe("failed");
     expect(await getMaterialCutoverDate(prisma)).toBeNull();
+  });
+
+  it("9. danh sách đối chiếu tách kỳ chuyển đổi theo tháng 27→26, bỏ tháng trống đầu, xem được từng tháng", async () => {
+    const s = await seed();
+    await committedRun(s);
+    const marker = await prisma.supplierReconciliation.findFirstOrThrow({
+      where: { supplierId: s.supplier, projectId: s.traiChuoi, deletedAt: null },
+    });
+
+    const rows = await listReconciliationsDerived(s.supplier, s.traiChuoi);
+    const asc = [...rows].reverse();
+    // Mỗi dòng là một tháng: kết thúc ngày 26, không dài quá một kỳ 27→26.
+    for (const r of asc) {
+      expect(r.periodTo.slice(8)).toBe("26");
+      expect(monthlySlices(day(r.periodFrom), day(r.periodTo))).toHaveLength(1);
+      expect(r.monthOfLongerPeriod).toBe(true);
+    }
+    // Tháng đầu có phát sinh (số dư đầu năm) — không có tháng trống nào phía trước; tháng cuối là 27/9 → 26/10.
+    expect(asc[0]).toMatchObject({ periodFrom: "2026-01-01", periodTo: "2026-01-26" });
+    expect(asc[0].opening !== 0 || asc[0].totalIn !== 0 || asc[0].totalPaid !== 0).toBe(true);
+    const last = asc[asc.length - 1];
+    expect(last).toMatchObject({ periodFrom: "2026-09-27", periodTo: "2026-10-26", lastMonthOfPeriod: true });
+    // Chuỗi liền: đầu tháng sau = cuối tháng trước; cuối tháng cuối = số cuối kỳ chuyển đổi đã ký.
+    for (let i = 1; i < asc.length; i++) expect(asc[i].opening).toBe(asc[i - 1].closing);
+    expect(last.closing).toBe(Number(marker.closingBalance));
+
+    const month = await getReconciliationMonthView(marker.id, last.periodFrom, last.periodTo);
+    expect(month).toMatchObject({ periodFrom: "2026-09-27", periodTo: "2026-10-26", closing: last.closing });
+    expect(month.parentPeriodLabel).toMatch(/01\/01\/2026/);
+    await expect(getReconciliationMonthView(marker.id, "2026-09-01", "2026-10-26")).rejects.toThrow(/không thuộc kỳ/);
   });
 });

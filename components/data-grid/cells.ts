@@ -5,6 +5,20 @@ import type { DataGridColumn, SelectOption } from "./types";
 
 const vndFmt = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 
+/** Mục cuối dropdown của cột có `onCreateOption`; lưới chặn giá trị này, không lưu xuống dòng. */
+export const CREATE_OPTION_VALUE = "__create_option__";
+const CREATE_OPTION_LABEL = "+ Tạo mới…";
+
+/** Người dùng vừa chọn "+ Tạo mới…" trong dropdown của cột (payload `{ value }` hoặc giá trị thô). */
+export function isCreateOptionPick<T>(col: DataGridColumn<T>, raw: unknown): boolean {
+  if (!col.onCreateOption) return false;
+  const value =
+    typeof raw === "object" && raw !== null && "value" in (raw as Record<string, unknown>)
+      ? (raw as { value: unknown }).value
+      : raw;
+  return value === CREATE_OPTION_VALUE;
+}
+
 function isoToDmy(iso: string): string {
   if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso ?? "";
   const [y, m, d] = iso.slice(0, 10).split("-");
@@ -105,6 +119,9 @@ export function buildCell<T>(
         value: String(o.id),
         label: o.name,
       }));
+      if (col.onCreateOption && !readonly) {
+        allowedValues.push({ value: CREATE_OPTION_VALUE, label: CREATE_OPTION_LABEL });
+      }
       const display = findOptionName(opts, raw);
       const cell: DropdownCellType = {
         kind: GridCellKind.Custom,
@@ -150,7 +167,7 @@ export function parseCellValue<T>(col: DataGridColumn<T>, raw: unknown): unknown
         typeof raw === "object" && raw !== null && "value" in (raw as Record<string, unknown>)
           ? (raw as { value: unknown }).value
           : raw;
-      if (candidate == null || candidate === "") return null;
+      if (candidate == null || candidate === "" || candidate === CREATE_OPTION_VALUE) return null;
       const opts = col.kind === "fk" ? (col.fk?.options ?? col.options) : col.options;
       const opt = opts?.find(
         (o) => String(o.id) === String(candidate) || o.name === String(candidate),

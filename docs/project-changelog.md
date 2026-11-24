@@ -44,6 +44,7 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 - Added controlled finance payable/receivable sync snapshots with admin override preservation, SL-DT receivable sync, payable exclusions, and clearer Excel export formatting.
 
 ### Fixed
+- Fixed task attachment uploads in containers. The image runs as uid 1001 and could not create `/app/uploads`, so every upload failed with `EACCES`. Both compose files now mount `D:\docker-data\ngoquyyen-erp\uploads` at `/data/uploads` and set `UPLOAD_DIR`. Files over 10MB were also truncated, because `proxy.ts` matches every path and Next buffers proxied bodies up to `experimental.proxyClientMaxBodySize`; that limit is now `26mb`. A download whose file is missing from storage now returns 404 before streaming. Production steps: [task-attachment-storage.md](operations/task-attachment-storage.md).
 - Fixed the shared `DateInput` dropping a typed `dd/mm/yyyy` date when the field lost focus without Enter: react-hook-form's `field.onBlur` replaced the commit handler, so clicking "Lưu" or tabbing away silently kept the previous value (often today). It affected 16 date fields (daily slips, reconciliation, project contracts, acceptance, schedule, change orders, project transactions, 3-way cash flow, project master data). Typed dates now commit on blur, then the caller's `onBlur` still runs.
 - Prevented the shared Glide DataGrid selection callback from causing a React maximum-update-depth loop when callers recreate rows or columns; sorting and filtering now clear index-based selection before changing the visible row order.
 - Added `http://localhost:3001` and `http://127.0.0.1:3001` to the ERP 3001 container's trusted origins so loopback logins no longer fail with "Invalid origin"; tailnet origins are unchanged and the port remains bound to loopback only.
@@ -78,6 +79,50 @@ All notable changes to ngoquyyen-erp are documented below. Format follows [Keep 
 ### Planned
 - Plan B: Task Swimlane — swimlane view for tasks with role-based column filtering
 - Plan C: Performance MVP — performance dashboard with role/director-based access
+
+---
+
+## [2026-11-24] — Dự án xây dựng: giao diện mới cho Đối chiếu DT-HĐ-TT
+
+Hướng dẫn: [doi-chieu-dt-hd-tt.md](user-guide/doi-chieu-dt-hd-tt.md), [ke-toan.md](user-guide/ke-toan.md) mục 7, [chi-huy-cong-truong.md](user-guide/chi-huy-cong-truong.md) mục 4.
+
+### Added
+- Trang **Tổng quan** là trang mở đầu của tab Đối chiếu DT-HĐ-TT, dành cho chỉ huy / lãnh đạo:
+  - chín số chính đọc thẳng từ ô báo cáo, mỗi số ghi cơ sở VAT: Phần III dòng Gxd (sau thuế); HĐ-TT Σ E, Σ T, Σ U, Σ I, Σ V, Σ Y (gồm VAT);
+  - hai số "thực tế" (Phần III và HĐ-TT Σ T) mang nhãn khác nhau vì cộng các dòng khác nhau; Σ U ghi rõ "bù trừ giữa các NCC" và mở HĐ-TT lọc các NCC có U > 0;
+  - khối "Đầu mối vượt dự toán" (Phần II A, B có chênh âm), kèm số đầu mối chưa chốt thực tế;
+  - "Việc cần làm": mỗi việc được đếm bằng đúng bộ lọc của màn sửa, và mở màn đó đã lọc sẵn;
+  - dòng "Kiểm tổng: n/n khớp" gom dòng đối soát của ba báo cáo; lối tắt Mở / Xuất Excel.
+- Màn hình riêng cho ba báo cáo; bản in và Excel giữ nguyên:
+  - DT-HĐ mở ra một dòng tóm tắt mỗi đầu mối, mở theo đầu mối rồi theo nhóm, công tắc "Hiện dòng hóa đơn", chip Còn thiếu / Vượt / Chưa có HĐ / Thiếu hệ số, chọn một đầu mối, ô tìm không dấu. Phần B tách "Chưa gán" (link mở đúng khóa ở Ánh xạ) và "Ngoài DT".
+  - HĐ-TT đủ 13 cột tiền trong bốn nhóm, tên cột dễ đọc, công thức trong tooltip. Đầu bảng, cột NCC và dòng tổng đứng yên khi cuộn; NCC xếp theo đầu mối; huy hiệu "H", "tạm = HĐ", "tách"; số E / G mở sổ Hóa đơn / Chi thực tế của NCC. Chip Còn phải lấy HĐ / Còn phải lấy về / Có việc cần làm.
+  - DT-TT có thanh nhảy Phần I · II · III, nhóm Phần I thu gọn được, và link từ "chưa chốt", thực tế nhập chưa gắn đầu mối, dự toán chưa có loại tới đúng màn sửa.
+- Người có quyền sửa nhập H / S / X / Z ngay trên HĐ-TT (nút "Nhập H / S / X / Z"): Enter lưu rồi xuống dòng, Tab sang ô kế, Esc bỏ nháp. Lưu lỗi thì giữ nguyên chữ đã gõ và báo ngay dưới ô. Người chỉ có quyền đọc không thấy ô nhập.
+- Quy tắc S trên HĐ-TT: S chỉ nhập được ở NCC thứ hai trở đi của đầu mối nhiều NCC đã chốt thực tế; chỗ khác ô S bị khóa, rê chuột thấy lý do. Khi Σ T lệch vì một S đang lưu ngoài quy tắc, dòng kiểm ghi "do S ở dòng …" kèm link sang trang Đầu mối để sửa.
+- Bộ lọc của ba sổ, trang Đầu mối, Ánh xạ, Dự toán ("chưa có loại VL / NC / MTC") và ba báo cáo được ghi lên đường dẫn: giữ nguyên khi tải lại, bấm Back, sau "Thêm dòng", và gửi link cho người khác được. Đổi bộ lọc trên lưới thì bỏ chọn các dòng đang chọn.
+- Ô chọn có tìm, gõ không dấu được, cho NCC, Đầu mối, Mã nhóm và Dòng DT. Enter khi danh sách đang mở chỉ chọn mục, không gửi form.
+- Form thêm dòng của ba sổ còn hai hàng và thu gọn được (nhớ theo từng sổ trên trình duyệt); lưới cao theo cửa sổ; sau "Thêm dòng" con trỏ về ô đầu của dòng hàng.
+- Ánh xạ: mở một khóa thì hiện tối đa 20 dòng nguồn (số HĐ mở sổ Hóa đơn lọc đúng NCC và số HĐ); nút "Lưu và sang dòng kế" (Ctrl+Enter) lưu Xác nhận rồi mở khóa kế tiếp trong danh sách đang lọc; thêm bộ lọc trạng thái "Chưa có hệ số".
+- Số tên "chưa gán" hiện cạnh mục Ánh xạ trên thanh mục.
+
+### Changed
+- Thanh tab của công trình: 14 tab gom thành 7 nhóm trên hai hàng, có nhóm / tab đang mở, không cuộn ngang. Đường dẫn các tab không đổi. Công trình dùng sổ có ghi chú "Hóa đơn ở các tab này lấy từ sổ Hóa đơn" ở nhóm Vật tư & công nợ.
+- Thanh mục của Đối chiếu DT-HĐ-TT chia bốn cụm: Tổng quan · Báo cáo · Nhập sổ · Thiết lập. Mở tab này vào Tổng quan thay vì DT-HĐ.
+- Dashboard của công trình dùng sổ: thẻ "Thực tế" thành "Thực tế (sổ DT-HĐ-TT)".
+  - Số là thực tế Phần III dòng Gxd, bằng đúng số trên Tổng quan; dòng phụ ghi Gxd và chênh DT − TT; bấm thẻ mở Tổng quan.
+  - Viền đỏ khi chênh âm; vàng khi thực tế chưa đủ (chưa có đầu mối, còn thực tế nhập chưa gắn đầu mối, hoặc có đầu mối chưa chốt); xanh trong các trường hợp còn lại.
+  - Công trình không dùng sổ, hoặc khi không đọc được sổ, giữ thẻ "Thực tế (đã nhập)" như cũ. Các thẻ khác không đổi.
+- Bảng NCC ở trang Đầu mối đọc H / S / X kiểu tiền Việt Nam như HĐ-TT: "1.500" là 1 500 (trước đây là 1,5), "1.500.000" được nhận.
+- "Chưa gán" được đếm theo một định nghĩa ở mọi nơi (số trên mục Ánh xạ, Tổng quan, Ánh xạ, Phần B của DT-HĐ): tên gán vào một Dòng DT không còn trong dự toán, không có Mã nhóm, cũng là chưa gán.
+
+### Fixed
+- Dashboard của công trình dùng sổ không còn hiện "Thực tế" 0 đ màu xanh.
+- Link "n dòng chưa gán — mở Ánh xạ" ở sổ Hóa đơn và Thực tế nhập mở đúng tab của sổ đó.
+
+### Notes
+- Không đổi: công thức và số của ba báo cáo, bản in A4 và file Excel (luôn là báo cáo đầy đủ, không theo bộ lọc trên màn hình), quyền, đường dẫn và cơ sở dữ liệu.
+- Lưu H / S / X / Z dùng thao tác lưu sẵn có. Quy tắc S chỉ chặn trên màn HĐ-TT, nên số S cũ (vd. từ lần import) vẫn sửa được ở trang Đầu mối.
+- Cột "Ánh xạ" của sổ vẫn chỉ ghi "chưa gán" cho dòng chưa có ánh xạ. Tên gán vào Dòng DT đã bị xóa hiện là chưa gán ở Ánh xạ và Tổng quan, nhưng không ở sổ.
 
 ---
 
