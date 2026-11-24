@@ -46,6 +46,20 @@ export function missesFactor(
   return alias.dtKey !== null && liveDtKeys.has(alias.dtKey) && alias.factor === null;
 }
 
+/**
+ * Khóa mở tiếp theo của nút "Lưu và sang dòng kế" trên Ánh xạ. `keys` là danh sách khóa của tab theo
+ * bộ lọc TRƯỚC lần lưu (lưu xong, khóa vừa gán có thể rời bộ lọc "chưa gán" nhưng khóa kế vẫn còn đó);
+ * trả khóa đầu tiên sau `current` mà người dùng mở được, bỏ qua khóa không mở được (gán khóa chưa có
+ * alias cần `create`, sửa alias đang có cần `edit`). `current` không có trong danh sách → khóa mở được
+ * đầu tiên. Hết danh sách → null (không quay vòng: ô gán đóng và báo hết).
+ */
+export function nextOpenKey(keys: readonly string[], current: string, canOpen: (key: string) => boolean): string | null {
+  for (let i = keys.indexOf(current) + 1; i < keys.length; i++) {
+    if (keys[i] !== current && canOpen(keys[i])) return keys[i];
+  }
+  return null;
+}
+
 /** Mục sổ chi cho ô chọn ở client (cùng giá trị với `PAYMENT_SECTIONS` của schema phía server). */
 export const PAYMENT_SECTION_OPTIONS = ["I", "II", "III", "IV"] as const;
 
