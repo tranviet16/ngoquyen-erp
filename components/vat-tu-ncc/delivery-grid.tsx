@@ -106,10 +106,12 @@ async function saveWithLockConfirm(
 
 /**
  * Ném lỗi khi server action trả `ok: false` (thông điệp nghiệp vụ đi nguyên văn lên toast); lưu được
- * thì báo phiếu đã vào công nợ chưa (xem DeliveryLedgerStatus).
+ * thì báo phiếu đã vào công nợ chưa (xem DeliveryLedgerStatus) và báo giá tự tạo có đổi không.
  */
 function toastSaved(result: DeliverySaveResult, savedText: string) {
   if (!result.ok) throw new Error(result.message);
+  if (result.quoteChange === "created") toast.info("Đơn giá mới đã được thêm vào Báo giá — lần sau chọn vật tư này sẽ tự điền giá.");
+  else if (result.quoteChange === "updated") toast.info("Đã cập nhật báo giá tự tạo từ phiếu này.");
   if (result.ledgerStatus === "posted") toast.success(`${savedText} — công nợ đã cập nhật`);
   else if (result.ledgerStatus === "missing_price") {
     toast.warning(`${savedText}. Phiếu thuộc kỳ đã chốt nhưng chưa có đơn giá nên chưa vào công nợ — nhập đơn giá.`);

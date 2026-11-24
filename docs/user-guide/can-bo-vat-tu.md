@@ -77,6 +77,12 @@ Tab **Báo giá** (`/vat-tu-ncc/[NCC]/bao-gia`) quản lý mức giá hiệu l�
 5. Khi nhập phiếu ngày → form **tự điền đơn giá** theo báo giá hiệu lực tại ngày phiếu
    - Nếu không có báo giá hiệu lực → để trống (bắt buộc ghi đè bằng tay)
    - Khi sửa phiếu cũ → đơn giá không bị ghi đè (giữ giá cũ)
+6. **Báo giá tự tạo từ phiếu**: khi lưu phiếu (thêm, sửa, sửa nhanh trên lưới) với đơn giá **khác** báo giá đang hiệu lực ở ngày phiếu, hệ thống tự thêm một dòng báo giá hiệu lực từ ngày phiếu, ghi chú «Tự tạo từ phiếu ngày #…». Lần sau nhập phiếu vật tư đó (từ ngày đó trở đi) form tự điền giá này, cho tới khi có giá mới.
+   - Báo giá tính theo **NCC × vật tư** (không theo công trình): nếu hai công trình có giá khác nhau, giá gợi ý là giá nhập gần nhất.
+   - Báo giá tự tạo **đi theo phiếu**: sửa đơn giá / ngày / vật tư của chính phiếu đó thì báo giá được sửa theo (không sinh thêm dòng); giá sửa về bằng báo giá đang hiệu lực, xoá giá hoặc xoá phiếu thì dòng báo giá đó bị xoá.
+   - Sửa ghi chú, cán bộ, số lượng không đụng tới báo giá. Phiếu không có giá (hoặc giá 0) không tạo báo giá.
+   - Sửa tay một dòng báo giá tự tạo ở tab Báo giá → dòng đó thôi đi theo phiếu và được giữ nguyên.
+   - Giá điền lúc **Chốt kỳ** không tạo báo giá.
 
 ### 3.4 Sửa & Xóa phiếu giao nhận
 

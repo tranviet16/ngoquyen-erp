@@ -17,6 +17,7 @@ import { toBusinessDateFromInput } from "@/lib/ledger/business-date";
 import { LedgerService, type LedgerWriteClient } from "@/lib/ledger/ledger-service";
 import { requireActiveAdmin } from "@/lib/admin/require-active-admin";
 import { applyAdminSlipChange, lockedKindOf, type LockedEditTx } from "./locked-delivery-edit";
+import { syncAutoQuote } from "./auto-quote-sync";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -210,15 +211,18 @@ export async function createDelivery(input: DeliveryInput, opts: LockedOverrideO
     const ledgerStatus = locked
       ? await applyAdminSlipChange(tx, null, created, adminUserId!)
       : await syncDeliveryLedger(tx, created);
-    return { ...created, ledgerStatus };
+    // Đơn giá mới (khác báo giá đang hiệu lực) → báo giá tự tạo, để lần sau form tự điền giá này.
+    const quoteChange = await syncAutoQuote(tx, created.id, created);
+    return { ...created, ledgerStatus, quoteChange };
   });
   revalidateDeliveryViews(data.supplierId);
   return record;
 }
 
-/** Phiếu đổi thì sổ công nợ, đối chiếu và báo cáo công nợ vật tư có thể đổi theo. */
+/** Phiếu đổi thì sổ công nợ, đối chiếu, báo giá và báo cáo công nợ vật tư có thể đổi theo. */
 function revalidateDeliveryViews(supplierId: number) {
   revalidatePath(`/vat-tu-ncc/${supplierId}/ngay`);
+  revalidatePath(`/vat-tu-ncc/${supplierId}/bao-gia`);
   revalidatePath(`/vat-tu-ncc/${supplierId}/thang`);
   revalidatePath(`/vat-tu-ncc/${supplierId}/doi-chieu`);
   revalidatePath("/cong-no-vt", "layout");
@@ -287,18 +291,25 @@ export async function updateDelivery(id: number, input: DeliveryInput, opts: Loc
         updatedAt: new Date(),
       },
     });
+    // Báo giá tự tạo chỉ phụ thuộc vật tư, ngày, đơn giá — sửa ghi chú / cán bộ không đụng tới báo giá.
+    const quoteChange =
+      current.date.getTime() !== newDate.getTime() ||
+      current.itemId !== data.itemId ||
+      !(current.unitPrice == null ? updated.unitPrice == null : updated.unitPrice?.equals(current.unitPrice))
+        ? await syncAutoQuote(tx, id, updated)
+        : null;
     if (locked) {
       // Kỳ khoá: gỡ tiền ở chỗ cũ, ghi ở chỗ mới, đông cứng lại các kỳ đã ký (sửa chữ thì không đổi tiền).
       const ledgerStatus: DeliveryLedgerStatus = affectsLedger
         ? await applyAdminSlipChange(tx, { id, supplierId: existing.supplierId, ...current }, updated, adminUserId!)
         : "posted";
-      return { ...updated, ledgerStatus };
+      return { ...updated, ledgerStatus, quoteChange };
     }
     // Sửa CB vật tư, CHCT, KT, ghi chú, ĐVT không đổi tiền → giữ nguyên event; còn lại (hoặc phiếu
     // chưa có event) thì đồng bộ sổ công nợ theo phiếu mới.
     const ledgerStatus: DeliveryLedgerStatus =
       affectsLedger || !event ? await syncDeliveryLedger(tx, updated) : "posted";
-    return { ...updated, ledgerStatus };
+    return { ...updated, ledgerStatus, quoteChange };
   });
   revalidateDeliveryViews(data.supplierId);
   return record;
@@ -346,6 +357,8 @@ export async function softDeleteDelivery(id: number, supplierId: number, opts: L
         data: { deletedAt: new Date() },
       });
     }
+    // Báo giá tự tạo đi theo phiếu: phiếu bị xoá thì báo giá đó cũng bị xoá (bản đã sửa tay thì giữ).
+    await syncAutoQuote(tx, id, null);
     return updated;
   });
   revalidateDeliveryViews(supplierId);
