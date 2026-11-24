@@ -447,11 +447,17 @@ describe("vat-tu-ncc khoá kỳ theo cặp NCC × công trình (integration)", (
     const afterMove = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
     expect(Number(afterMove.closingBalance)).toBe(Number(signedBefore.closingBalance));
 
-    // Dời ra sau mốc (kỳ chưa chốt): tiền rời kỳ chuyển đổi, phiếu chờ chốt kỳ, không có dòng lay_hang.
+    // Dời ra sau mốc (tháng chưa có kỳ): tiền rời kỳ chuyển đổi; kỳ 27/10 – 26/11 được tự tạo (chưa ký) và
+    // phiếu vào công nợ ngay bằng dòng lay_hang của chính phiếu.
     const moved = await updateDelivery(slip.id, { ...body, qty: 10, date: "2026-10-30" }, { overrideLocked: true });
-    expect(moved.ledgerStatus).toBe("awaiting_close");
+    expect(moved.ledgerStatus).toBe("posted");
     expect(await byDate()).toEqual({ "2026-10-20": -10_000, "2026-10-21": 0 });
-    expect(await prisma.ledgerTransaction.count({ where: { deliveryId: slip.id, deletedAt: null } })).toBe(0);
+    const slipEvents = await prisma.ledgerTransaction.findMany({ where: { deliveryId: slip.id, deletedAt: null } });
+    expect(slipEvents.map((e) => [e.date.toISOString().slice(0, 10), Number(e.totalTt)])).toEqual([["2026-10-30", 10_000]]);
+    const autoMonth = await prisma.supplierReconciliation.findFirstOrThrow({
+      where: { supplierId: supplier.id, projectId: project.id, periodFrom: new Date("2026-10-27"), deletedAt: null },
+    });
+    expect(autoMonth).toMatchObject({ periodTo: new Date("2026-11-26"), signedBySupplier: false });
     const afterOut = await prisma.supplierReconciliation.findUniqueOrThrow({ where: { id: marker.id } });
     expect(Number(afterOut.closingBalance)).toBe(Number(signedBefore.closingBalance) - 10_000);
   });

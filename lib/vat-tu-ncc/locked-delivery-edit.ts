@@ -20,6 +20,7 @@ import { getMaterialCutoverDate, requireProjectId, resolveMaterialEntityId } fro
 import { findSignedPeriodCovering } from "./period-lock";
 import { periodLabel } from "./period";
 import { freezeReconciliationSnapshot, type ReconFreezeClient } from "./reconciliation-compute";
+import { ensureMonthlyPeriodFor } from "./auto-monthly-period";
 
 // Structural Pick thay vì Prisma.TransactionClient vì client đã $extends.
 export type LockedEditTx = LedgerWriteClient & ReconFreezeClient;
@@ -162,6 +163,9 @@ export async function applyAdminSlipChange(
  */
 async function placeSlipEvent(tx: LockedEditTx, s: LockedSlipState, change: string): Promise<AdminSlipLedgerStatus> {
   const projectId = requireProjectId(s.projectId, `Phiếu #${s.id}`);
+  // Chỗ mới rơi vào tháng chưa có kỳ → tự tạo kỳ tháng chưa ký như khi lưu phiếu thường.
+  const ledger = new LedgerService("material", { adminOverride: true });
+  await ensureMonthlyPeriodFor(tx, s.supplierId, projectId, s.date, (input) => ledger.upsertFromDelivery(input, tx));
   const signed = await findSignedPeriodCovering(s.supplierId, projectId, s.date, tx);
   const closed =
     signed ??
@@ -182,7 +186,7 @@ async function placeSlipEvent(tx: LockedEditTx, s: LockedSlipState, change: stri
     return closed ? "missing_price" : "awaiting_close";
   }
   const label = periodLabel(closed.periodFrom, closed.periodTo);
-  await new LedgerService("material", { adminOverride: true }).upsertFromDelivery(
+  await ledger.upsertFromDelivery(
     {
       deliveryId: s.id,
       date: s.date,
