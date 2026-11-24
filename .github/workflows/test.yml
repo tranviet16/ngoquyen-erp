@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       strict: ${{ steps.classify.outputs.strict }}
+      e2e: ${{ steps.classify.outputs.e2e }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,12 +32,15 @@ jobs:
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
           if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
             echo "strict=true" >> "$GITHUB_OUTPUT"
+            echo "e2e=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           result="$(npm run --silent risk:classify -- $(git diff --name-only "$base" "$GITHUB_SHA"))"
           echo "$result"
           strict="$(node -e "console.log(JSON.parse(process.argv[1]).securityContract)" "$result")"
           echo "strict=$strict" >> "$GITHUB_OUTPUT"
+          e2e="$(node -e "console.log(JSON.parse(process.argv[1]).e2eSecurity)" "$result")"
+          echo "e2e=$e2e" >> "$GITHUB_OUTPUT"
 
   unit:
     name: baseline
@@ -124,7 +128,8 @@ jobs:
   e2e:
     name: e2e-security
     needs: classify
-    if: needs.classify.outputs.strict == 'true'
+    # Strict changes, and changes to screens only the Playwright suite pins (scripts/risk-change-classifier.ts).
+    if: needs.classify.outputs.e2e == 'true'
     # Pinned: Playwright 1.60 cannot install Chromium deps on ubuntu-latest (26.04).
     runs-on: ubuntu-24.04
     env:
