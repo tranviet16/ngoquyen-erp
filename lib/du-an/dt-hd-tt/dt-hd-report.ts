@@ -27,6 +27,12 @@ export interface DtHdInvoiceRow {
   factor: number | null;
   qtyConverted: number | null;
   amount: number;
+  /**
+   * Lý do dòng HĐ nằm ở Phần B: "chua_gan" (chưa có alias, hoặc alias trỏ Dòng DT không còn và không có
+   * Mã nhóm) / "ngoai_dt" (alias đã quyết định Ngoài DT); null với dòng đã xếp vào dòng DT / nhóm. Chỉ để
+   * màn hình tách hai danh sách — bản in và Excel không đọc trường này.
+   */
+  outsideReason: "chua_gan" | "ngoai_dt" | null;
 }
 
 export interface DtHdLineRow {
@@ -108,6 +114,7 @@ export function buildDtHdReport(inp: ReportInputs, index: BookIndex = buildBookI
       invoiceLineId: l.id, supplierName: index.supplierName.get(l.supplierId) ?? `NCC #${l.supplierId}`,
       invoiceNo: l.invoiceNo, itemName: l.itemName, unit: l.unit, qty: l.qty, factor,
       qtyConverted: convertedQty(l.qty, factor), amount: l.amountVnd,
+      outsideReason: place.kind === "outside" ? place.reason : null,
     };
     placements.push({ row, place, supplierId: l.supplierId });
     if (place.kind === "dt_line") byLine.set(place.dtKey, [...(byLine.get(place.dtKey) ?? []), row]);

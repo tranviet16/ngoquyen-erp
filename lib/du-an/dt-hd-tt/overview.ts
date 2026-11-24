@@ -19,6 +19,7 @@ import {
 import type { PhanIIIRow } from "./phan-iii";
 import type { TieOut } from "./report-inputs";
 import type { DtHdTtReports } from "./reports";
+import { dtHdQuery, NONE_FILTER_VALUE } from "./screen-links";
 
 // ---------------------------------------------------------------------------
 // Số chính
@@ -142,7 +143,7 @@ export interface OverviewCheck {
 export function collectChecks(reports: Pick<DtHdTtReports, "dtHd" | "dtTt" | "hdTt">): OverviewCheck[] {
   const dtHdBlock = (counterpartyId: number | null): ScreenLink => ({
     target: "dt-hd",
-    params: { query: new URLSearchParams({ dauMoi: counterpartyId === null ? "none" : String(counterpartyId) }).toString() },
+    params: { query: dtHdQuery({ dauMoi: counterpartyId ?? NONE_FILTER_VALUE }) },
   });
   return [
     ...reports.dtHd.blocks.map((b): OverviewCheck => ({ group: "DT-HĐ", scope: b.name, check: b.tieOut, fix: dtHdBlock(b.counterpartyId) })),

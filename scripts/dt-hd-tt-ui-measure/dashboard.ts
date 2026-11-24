@@ -125,15 +125,17 @@ export const run: MeasureCommand = async ({ session, projectId, argv }) => {
           throw new MissingHookError(`bấm thẻ sổ không mở Tổng quan (data-tong-quan) ở ${tongQuan}`);
         }
         await page.waitForTimeout(SETTLE_MS);
+        // Không khai báo hàm có tên trong evaluate: tsx (esbuild keepNames) chèn `__name(...)`, mà trình duyệt
+        // không có hàm đó. Dùng hàm ẩn danh truyền vào map.
         const tq = await page.evaluate(() => {
-          const figure = (id: string) => {
+          const [actual, diff] = ["gxd-actual", "gxd-diff"].map((id) => {
             const el = document.querySelector<HTMLElement>(`[data-tong-quan] [data-figure="${id}"]`);
             const label = el?.querySelector("p.uppercase");
             return el ? { dataValue: el.getAttribute("data-value"), shown: label?.nextElementSibling?.textContent?.trim() ?? null } : null;
-          };
+          });
           return {
-            actual: figure("gxd-actual"),
-            diff: figure("gxd-diff"),
+            actual,
+            diff,
             todos: [...document.querySelectorAll<HTMLElement>("[data-tong-quan] [data-todo]")].map((el) => el.dataset.todo ?? ""),
           };
         });

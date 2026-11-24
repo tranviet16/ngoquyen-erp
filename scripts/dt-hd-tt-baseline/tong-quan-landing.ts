@@ -3,7 +3,9 @@
  *   - đích đã sẵn sàng (`READY_TARGETS`): trạng thái `data-*` của màn = tham số của link (đọc bằng parser
  *     của chính màn đó), URL sau khi vào vẫn mang đúng tham số, và còn ≥ 1 dòng; neo phải có phần tử;
  *   - đích chưa sẵn sàng: link là trang trần và trang mở ra không có query / neo;
- *   - Cài đặt: ngoại lệ không lọc duy nhất, chỉ cần mở được.
+ *   - Cài đặt: ngoại lệ không lọc duy nhất, chỉ cần mở được;
+ *   - DT-HĐ (màn báo cáo, hook `data-dt-hd-state`): trạng thái = tham số link = URL, còn ≥ 1 đầu mối; link
+ *     `dauMoi` của Kiểm tổng chỉ hiện đúng khối đó và khối đang mở; link trần hiện đủ mọi khối.
  * Đích đã sẵn sàng mà chưa có cách kiểm ở đây → lỗi (phase làm màn đó phải thêm vào). Thông báo chỉ nói
  * đích / tham số / kết luận, không in số liệu.
  */
@@ -11,9 +13,10 @@
 import type { Page } from "playwright";
 import { canonicalJson } from "../../lib/du-an/dt-hd-tt/grid-url-codec";
 import {
-  ANH_XA_URL, CHI_THUC_TE_URL, DAU_MOI_ANCHORS, DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL, HOA_DON_URL, parseDuToanQuery,
+  ANH_XA_URL, CHI_THUC_TE_URL, DAU_MOI_ANCHORS, DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL, DT_HD_URL, HOA_DON_URL, parseDuToanQuery,
   READY_TARGETS, screenPath, THUC_TE_NHAP_URL, type ScreenTarget,
 } from "../../lib/du-an/dt-hd-tt/screen-links";
+import { dtHdStateOfUrl, readDtHd, waitForDtHd } from "./dt-hd-screen-hooks";
 import { liveSearch, PAGE_TIMEOUT_MS, readHook, SETTLE_MS, waitForHook } from "./screen-state-hooks";
 
 const ALL_TARGETS: readonly ScreenTarget[] = ["hoa-don", "thuc-te-nhap", "chi-thuc-te", "dau-moi", "anh-xa", "du-toan", "dt-hd", "dt-tt", "hd-tt", "cai-dat"];
@@ -115,6 +118,27 @@ export async function checkLanding(page: Page, l: ParsedLink, where: string): Pr
     return failures;
   }
 
+  if (l.target === "dt-hd") return checkDtHdLanding(page, l, where);
+
   failures.push(`${where}: đích ${l.target} đã sẵn sàng nhưng lệnh đo todos chưa có cách kiểm màn này`);
+  return failures;
+}
+
+/** DT-HĐ mở từ link của Tổng quan (Kiểm tổng `dauMoi=…`, lối tắt "Mở" trần). */
+async function checkDtHdLanding(page: Page, l: ParsedLink, where: string): Promise<string[]> {
+  const failures: string[] = [];
+  await waitForDtHd(page);
+  await page.waitForTimeout(SETTLE_MS);
+  const s = await readDtHd(page);
+  const params = DT_HD_URL.parse(l.search);
+  if (s.state !== dtHdStateOfUrl(page)) failures.push(`${where}: data-dt-hd-state khác trạng thái đọc từ URL`);
+  if (s.state !== canonicalJson(params)) failures.push(`${where}: trạng thái DT-HĐ khác tham số của link`);
+  if (!(s.rows.length >= 1)) failures.push(`${where}: không còn đầu mối nào`);
+  if (params.dauMoi !== undefined) {
+    const row = s.rows.find((r) => r.key === String(params.dauMoi));
+    if (!row || s.rows.length !== 1) failures.push(`${where}: link dauMoi không hiện đúng một khối đầu mối của nó`);
+    else if (!row.open) failures.push(`${where}: khối đầu mối của link không mở`);
+  }
+  if (canonicalJson(params) === "{}" && s.rows.length !== s.blocks) failures.push(`${where}: link trần không hiện đủ khối đầu mối`);
   return failures;
 }

@@ -5,8 +5,9 @@ import { canonicalJson, parseGridQuery, writeGridQuery, type GridFilters } from 
 import { kindOfCategoryCode } from "../keys";
 import {
   anhXaQuery, ANH_XA_QUERY_MAX, CHI_THUC_TE_GRID_SPEC, chiThucTeQuery, DAU_MOI_COUNTERPARTY_GRID_SPEC, DAU_MOI_PAGE_SPEC,
-  DAU_MOI_SUPPLIER_GRID_SPEC, dauMoiQuery, duToanQuery, HOA_DON_GRID_SPEC, hoaDonQuery, kindlessEstimateIds, parseAnhXaQuery,
-  parseDuToanQuery, patchAnhXaQuery, READY_TARGETS, screenHref, THUC_TE_NHAP_GRID_SPEC, thucTeNhapQuery, type AnhXaParams,
+  DAU_MOI_SUPPLIER_GRID_SPEC, dauMoiQuery, DT_HD_OPEN_MAX, DT_HD_URL, dtHdQuery, duToanQuery, HOA_DON_GRID_SPEC, hoaDonQuery,
+  kindlessEstimateIds, parseAnhXaQuery, parseDtHdQuery, parseDuToanQuery, patchAnhXaQuery, patchDtHdQuery, READY_TARGETS, screenHref,
+  THUC_TE_NHAP_GRID_SPEC, thucTeNhapQuery, type AnhXaParams, type DtHdParams,
 } from "../screen-links";
 
 /** "Thép" viết bằng dấu tổ hợp (NFD), khác chuỗi dựng sẵn (NFC). */
@@ -23,10 +24,59 @@ describe("screenHref", () => {
   });
 
   it("returns the bare page path for a target that is not ready yet", () => {
-    expect(READY_TARGETS).not.toContain("dt-hd");
-    expect(screenHref(4, "dt-hd", { query: "loc=vuot", hash: "x" })).toBe("/du-an/4/dt-hd-tt/dt-hd");
-    expect(screenHref(4, "dt-tt", { hash: "phan-iii" })).toBe("/du-an/4/dt-hd-tt/dt-tt");
+    expect(READY_TARGETS).not.toContain("cai-dat");
     expect(screenHref(4, "cai-dat", { query: "a=1" })).toBe("/du-an/4/cai-dat");
+    if (!READY_TARGETS.includes("dt-tt")) expect(screenHref(4, "dt-tt", { hash: "phan-iii" })).toBe("/du-an/4/dt-hd-tt/dt-tt");
+  });
+
+  it("DT-HĐ is ready: its links carry their state", () => {
+    expect(READY_TARGETS).toContain("dt-hd");
+    expect(screenHref(4, "dt-hd", { query: dtHdQuery({ dauMoi: 12 }) })).toBe("/du-an/4/dt-hd-tt/dt-hd?dauMoi=12");
+    expect(screenHref(4, "dt-hd", { query: dtHdQuery({ dauMoi: "none" }) })).toBe("/du-an/4/dt-hd-tt/dt-hd?dauMoi=none");
+  });
+});
+
+describe("DT-HĐ parameters", () => {
+  const cases: DtHdParams[] = [
+    {},
+    { mo: [12] },
+    { mo: [12, "none", 7] },
+    { mo: [] },
+    { dauMoi: 3, loc: "vuot" },
+    { dauMoi: "none", loc: "thieu-he-so", hd: true },
+    { mo: [5], loc: "con-thieu", hd: true },
+    { loc: "chua-co-hd" },
+  ];
+
+  it.each(cases)("build then parse returns %o", (params) => {
+    expect(parseDtHdQuery(dtHdQuery(params))).toEqual(params);
+    expect(DT_HD_URL.parse(`?${DT_HD_URL.write(params, "")}`)).toEqual(params);
+  });
+
+  it("builds the contract's parameter names with URLSearchParams", () => {
+    expect(dtHdQuery({ mo: [12, "none"], dauMoi: 12, loc: "vuot", hd: true })).toBe("mo=12%2Cnone&dauMoi=12&loc=vuot&hd=1");
+    expect(dtHdQuery({ mo: [] })).toBe("mo=");
+    expect(dtHdQuery({})).toBe("");
+  });
+
+  it("drops unknown values, keeps the valid ids of mo, and treats mo= as everything closed", () => {
+    expect(parseDtHdQuery("mo=abc&dauMoi=0&loc=du&hd=true")).toEqual({});
+    expect(parseDtHdQuery("dauMoi=-1&loc=Vượt&hd=0")).toEqual({});
+    expect(parseDtHdQuery("mo=abc,12,,none,12,0")).toEqual({ mo: [12, "none"] });
+    expect(parseDtHdQuery("mo=")).toEqual({ mo: [] });
+    expect(parseDtHdQuery("mo=1234567890")).toEqual({});
+    expect(parseDtHdQuery("dauMoi=none&mo=%20none%20")).toEqual({ dauMoi: "none", mo: ["none"] });
+  });
+
+  it("caps mo at 30 open blocks, keeping the last ones", () => {
+    const ids = Array.from({ length: DT_HD_OPEN_MAX + 5 }, (_, i) => i + 1);
+    expect(parseDtHdQuery(`mo=${ids.join(",")}`).mo).toEqual(ids.slice(-DT_HD_OPEN_MAX));
+    expect(parseDtHdQuery(dtHdQuery({ mo: ids })).mo).toEqual(ids.slice(-DT_HD_OPEN_MAX));
+  });
+
+  it("patches only its own parameters", () => {
+    expect(patchDtHdQuery("?foo=1&loc=vuot&mo=3", { mo: [4], hd: true })).toBe("foo=1&mo=4&hd=1");
+    expect(DT_HD_URL.write({}, "?x=y&dauMoi=4")).toBe("x=y");
   });
 });
 
