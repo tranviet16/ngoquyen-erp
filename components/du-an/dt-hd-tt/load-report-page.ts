@@ -3,14 +3,17 @@
  * - `loadReportPage`: kiểm id, tính báo cáo (service tự kiểm quyền đọc dự án theo công trình) và nhãn
  *   công trình cho tiêu đề in;
  * - `loadAliasQueueSummary`: số khóa chưa gán / đề xuất cho huy hiệu mục Ánh xạ, đọc hẹp (khóa và alias,
- *   không đọc tiền / NCC / đầu mối) để không làm chậm mọi trang của tab.
+ *   không đọc tiền / NCC / đầu mối) để không làm chậm mọi trang của tab;
+ * - `loadBookHeadline`: thẻ "Thực tế" của Dashboard công trình khi công trình dùng sổ (null = giữ thẻ cũ).
  */
 
-import { notFound } from "next/navigation";
+import { notFound, unstable_rethrow } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { aliasQueueSummary, type AliasQueueEntry, type AliasQueueSummary } from "@/lib/du-an/dt-hd-tt/alias-board";
 import { loadDtLines } from "@/lib/du-an/dt-hd-tt/alias-groups";
+import { projectUsesBook } from "@/lib/du-an/dt-hd-tt/book-presence";
+import { bookActualCard, type BookActualCard } from "@/lib/du-an/dt-hd-tt/overview";
 import type { AliasSource } from "@/lib/du-an/dt-hd-tt/register-ui";
 import type { AliasStatus } from "@/lib/du-an/dt-hd-tt/report-inputs";
 import { getDtHdTtReports } from "@/lib/du-an/dt-hd-tt/report-service";
@@ -46,4 +49,23 @@ export async function loadAliasQueueSummary(projectId: number): Promise<AliasQue
     ...receiptKeys.map((r) => entry("tt", r.itemKey)),
   ];
   return aliasQueueSummary(entries, new Set(dtLines.keys()));
+}
+
+/**
+ * Thẻ "Thực tế" của Dashboard công trình, đọc từ sổ DT-HĐ-TT. Thứ tự: kiểm quyền đọc dự án theo công trình
+ * TRƯỚC mọi truy vấn; công trình không dùng sổ (`projectUsesBook`, cùng quy tắc với guard import cũ) → null;
+ * còn lại tính ba báo cáo như Tổng quan rồi dựng thẻ. Lỗi nào (kể cả bị từ chối quyền) cũng ghi log và trả
+ * null để Dashboard giữ thẻ cũ, không bao giờ làm hỏng trang; lỗi điều khiển của Next (redirect, notFound,
+ * API theo request lúc prerender) được ném lại.
+ */
+export async function loadBookHeadline(projectId: number): Promise<BookActualCard | null> {
+  try {
+    await requireReleasedModuleRequest("du-an", { minLevel: "read", scope: { kind: "project", projectId } });
+    if (!(await projectUsesBook(prisma, projectId))) return null;
+    return bookActualCard(await getDtHdTtReports(projectId));
+  } catch (err) {
+    unstable_rethrow(err);
+    console.error("[dashboard] không đọc được thực tế từ sổ DT-HĐ-TT của công trình", projectId, err);
+    return null;
+  }
 }

@@ -6,9 +6,11 @@
  *   - đầu mối vượt dự toán: dòng Phần II A và B có chênh < 0 (khối C không có dự toán nên không xét);
  *   - kiểm tổng: các dòng đối soát sẵn có của ba báo cáo.
  * Hai số "thực tế" khác tập dòng (Phần III gồm mọi đầu mối; Σ T chỉ NCC có HĐ) nên mang nhãn khác nhau;
- * Σ U bù trừ giữa các NCC nên nhãn nói rõ. Module thuần, an toàn cho bundle client.
+ * Σ U bù trừ giữa các NCC nên nhãn nói rõ. Cuối file là thẻ "Thực tế" của Dashboard công trình dùng sổ
+ * (`bookActualCard`), đọc cùng ô Phần III. Module thuần, an toàn cho bundle client.
  */
 
+import { formatVND } from "@/lib/utils/format";
 import type { AliasBoard } from "./alias-board";
 import type { PhanIIRow } from "./dt-tt-report";
 import {
@@ -54,7 +56,7 @@ export function phanIIITotalRow(reports: Pick<DtHdTtReports, "phanIII">): PhanII
   return row;
 }
 
-/** Ba số dự toán – thực tế của dòng Gxd (Tổng quan, và Dashboard ở phase sau). */
+/** Ba số dự toán – thực tế của dòng Gxd (Tổng quan, và thẻ "Thực tế" của Dashboard qua `bookActualCard`). */
 export function selectBudgetHeadline(reports: Pick<DtHdTtReports, "phanIII">): { estimate: OverviewFigure; actual: OverviewFigure; diff: OverviewFigure } {
   const total = phanIIITotalRow(reports);
   return {
@@ -173,5 +175,62 @@ export function buildOverview(reports: DtHdTtReports, board: AliasBoard, links: 
     overBudget: selectOverBudget(reports),
     todos: buildOverviewTodos(reports, board, links),
     checks: collectChecks(reports),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Thẻ "Thực tế" của Dashboard công trình (công trình dùng sổ)
+// ---------------------------------------------------------------------------
+
+export const BOOK_ACTUAL_LABEL = "Thực tế (sổ DT-HĐ-TT)";
+
+/** Trang Tổng quan: trang index của tab Đối chiếu DT-HĐ-TT (mọi màn của tab nằm dưới đường dẫn này). */
+export const tongQuanPath = (projectId: number): string => `/du-an/${projectId}/dt-hd-tt`;
+
+export type BookActualTone = "danger" | "warning" | "success";
+
+export interface BookActualCard {
+  label: string;
+  /** Phần III dòng Gxd, cột thực tế — đúng ô mà Tổng quan hiện ở số "gxd-actual". */
+  actual: number | null;
+  value: string;
+  /** "Gxd … · Chênh DT − TT …", thêm "thực tế chưa đủ" khi số của sổ còn thiếu. */
+  sub: string;
+  tone: BookActualTone;
+  /**
+   * Thực tế của sổ chưa đủ: Phần II A và B đều trống, có thực tế nhập chưa gắn đầu mối, hoặc có đầu mối chưa
+   * chốt. Các trường hợp này chỉ làm thực tế THIẾU (không bao giờ thừa).
+   */
+  incomplete: boolean;
+}
+
+/** Tiền trên thẻ Dashboard: làm tròn đồng như ô báo cáo, định dạng như các thẻ khác của Dashboard. */
+const cardMoney = (v: number | null): string => formatVND(v === null ? null : Math.round(v));
+
+/**
+ * Thẻ "Thực tế" của Dashboard trên công trình dùng sổ: số là thực tế Phần III dòng Gxd, dòng phụ là dự toán
+ * Gxd và chênh (`phanIIIDiff`) — ba số của `selectBudgetHeadline`, cùng ô với Tổng quan. Sắc thái theo thứ tự:
+ *   1. danger khi chênh < 0: thực tế thiếu chỉ làm chênh lớn lên, nên chênh âm là thật;
+ *   2. warning khi thực tế chưa đủ — Phần II A và B đều trống, thực tế nhập chưa gắn đầu mối ≠ 0 (so sau khi
+ *      làm tròn đồng, như bản in), hoặc có dòng Phần II thực tế null (cùng định nghĩa "chưa chốt" của Tổng quan);
+ *   3. success.
+ * Khi vừa danger vừa chưa đủ, dòng phụ vẫn mang "thực tế chưa đủ".
+ */
+export function bookActualCard(reports: Pick<DtHdTtReports, "phanIII" | "dtTt">): BookActualCard {
+  const { estimate, actual, diff } = selectBudgetHeadline(reports);
+  const { a, b } = reports.dtTt.phanII;
+  const incomplete =
+    actual.value === null
+    || (a.length === 0 && b.length === 0)
+    || Math.round(reports.dtTt.untaggedReceipts) !== 0
+    || unsettledCounterparties(reports).length > 0;
+  const tone: BookActualTone = diff.value !== null && Math.round(diff.value) < 0 ? "danger" : incomplete ? "warning" : "success";
+  return {
+    label: BOOK_ACTUAL_LABEL,
+    actual: actual.value,
+    value: cardMoney(actual.value),
+    sub: `Gxd ${cardMoney(estimate.value)} · Chênh DT − TT ${cardMoney(diff.value)}${incomplete ? " · thực tế chưa đủ" : ""}`,
+    tone,
+    incomplete,
   };
 }

@@ -104,10 +104,20 @@ Meet criterion 9. On a project that uses the team book, the Dashboard "Thực t�
 
 ## Todo
 
-- [ ] `bookActualCard` with the literal-expectation cases
-- [ ] `loadBookHeadline` in `load-report-page.ts`: ACL first, fallback on failure, unit-tested
-- [ ] Dashboard page wired; entrypoint test green
-- [ ] Measure `dashboard`: project 4 equals Tổng quan, the control project equals the phase-1 capture, within the time budget
+- [x] `bookActualCard` with the literal-expectation cases
+- [x] `loadBookHeadline` in `load-report-page.ts`: ACL first, fallback on failure, unit-tested
+- [x] Dashboard page wired; entrypoint test green
+- [ ] Measure `dashboard`: project 4 equals Tổng quan, the control project equals the phase-1 capture, within the time budget. Run on the phase 6 build, which contains this phase; see phase 6's run log.
+
+## Run log (2026-11-23)
+
+- **Branch:** `feat/du-an-ui-redesign-p5-dashboard`, stacked on phase 4 (PR #28).
+- **Static gate:** unit tests 1556 passed. `tsc`, `lint` and `risk:verify` are green. The print snapshot, the ACL contract test, `dashboard-service.ts` and its test are unchanged.
+- **Browser checks are batched with phase 6** to save one build and two privacy approvals: `measure dashboard`, and the baseline `compare` with `--expect-changed-card "Thực tế (đã nhập)=>Thực tế (sổ DT-HĐ-TT)"`.
+- **Deviations:**
+  - The Tổng quan link comes from `tongQuanPath()` in `overview.ts`. `screen-links.ts` is shared by phases 6 and 7, and it has no index target.
+  - The "thực tế chưa đủ" hint shows whenever the figure is incomplete, not only alongside danger.
+  - The card hooks (`data-book-card`, `data-value`, `data-tone`) sit on the wrapping `Link`. `StatCard` itself is untouched, so the card texts of projects without a book cannot change.
 
 ## Verification
 
