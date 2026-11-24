@@ -169,6 +169,12 @@ export async function getAttachmentForDownload(id: number): Promise<{
   if (!canAccessTask(att.task, ctx, accessMap, "read")) {
     throw new Error("Bạn không có quyền tải file này");
   }
+  // A read stream only reports a missing file after the response headers are sent, so the
+  // download would break mid-response. Check first so the route can answer 404 instead.
+  if (!(await store.exists(att.storedPath))) {
+    console.error(`[task-attachment] file missing from storage: attachment ${att.id}`);
+    throw new Error("Không tìm thấy file trên ổ lưu trữ");
+  }
   return {
     stream: store.getStream(att.storedPath),
     filename: att.filename,

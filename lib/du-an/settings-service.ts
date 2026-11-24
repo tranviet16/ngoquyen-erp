@@ -18,36 +18,13 @@ export async function upsertSettings(input: SettingsInput) {
     minLevel: "edit",
     scope: { kind: "project", projectId: input.projectId },
   });
-  const data = settingsSchema.parse(input);
+  const { projectId, ...values } = settingsSchema.parse(input);
 
   // Use create/update loop pattern (no upsert allowed by audit log guard)
-  const existing = await prisma.projectSettings.findUnique({ where: { projectId: data.projectId } });
-  let record;
-  if (existing) {
-    record = await prisma.projectSettings.update({
-      where: { projectId: data.projectId },
-      data: {
-        vatPct: data.vatPct,
-        normYellowThreshold: data.normYellowThreshold,
-        normRedThreshold: data.normRedThreshold,
-        contractWarningDays: data.contractWarningDays,
-        managementFeePct: data.managementFeePct,
-        teamSharePct: data.teamSharePct,
-      },
-    });
-  } else {
-    record = await prisma.projectSettings.create({
-      data: {
-        projectId: data.projectId,
-        vatPct: data.vatPct,
-        normYellowThreshold: data.normYellowThreshold,
-        normRedThreshold: data.normRedThreshold,
-        contractWarningDays: data.contractWarningDays,
-        managementFeePct: data.managementFeePct,
-        teamSharePct: data.teamSharePct,
-      },
-    });
-  }
-  revalidatePath(`/du-an/${data.projectId}/cai-dat`);
+  const existing = await prisma.projectSettings.findUnique({ where: { projectId } });
+  const record = existing
+    ? await prisma.projectSettings.update({ where: { projectId }, data: values })
+    : await prisma.projectSettings.create({ data: { projectId, ...values } });
+  revalidatePath(`/du-an/${projectId}/cai-dat`);
   return record;
 }

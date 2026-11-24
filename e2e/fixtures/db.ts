@@ -100,6 +100,69 @@ export async function deleteRound(roundId: number): Promise<void> {
   await db.paymentRound.delete({ where: { id: roundId } });
 }
 
+/** A DT-HĐ-TT book seeded for the HĐ-TT screen specs; every name is invented. */
+export interface DtHdTtBook {
+  projectId: number;
+  projectCode: string;
+  counterpartyId: number;
+  supplierIds: number[];
+  /** NCC rows of HĐ-TT, in the screen's order. */
+  links: {
+    /** First NCC of a settled đầu mối with two NCC: H / X / Z typeable, S blocked ("NCC đầu tiên…"). */
+    first: number;
+    /** Second NCC of the same đầu mối: S typeable. */
+    second: number;
+    /** NCC without a đầu mối: S blocked ("Gắn NCC vào đầu mối trước"). */
+    loose: number;
+  };
+}
+
+/**
+ * Seeds one project whose HĐ-TT shows three linked NCC rows: two under a đầu mối with a manual (settled) actual,
+ * and one without a đầu mối. `projectUserLevel` grants the E2E project user that level on the project.
+ * Caller cleans up via `deleteDtHdTtBook`.
+ */
+export async function seedDtHdTtBook(prefix: string, projectUserLevel: "read" | "edit" = "read"): Promise<DtHdTtBook> {
+  const stamp = `${prefix}-${Date.now()}`;
+  const project = await db.project.create({ data: { code: stamp, name: `Công trình E2E ${stamp}`, status: "active" } });
+  const names = ["NCC E2E An", "NCC E2E Bình", "NCC E2E Cường"].map((n) => `${n} ${stamp}`);
+  const suppliers = [];
+  for (const name of names) suppliers.push(await db.supplier.create({ data: { name } }));
+  const counterparty = await db.projectCounterparty.create({
+    data: { projectId: project.id, name: `Đầu mối E2E ${stamp}`, kind: "ncc", actualBasis: "manual", actualManualVnd: 7_000_000 },
+  });
+  const first = await db.projectCounterpartySupplier.create({ data: { projectId: project.id, counterpartyId: counterparty.id, supplierId: suppliers[0].id } });
+  const second = await db.projectCounterpartySupplier.create({ data: { projectId: project.id, counterpartyId: counterparty.id, supplierId: suppliers[1].id } });
+  const loose = await db.projectCounterpartySupplier.create({ data: { projectId: project.id, supplierId: suppliers[2].id } });
+  const projectUser = await db.user.findFirst({ where: { email: "e2e-project@nq.local" }, select: { id: true } });
+  if (!projectUser) throw new Error("E2E project user missing — global setup did not run");
+  await db.projectPermission.create({ data: { userId: projectUser.id, projectId: project.id, level: projectUserLevel } });
+  return {
+    projectId: project.id,
+    projectCode: project.code,
+    counterpartyId: counterparty.id,
+    supplierIds: suppliers.map((s) => s.id),
+    links: { first: first.id, second: second.id, loose: loose.id },
+  };
+}
+
+/** Clears H / S / X / Z on every NCC row of the book, so each spec starts from stored nothing. */
+export async function resetDtHdTtLinks(book: DtHdTtBook): Promise<void> {
+  await db.projectCounterpartySupplier.updateMany({
+    where: { projectId: book.projectId },
+    data: { paidOverrideVnd: null, splitActualVnd: null, recoveredVnd: null, todoNote: null, deletedAt: null },
+  });
+}
+
+/** Deletes everything `seedDtHdTtBook` created (FK-safe order). */
+export async function deleteDtHdTtBook(book: DtHdTtBook): Promise<void> {
+  await db.projectPermission.deleteMany({ where: { projectId: book.projectId } });
+  await db.projectCounterpartySupplier.deleteMany({ where: { projectId: book.projectId } });
+  await db.projectCounterparty.deleteMany({ where: { projectId: book.projectId } });
+  await db.project.delete({ where: { id: book.projectId } });
+  await db.supplier.deleteMany({ where: { id: { in: book.supplierIds } } });
+}
+
 /** Returns the highest-id round whose note matches, for teardown of UI-created rounds. */
 export async function findRoundByNote(note: string): Promise<{ id: number } | null> {
   return db.paymentRound.findFirst({

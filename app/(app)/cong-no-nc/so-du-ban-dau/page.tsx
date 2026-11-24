@@ -45,6 +45,7 @@ export default async function SoDuBanDauNcPage() {
         partyOptions={contractors}
         projects={projects}
         partyLabel="Đội thi công"
+        partyKind="contractor"
         defaults={{ entityId: entities[0]?.id ?? 0, partyId: contractors[0]?.id ?? 0 }}
         actions={{
           patch: patchLaborOpeningBalance,

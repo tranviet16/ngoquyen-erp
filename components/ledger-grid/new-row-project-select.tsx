@@ -1,6 +1,7 @@
 "use client";
 
 import type { SelectOption } from "@/components/data-grid";
+import { QuickCreateOption, useQuickCreatePick } from "@/components/master-data/quick-create/quick-create-provider";
 
 export const NEW_ROW_PROJECT_REQUIRED_MESSAGE =
   "Chọn công trình cho dòng mới trước khi thêm dòng — công nợ vật tư theo NCC × công trình.";
@@ -17,19 +18,24 @@ interface Props {
  * công trình cũng lấy giá trị này.
  */
 export function NewRowProjectSelect({ projects, value, onChange }: Props) {
+  const pickQuickCreate = useQuickCreatePick();
   return (
     <label className="flex flex-wrap items-center gap-2 text-sm">
       <span className="text-muted-foreground">Công trình cho dòng mới</span>
       <select
         className="h-8 min-w-56 rounded-md border border-input bg-transparent px-2 text-sm"
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        onChange={(e) => {
+          if (pickQuickCreate(e.target.value, "project", (r) => onChange(r.id))) return;
+          onChange(e.target.value ? Number(e.target.value) : null);
+        }}
         aria-label="Công trình cho dòng mới"
       >
         <option value="">-- Chọn công trình --</option>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>{p.name}</option>
         ))}
+        <QuickCreateOption />
       </select>
     </label>
   );

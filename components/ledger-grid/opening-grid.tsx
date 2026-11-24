@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { DataGridColumn, DataGridHandlers, SelectOption } from "@/components/data-grid";
 import { NEW_ROW_PROJECT_REQUIRED_MESSAGE, NewRowProjectSelect } from "./new-row-project-select";
 import { unwrapActionResult } from "./unwrap-action-result";
+import { useLedgerSelectOptions, type LedgerPartyKind } from "./use-ledger-select-options";
 
 const DataGrid = dynamic(
   () => import("@/components/data-grid").then((m) => m.DataGrid),
@@ -55,6 +56,8 @@ interface Props {
   role?: string;
   /** Sổ vật tư: bắt buộc chọn công trình trước khi tạo dòng (sổ nhân công không truyền). */
   requireProject?: boolean;
+  /** Đối tác của sổ — loại danh mục tạo khi chọn "+ Tạo mới…" ở cột đối tác. */
+  partyKind: LedgerPartyKind;
 }
 
 export function dbObToRow(b: Record<string, unknown>): OpeningRow {
@@ -73,9 +76,9 @@ export function dbObToRow(b: Record<string, unknown>): OpeningRow {
 
 export function LedgerOpeningGrid({
   initialData,
-  entities,
-  partyOptions,
-  projects,
+  entities: baseEntities,
+  partyOptions: basePartyOptions,
+  projects: baseProjects,
   partyLabel,
   defaults,
   actions,
@@ -83,22 +86,29 @@ export function LedgerOpeningGrid({
   canEdit,
   canDelete,
   requireProject = false,
+  partyKind,
 }: Props) {
   const router = useRouter();
   const [newRowProjectId, setNewRowProjectId] = useState<number | null>(null);
+  const { entities, partyOptions, projects, create } = useLedgerSelectOptions({
+    entities: baseEntities,
+    partyOptions: basePartyOptions,
+    projects: baseProjects,
+    partyKind,
+  });
 
   const columns = useMemo<DataGridColumn<OpeningRow>[]>(
     () => [
       // entityId/partyId/projectId: plain integer FKs (no Prisma join); sort by option name via kind:"select" + options
-      { id: "entityId", title: "Chủ thể", kind: "select", width: 160, options: entities, sortable: true, filterable: true, filterKind: "select" },
-      { id: "partyId", title: partyLabel, kind: "select", width: 180, options: partyOptions, sortable: true, filterable: true, filterKind: "select" },
-      { id: "projectId", title: "Dự án", kind: "select", width: 160, options: projects, sortable: true, filterable: true, filterKind: "select" },
+      { id: "entityId", title: "Chủ thể", kind: "select", width: 160, options: entities, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.entity },
+      { id: "partyId", title: partyLabel, kind: "select", width: 180, options: partyOptions, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.party },
+      { id: "projectId", title: "Dự án", kind: "select", width: 160, options: projects, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.project },
       { id: "asOfDate", title: "Ngày đầu kỳ", kind: "date", width: 120, sortable: true, filterable: true, filterKind: "date" },
       { id: "balanceTt", title: "Số dư TT", kind: "currency", width: 140, sortable: true, filterable: true, filterKind: "number" },
       { id: "balanceHd", title: "Số dư HĐ", kind: "currency", width: 140, sortable: true, filterable: true, filterKind: "number" },
       { id: "note", title: "Ghi chú", kind: "text", width: 200, sortable: true, filterable: true, filterKind: "text" },
     ],
-    [entities, partyOptions, projects, partyLabel],
+    [entities, partyOptions, projects, partyLabel, create],
   );
 
   const handlers: DataGridHandlers<OpeningRow> = {

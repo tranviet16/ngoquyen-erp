@@ -10,11 +10,21 @@
 
 import { prisma } from "@/lib/prisma";
 import { lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
+import { lockProjectDtHdTt } from "@/lib/du-an/dt-hd-tt/project-lock";
 import { getAdapter } from "./adapters/adapter-registry";
 import type { ImportTx } from "./adapters/adapter-types";
-import { ImportError } from "./import-errors";
+import {
+  assertDuAnBookRollbackAllowed,
+  countDuAnBookRows,
+  deleteDuAnBookRows,
+  duAnBookProjects,
+} from "./du-an-book-rollback";
+import { hasDbErrorCode, ImportError, RollbackBlockedError } from "./import-errors";
 import { lockRunRow, updateRunIfStatus } from "./import-run-store";
 import { assertRollbackAllowed, collectRunPairs } from "./rollback-guards";
+
+/** Postgres: vi phạm khóa ngoại — còn dòng ngoài run trỏ tới dòng sắp xóa. */
+const FK_VIOLATION = new Set(["23503"]);
 
 /** Giống commit: hoàn tác lớn (nhiều bảng) cần hơn 5 giây mặc định. */
 const ROLLBACK_TX_OPTIONS = { timeout: 300_000, maxWait: 10_000 } as const;
@@ -73,7 +83,9 @@ export async function getRollbackInfo(id: number) {
     prisma.slDtMonthlyInput.count({ where: { importRunId: id } }),
     prisma.slDtProgressStatus.count({ where: { importRunId: id } }),
   ]);
+  const duAnBook = await countDuAnBookRows(id);
   return {
+    duAnBook,
     ledgerTransactions: tx,
     ledgerOpeningBalances: open,
     projectEstimates: est,
@@ -100,7 +112,7 @@ export async function getRollbackInfo(id: number) {
     total:
       tx + open + est + ptx + sdd + psc + lc + je +
       psch + pacc + pco + pcon + p3wf + srec + lpay + pra + eclass + psds +
-      slLot + slMs + slPp + slMi + slPs,
+      slLot + slMs + slPp + slMi + slPs + duAnBook.total,
   };
 }
 
@@ -166,7 +178,9 @@ async function deleteRunRows(tx: Pick<ImportTx, "$executeRaw">, id: number) {
   };
 }
 
-export type RollbackResult = Awaited<ReturnType<typeof deleteRunRows>>;
+export type RollbackResult = Awaited<ReturnType<typeof deleteRunRows>> & {
+  duAnBook: Awaited<ReturnType<typeof deleteDuAnBookRows>>;
+};
 
 /** Hoàn tác run `committed` → `rolled_back`. Ném `ImportError` / `RollbackBlockedError` khi bị từ chối. */
 export async function rollbackImportRun(id: number): Promise<RollbackResult> {
@@ -184,9 +198,22 @@ export async function rollbackImportRun(id: number): Promise<RollbackResult> {
 
     const pairs = await collectRunPairs(tx, id);
     await lockSuppliers(tx, pairs.map((p) => p.supplierId));
+    const bookProjects = await duAnBookProjects(tx, id);
+    await lockProjectDtHdTt(tx, bookProjects);
     await assertRollbackAllowed(tx, run);
+    await assertDuAnBookRollbackAllowed(tx, run, bookProjects);
 
-    const counts = await deleteRunRows(tx, id);
+    let counts: RollbackResult;
+    try {
+      // Giao dịch / dự toán của run (gồm giao dịch sinh từ hóa đơn) xóa trước sổ: khóa ngoại.
+      const base = await deleteRunRows(tx, id);
+      counts = { ...base, duAnBook: await deleteDuAnBookRows(tx, run, bookProjects) };
+    } catch (err) {
+      if (hasDbErrorCode(err, FK_VIOLATION)) {
+        throw new RollbackBlockedError(id, ["Còn dữ liệu ngoài run trỏ tới dòng của run (khóa ngoại) — sửa trên màn hình thay vì hoàn tác."]);
+      }
+      throw err;
+    }
     const updated = await updateRunIfStatus(tx, id, "committed", {
       status: "rolled_back",
       rolledBackAt: new Date(),

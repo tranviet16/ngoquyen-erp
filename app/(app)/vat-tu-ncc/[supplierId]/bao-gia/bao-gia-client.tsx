@@ -14,6 +14,12 @@ import { formatDate, formatNumber } from "@/lib/utils/format";
 import { Plus, Save, X } from "lucide-react";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
+import {
+  QuickCreateOption,
+  useOptionsWithCreated,
+  useQuickCreatePick,
+} from "@/components/master-data/quick-create/quick-create-provider";
+import type { QuickCreatedRecord } from "@/lib/master-data/quick-create-types";
 
 type QuoteRow = {
   id: number;
@@ -29,6 +35,12 @@ type AnnotatedRow = ReturnType<typeof annotateQuoteHistory<{
 }>>[number];
 
 type ItemOption = { id: number; code: string; name: string; unit: string };
+
+/** Vật tư vừa tạo tại chỗ: NCC vật tư báo giá vật liệu và ca máy (như danh sách của trang). */
+const toQuoteItemOption = (r: QuickCreatedRecord): ItemOption | null =>
+  r.itemType === "material" || r.itemType === "machine"
+    ? { id: r.id, code: r.code ?? "", name: r.name, unit: r.unit ?? "" }
+    : null;
 
 const TREND_BADGE: Record<QuoteTrend, { label: string; className: string }> = {
   moi: { label: "Mới", className: "bg-blue-100 text-blue-700" },
@@ -47,8 +59,10 @@ interface Props {
   canEdit: boolean;
 }
 
-export function BaoGiaClient({ supplierId, initialData, items, canCreate, canEdit }: Props) {
+export function BaoGiaClient({ supplierId, initialData, items: baseItems, canCreate, canEdit }: Props) {
   const router = useRouter();
+  const items = useOptionsWithCreated("item", baseItems, toQuoteItemOption);
+  const pickQuickCreate = useQuickCreatePick();
   const [, startTransition] = useTransition();
   const [itemId, setItemId] = useState<string>("");
   const [unitPrice, setUnitPrice] = useState<string>("");
@@ -172,13 +186,17 @@ export function BaoGiaClient({ supplierId, initialData, items, canCreate, canEdi
             <span className="block text-muted-foreground">Vật tư</span>
             <select
               value={itemId}
-              onChange={(e) => setItemId(e.target.value)}
+              onChange={(e) => {
+                if (pickQuickCreate(e.target.value, "item", (r) => setItemId(String(r.id)), { itemType: "material" })) return;
+                setItemId(e.target.value);
+              }}
               className="h-9 min-w-56 rounded-md border border-input bg-transparent px-2 text-sm"
             >
               <option value="">— Chọn vật tư —</option>
               {items.map((i) => (
                 <option key={i.id} value={i.id}>{i.code} - {i.name} ({i.unit})</option>
               ))}
+              <QuickCreateOption />
             </select>
             {itemId && (
               <span className="block text-xs text-muted-foreground">

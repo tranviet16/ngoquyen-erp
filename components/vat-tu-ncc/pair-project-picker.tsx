@@ -17,6 +17,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { parseProjectIdParam } from "./project-id-param";
+import {
+  QuickCreateOption,
+  useOptionsWithCreated,
+  useQuickCreate,
+  useQuickCreatePick,
+} from "@/components/master-data/quick-create/quick-create-provider";
+import type { QuickCreatedRecord } from "@/lib/master-data/quick-create-types";
+
+const toPairProjectOption = (r: QuickCreatedRecord): PairProjectOption => ({ id: r.id, code: r.code ?? "", name: r.name });
 
 export interface PairProjectOption {
   id: number;
@@ -46,10 +55,12 @@ interface NavProps {
   allProjects: PairProjectOption[];
 }
 
-export function SupplierPairNav({ supplierId, supplierName, tabs, supplierProjects, allProjects }: NavProps) {
+export function SupplierPairNav({ supplierId, supplierName, tabs, supplierProjects, allProjects: baseAllProjects }: NavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const allProjects = useOptionsWithCreated("project", baseAllProjects, toPairProjectOption);
+  const pickQuickCreate = useQuickCreatePick();
   const projectId = parseProjectIdParam(searchParams.get("projectId"));
   const basePath = `/vat-tu-ncc/${supplierId}`;
   const query = projectId != null ? `?projectId=${projectId}` : "";
@@ -80,7 +91,10 @@ export function SupplierPairNav({ supplierId, supplierName, tabs, supplierProjec
           aria-label="Công trình"
           className={cn(selectClass, "max-w-xs")}
           value={projectId ?? ""}
-          onChange={(e) => changeProject(e.target.value ? Number(e.target.value) : null)}
+          onChange={(e) => {
+            if (pickQuickCreate(e.target.value, "project", (r) => changeProject(r.id))) return;
+            changeProject(e.target.value ? Number(e.target.value) : null);
+          }}
         >
           <option value="">Tất cả công trình</option>
           {supplierProjects.length > 0 && (
@@ -98,6 +112,7 @@ export function SupplierPairNav({ supplierId, supplierName, tabs, supplierProjec
             </optgroup>
           )}
           {projectId != null && !current && <option value={projectId}>Công trình #{projectId}</option>}
+          <QuickCreateOption label="+ Tạo công trình mới…" />
         </select>
         {projectId == null && (
           <span className="text-xs text-muted-foreground">
@@ -167,8 +182,11 @@ interface PickerProps {
   allProjects: PairProjectOption[];
 }
 
-export function PairProjectPicker({ supplierId, tab, supplierProjects, allProjects }: PickerProps) {
+export function PairProjectPicker({ supplierId, tab, supplierProjects, allProjects: baseAllProjects }: PickerProps) {
   const router = useRouter();
+  const allProjects = useOptionsWithCreated("project", baseAllProjects, toPairProjectOption);
+  const { enabled: canQuickCreate } = useQuickCreate();
+  const pickQuickCreate = useQuickCreatePick();
   const knownIds = new Set(supplierProjects.map((p) => p.id));
   const otherProjects = allProjects.filter((p) => !knownIds.has(p.id));
   const [other, setOther] = useState("");
@@ -196,7 +214,7 @@ export function PairProjectPicker({ supplierId, tab, supplierProjects, allProjec
           ))}
         </ul>
       )}
-      {otherProjects.length > 0 && (
+      {(otherProjects.length > 0 || canQuickCreate) && (
         <form
           className="flex flex-wrap items-center gap-2 text-sm"
           onSubmit={(e) => {
@@ -211,12 +229,16 @@ export function PairProjectPicker({ supplierId, tab, supplierProjects, allProjec
             id="pair-project-other"
             className={cn(selectClass, "max-w-xs")}
             value={other}
-            onChange={(e) => setOther(e.target.value)}
+            onChange={(e) => {
+              if (pickQuickCreate(e.target.value, "project", (r) => setOther(String(r.id)))) return;
+              setOther(e.target.value);
+            }}
           >
             <option value="">— Chọn công trình —</option>
             {otherProjects.map((p) => (
               <option key={p.id} value={p.id}>{projectLabel(p)}</option>
             ))}
+            <QuickCreateOption label="+ Tạo công trình mới…" />
           </select>
           <Button type="submit" size="sm" variant="outline" disabled={!other}>
             Mở
