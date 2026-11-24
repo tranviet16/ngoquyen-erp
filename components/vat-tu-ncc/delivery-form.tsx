@@ -10,9 +10,19 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { deliverySchema, type DeliveryInput } from "@/lib/vat-tu-ncc/schemas";
 import { resolveQuote, type QuoteLike } from "@/lib/vat-tu-ncc/quote-resolver";
 import { formatDate, formatNumber } from "@/lib/utils/format";
+import {
+  QuickCreateOption,
+  useLocalQuickCreate,
+  useOptionsWithCreated,
+  useQuickCreatePick,
+} from "@/components/master-data/quick-create/quick-create-provider";
+import type { QuickCreatedRecord } from "@/lib/master-data/quick-create-types";
 
 type ItemOption = { id: number; code: string; name: string; unit: string };
 type ProjectOption = { id: number; code: string; name: string };
+
+const toItemOption = (r: QuickCreatedRecord): ItemOption => ({ id: r.id, code: r.code ?? "", name: r.name, unit: r.unit ?? "" });
+const toProjectOption = (r: QuickCreatedRecord): ProjectOption => ({ id: r.id, code: r.code ?? "", name: r.name });
 
 /** Mức báo giá đã tải sẵn của NCC (đơn giá dạng số, ngày hiệu lực dạng Date). */
 type QuoteOption = QuoteLike;
@@ -30,7 +40,12 @@ interface Props {
   onSubmit: (d: DeliveryInput) => Promise<void>;
 }
 
-export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaultValues, lockedProjectId, onSubmit }: Props) {
+export function DeliveryForm({ supplierId, mode, quotes, items: baseItems, projects: baseProjects, defaultValues, lockedProjectId, onSubmit }: Props) {
+  const items = useOptionsWithCreated("item", baseItems, toItemOption);
+  const projects = useOptionsWithCreated("project", baseProjects, toProjectOption);
+  // Form nằm trong hộp thoại Thêm/Sửa phiếu → hộp thoại "Tạo mới" phải là hộp thoại con của nó.
+  const localQuickCreate = useLocalQuickCreate();
+  const pickQuickCreate = useQuickCreatePick(localQuickCreate.request);
   const form = useForm<DeliveryInput>({
     resolver: zodResolver(deliverySchema),
     defaultValues: {
@@ -83,12 +98,16 @@ export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaul
             <FormItem><FormLabel>Công trình</FormLabel><FormControl>
               <select
                 value={field.value ?? ""}
-                onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                onChange={(e) => {
+                  if (pickQuickCreate(e.target.value, "project", (r) => field.onChange(r.id))) return;
+                  field.onChange(e.target.value ? Number(e.target.value) : undefined);
+                }}
                 disabled={lockedProjectId != null}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-70"
               >
                 <option value="">-- Chọn công trình --</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
+                <QuickCreateOption />
               </select>
             </FormControl><FormMessage /></FormItem>
           )} />
@@ -98,10 +117,14 @@ export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaul
           <FormItem><FormLabel>Vật tư</FormLabel><FormControl>
             <select
               value={field.value}
-              onChange={(e) => field.onChange(Number(e.target.value))}
+              onChange={(e) => {
+                if (pickQuickCreate(e.target.value, "item", (r) => field.onChange(r.id), { itemType: "material" })) return;
+                field.onChange(Number(e.target.value));
+              }}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
             >
               {items.map((i) => <option key={i.id} value={i.id}>{i.code} - {i.name}</option>)}
+              <QuickCreateOption />
             </select>
           </FormControl><FormMessage /></FormItem>
         )} />
@@ -167,6 +190,8 @@ export function DeliveryForm({ supplierId, mode, quotes, items, projects, defaul
 
         <div className="flex justify-end pt-2"><Button type="submit">Lưu</Button></div>
       </form>
+      {/* Ngoài <form>: submit của form tạo danh mục không được lan lên form phiếu. */}
+      {localQuickCreate.element}
     </Form>
   );
 }

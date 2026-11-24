@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
+import { invoiceBookHref } from "@/components/du-an/dt-hd-tt/dt-hd-tt-sub-nav";
 import { useState, useTransition } from "react";
 import type { ReactElement } from "react";
 import { useRouter } from "next/navigation";
@@ -36,6 +38,8 @@ type TxRow = {
   categoryId: number; itemCode: string; itemName: string; partyName: string | null;
   qty: unknown; qtyHd: unknown; unit: string; unitPriceHd: unknown; unitPriceTt: unknown;
   amountHd: unknown; amountTt: unknown; invoiceNo: string | null; status: string; note: string | null;
+  /** Dòng sinh từ sổ Hóa đơn của tab Đối chiếu DT-HĐ-TT — chỉ đọc ở đây. */
+  sourceInvoiceLineId: number | null;
 };
 type CategoryOption = { id: number; code: string; name: string };
 
@@ -59,7 +63,12 @@ interface TxGridRow extends RowWithId {
   invoiceNo: string;
   status: string;
   note: string;
+  fromInvoiceBook: boolean;
 }
+
+const INVOICE_BOOK_HINT = "Sửa ở sổ Hóa đơn (tab Đối chiếu DT-HĐ-TT)";
+/** Cột sửa được ở dòng thường; dòng sinh từ sổ Hóa đơn thì khóa với mọi vai trò. */
+const lockDerived = (row: TxGridRow) => row.fromInvoiceBook;
 
 interface Props {
   projectId: number; initialData: TxRow[]; categories: CategoryOption[]; canCreate: boolean; canEdit: boolean; canDelete: boolean; isAdmin?: boolean;
@@ -182,7 +191,10 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
     invoiceNo: r.invoiceNo ?? "",
     status: r.status,
     note: r.note ?? "",
+    fromInvoiceBook: r.sourceInvoiceLineId != null,
   }));
+  const derivedCount = rows.filter((r) => r.fromInvoiceBook).length;
+  const selectedDerived = selectedIds.some((id) => rows.find((r) => r.id === id)?.fromInvoiceBook);
 
   const statusOptions: SelectOption[] = Object.entries(STATUS_LABELS).map(([v, l]) => ({ id: v, name: l }));
 
@@ -216,22 +228,22 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
     { id: "date", title: "Ngày", kind: "text", width: 100, readonly: true },
     { id: "txTypeLabel", title: "Loại", kind: "text", width: 100, readonly: true },
     { id: "itemCode", title: "Mã hàng", kind: "text", width: 100, readonly: true },
-    { id: "itemName", title: "Tên hàng", kind: "text", width: 220 },
+    { id: "itemName", title: "Tên hàng", kind: "text", width: 220, readonly: lockDerived },
     { id: "categoryLabel", title: "Hạng mục", kind: "text", width: 130, readonly: true },
-    { id: "partyName", title: "Nhà cung cấp", kind: "text", width: 140 },
-    { id: "qty", title: "SL", kind: "number", width: 90 },
-    { id: "qtyHd", title: "SL HĐ", kind: "number", width: 90, format: (v) => (v == null ? "—" : String(v)) },
-    { id: "unit", title: "ĐVT", kind: "text", width: 60 },
-    { id: "unitPriceHd", title: "ĐG HĐ", kind: "currency", width: 120 },
-    { id: "unitPriceTt", title: "ĐG TT", kind: "currency", width: 120 },
-    { id: "amountHd", title: "Giá trị HĐ", kind: "currency", width: 130, readonly: adminEditable<TxGridRow>(true) },
-    { id: "amountTt", title: "Giá trị TT", kind: "currency", width: 130, readonly: adminEditable<TxGridRow>(true) },
-    { id: "invoiceNo", title: "Số HĐ", kind: "text", width: 100 },
+    { id: "partyName", title: "Nhà cung cấp", kind: "text", width: 140, readonly: lockDerived },
+    { id: "qty", title: "SL", kind: "number", width: 90, readonly: lockDerived },
+    { id: "qtyHd", title: "SL HĐ", kind: "number", width: 90, readonly: lockDerived, format: (v) => (v == null ? "—" : String(v)) },
+    { id: "unit", title: "ĐVT", kind: "text", width: 60, readonly: lockDerived },
+    { id: "unitPriceHd", title: "ĐG HĐ", kind: "currency", width: 120, readonly: lockDerived },
+    { id: "unitPriceTt", title: "ĐG TT", kind: "currency", width: 120, readonly: lockDerived },
+    { id: "amountHd", title: "Giá trị HĐ", kind: "currency", width: 130, readonly: (row, role) => lockDerived(row) || adminEditable<TxGridRow>(true)(row, role) },
+    { id: "amountTt", title: "Giá trị TT", kind: "currency", width: 130, readonly: (row, role) => lockDerived(row) || adminEditable<TxGridRow>(true)(row, role) },
+    { id: "invoiceNo", title: "Số HĐ", kind: "text", width: 100, readonly: lockDerived },
     {
-      id: "status", title: "TT", kind: "select", width: 110, options: statusOptions,
+      id: "status", title: "TT", kind: "select", width: 110, options: statusOptions, readonly: lockDerived,
       format: (v) => STATUS_LABELS[String(v)] ?? "",
     },
-    { id: "note", title: "Ghi chú", kind: "text", width: 200 },
+    { id: "note", title: "Ghi chú", kind: "text", width: 200, readonly: lockDerived, format: (v, row) => (row.fromInvoiceBook ? `${INVOICE_BOOK_HINT}${v ? ` · ${String(v)}` : ""}` : String(v ?? "")) },
   ];
 
   const handlers: DataGridHandlers<TxGridRow> = {
@@ -250,7 +262,9 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
       }
     },
     onDeleteRows: async (ids) => {
-      for (const id of ids) {
+      const deletable = ids.filter((id) => !rows.find((r) => r.id === id)?.fromInvoiceBook);
+      if (deletable.length < ids.length) toast.info(`Bỏ qua ${ids.length - deletable.length} dòng sinh từ sổ Hóa đơn — ${INVOICE_BOOK_HINT}.`);
+      for (const id of deletable) {
         await softDeleteTransaction(id, projectId);
       }
       startTransition(() => router.refresh());
@@ -286,12 +300,21 @@ export function GiaoDichClient({ projectId, initialData, categories, canCreate, 
           </p>
         </div>
         <div className="flex gap-2">
-          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1} onClick={editSelected}>
+          <Button hidden={!canEdit} variant="outline" disabled={selectedIds.length !== 1 || selectedDerived} onClick={editSelected}>
             Sửa đầy đủ
           </Button>
           <Button hidden={!canCreate} onClick={() => setCreateOpen(true)}>Thêm giao dịch</Button>
         </div>
       </div>
+
+      {derivedCount > 0 && (
+        <div className="rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          Công trình này có sổ Hóa đơn: {derivedCount} dòng giao dịch sinh từ sổ là chỉ đọc ở đây.{" "}
+          <Link href={invoiceBookHref(projectId)} className="underline">
+            Sửa ở sổ Hóa đơn
+          </Link>
+        </div>
+      )}
 
       <DataGrid<TxGridRow>
         columns={columns}

@@ -153,7 +153,8 @@ export function TableShell<T extends Record<string, unknown>>({
                     if (col.editable && onCellEdit) {
                       return (
                         <EditableCell key={col.key} row={row} colKey={col.key} editKind={col.editKind}
-                          editOptions={col.editOptions} parseEdit={col.parseEdit} onCellEdit={onCellEdit}
+                          editOptions={col.editOptions} parseEdit={col.parseEdit} onCreateOption={col.onCreateOption}
+                          onCellEdit={onCellEdit}
                           onPendingChange={onPendingChange} className={cls}>
                           {content}
                         </EditableCell>
