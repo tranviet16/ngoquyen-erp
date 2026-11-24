@@ -81,7 +81,7 @@ No real figures, names or credentials are committed.
 - [x] User guides updated
 - [x] Changelog entry
 - [x] Full gate, baseline compare and measure `all` green against `127.0.0.1:3003`; server stopped. Integration tests run in CI only: this machine has no working test database.
-- [ ] Per-account `measure hd-tt` inside the session protocol; dump restored. Pending, together with the write checks of phases 3, 7 and 8; see [final-verification.md](reports/final-verification.md).
+- [x] Per-account `measure hd-tt` inside the session protocol; dump restored. Run together with the write checks of phases 3, 7 and 8; see [final-verification.md](reports/final-verification.md).
 - [x] Final criterion 3 check passes
 - [x] ACL contract test and risk-manifest files byte-identical to `origin/main`
 - [x] `final-verification.md` holds verdicts, counts, sizes, durations and hashes only
@@ -98,7 +98,10 @@ No real figures, names or credentials are committed.
   - Where the plan text and the code differ, the guides follow the code. Examples: the badge shows only a number; the section is named "Đầu mối vượt dự toán"; the print button is "In".
   - Only invented example names and figures are used.
 - **Known gap, documented in the guides:** a book's "Ánh xạ" column says "chưa gán" only when a name has no alias. Ánh xạ and Tổng quan also count a name whose Dòng DT was deleted.
-- **Still to do:** the manual session listed in [final-verification.md](reports/final-verification.md). Until it runs, the guide text on HĐ-TT typing, per-account views and "Lưu và sang dòng kế" is written from code, not seen in a browser.
+- **Manual session (2026-11-24):** run once for phases 3, 7, 8 and 9 under the plan.md protocol: dump, two non-admin accounts, checks, restore, then `compare`. Every check passed; the S check does not apply on project 4. Details are in [final-verification.md](reports/final-verification.md).
+  - The session found that a HĐ-TT cell whose save failed trapped the cursor. The fix landed on phase 7 (`e21a6c8`) and was merged into phases 8 and 9.
+  - The two guide lines on failed saves now describe the new behaviour. The rest of the typing, per-account and "Lưu và sang dòng kế" text matched what the browser showed.
+  - The restore was proven by `compare`, which exited 0 with every artifact equal to the baseline.
 
 ## Verification
 

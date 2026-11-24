@@ -198,7 +198,7 @@ dependencies: [1, 3, 4]
 - [x] `canEditFrom` in the page, with a unit test of the request it makes
 - [x] DT-TT screen: jump bar, collapsible groups, warning links
 - [x] `hd-tt` and `dt-tt` builders; both targets ready; `measure todos` green
-- [ ] `measure hd-tt` per account and the manual sessions inside the session protocol; dump restored. Moved to phase 9's single session, together with the write checks of phases 3 and 8.
+- [x] `measure hd-tt` per account and the manual sessions inside the session protocol; dump restored. Run in phase 9's single session on 2026-11-24. All passed after a focus fix (`e21a6c8`); S does not apply on project 4 (see `reports/final-verification.md`).
 - [x] Baseline compare exits 0
 
 ## Run log (2026-11-23)
