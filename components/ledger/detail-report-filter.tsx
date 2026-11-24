@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { ControlledMultiSelect } from "@/components/ledger/controlled-multi-select";
 import type { Option } from "@/components/ledger/controlled-multi-select";
 import {
@@ -118,13 +119,13 @@ export function DetailReportFilter({
   return (
     <div className="rounded-md border bg-muted/20 p-4 space-y-4">
       {/* Row 1: Year + Month + Entities + Projects */}
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
         {initialPeriod ? (
           <ReportPeriodSelector value={period} onChange={setPeriod} />
         ) : (
           <>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Năm</label>
+        <div className="flex flex-col gap-1.5">
+          <Label>Năm</Label>
           <select
             value={year}
             onChange={(e) => setYear(e.target.value)}
@@ -137,8 +138,8 @@ export function DetailReportFilter({
           </select>
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Tháng</label>
+        <div className="flex flex-col gap-1.5">
+          <Label>Tháng</Label>
           <select
             value={month}
             onChange={(e) => setMonth(e.target.value)}
@@ -153,8 +154,8 @@ export function DetailReportFilter({
           </>
         )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Chủ thể</label>
+        <div className="flex flex-col gap-1.5">
+          <Label>Chủ thể</Label>
           <ControlledMultiSelect
             options={entities}
             selected={selectedEntityIds}
@@ -163,8 +164,8 @@ export function DetailReportFilter({
           />
         </div>
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Công trình</label>
+        <div className="flex flex-col gap-1.5">
+          <Label>Công trình</Label>
           <ControlledMultiSelect
             options={projectOptions}
             selected={selectedProjectIds}
