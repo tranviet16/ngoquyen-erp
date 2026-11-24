@@ -156,6 +156,8 @@ Tab **Đối chiếu công nợ** (`/vat-tu-ncc/[NCC]/doi-chieu?projectId=…`) 
 
 > Cán bộ vật tư chỉ xem được, không nhập liệu công nợ (kế toán nhập).
 
+> Sổ hóa đơn, thực tế nhập, chi thực tế và ánh xạ của từng công trình nhập ở tab **Đối chiếu DT-HĐ-TT**: xem [hướng dẫn riêng](doi-chieu-dt-hd-tt.md).
+
 ---
 
 ## 7. Tìm Kiếm Nhà Cung Cấp

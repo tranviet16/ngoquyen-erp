@@ -9,6 +9,8 @@ import { adminEditable } from "@/lib/utils/admin-editable";
 import { TRANSACTION_TYPES, TRANSACTION_TYPE_LABELS, type TransactionType } from "@/lib/ledger/transaction-classification";
 import { NEW_ROW_PROJECT_REQUIRED_MESSAGE, NewRowProjectSelect } from "./new-row-project-select";
 import { unwrapActionResult } from "./unwrap-action-result";
+import { useLedgerSelectOptions, type LedgerPartyKind } from "./use-ledger-select-options";
+import type { ItemType } from "@/lib/master-data/quick-create-types";
 
 const DataGrid = dynamic(
   () => import("@/components/data-grid").then((m) => m.DataGrid),
@@ -75,6 +77,10 @@ interface Props {
   allowedTypes?: readonly TransactionType[];
   /** Sổ vật tư: bắt buộc chọn công trình trước khi tạo dòng (sổ nhân công không truyền). */
   requireProject?: boolean;
+  /** Đối tác của sổ — loại danh mục tạo khi chọn "+ Tạo mới…" ở cột đối tác. */
+  partyKind: LedgerPartyKind;
+  /** Loại vật tư của cột Hạng mục (loại đầu tiên điền sẵn khi tạo mới). */
+  itemTypes: readonly ItemType[];
 }
 
 const STATUS_OPTIONS: SelectOption[] = [
@@ -110,10 +116,10 @@ export function dbTxToRow(t: Record<string, unknown>): TxRow {
 
 export function LedgerTransactionGrid({
   initialData,
-  entities,
-  partyOptions,
-  projects,
-  items,
+  entities: baseEntities,
+  partyOptions: basePartyOptions,
+  projects: baseProjects,
+  items: baseItems,
   partyLabel,
   defaults,
   actions,
@@ -123,9 +129,19 @@ export function LedgerTransactionGrid({
   isAdmin = false,
   allowedTypes = TRANSACTION_TYPES,
   requireProject = false,
+  partyKind,
+  itemTypes,
 }: Props) {
   const router = useRouter();
   const [newRowProjectId, setNewRowProjectId] = useState<number | null>(null);
+  const { entities, partyOptions, projects, items, create } = useLedgerSelectOptions({
+    entities: baseEntities,
+    partyOptions: basePartyOptions,
+    projects: baseProjects,
+    items: baseItems,
+    partyKind,
+    itemTypes,
+  });
 
   const txTypeOptions = useMemo<SelectOption[]>(
     () => allowedTypes.map((t) => ({ id: t, name: TRANSACTION_TYPE_LABELS[t] })),
@@ -137,10 +153,10 @@ export function LedgerTransactionGrid({
       { id: "date", title: "Ngày", kind: "date", width: 110, sortable: true, filterable: true, filterKind: "date" },
       { id: "transactionType", title: "Loại GD", kind: "select", width: 110, options: txTypeOptions, sortable: true, filterable: true, filterKind: "select" },
       // entityId/partyId/projectId/itemId: plain integer FKs (no Prisma join); sort by option name via kind:"select" + options
-      { id: "entityId", title: "Chủ thể", kind: "select", width: 140, options: entities, sortable: true, filterable: true, filterKind: "select" },
-      { id: "partyId", title: partyLabel, kind: "select", width: 160, options: partyOptions, sortable: true, filterable: true, filterKind: "select" },
-      { id: "projectId", title: "Dự án", kind: "select", width: 140, options: projects, sortable: true, filterable: true, filterKind: "select" },
-      { id: "itemId", title: "Hạng mục", kind: "select", width: 140, options: items, sortable: true, filterable: true, filterKind: "select" },
+      { id: "entityId", title: "Chủ thể", kind: "select", width: 140, options: entities, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.entity },
+      { id: "partyId", title: partyLabel, kind: "select", width: 160, options: partyOptions, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.party },
+      { id: "projectId", title: "Dự án", kind: "select", width: 140, options: projects, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.project },
+      { id: "itemId", title: "Hạng mục", kind: "select", width: 140, options: items, sortable: true, filterable: true, filterKind: "select", onCreateOption: create.item },
       { id: "content", title: "Nội dung", kind: "text", width: 200, sortable: true, filterable: true, filterKind: "text" },
       { id: "amountTt", title: "Tiền TT", kind: "currency", width: 120, sortable: true },
       { id: "vatPctTt", title: "VAT% TT", kind: "number", width: 90, sortable: true },
@@ -152,7 +168,7 @@ export function LedgerTransactionGrid({
       { id: "status", title: "TT", kind: "select", width: 100, options: STATUS_OPTIONS, sortable: true, filterable: true, filterKind: "select" },
       { id: "note", title: "Ghi chú", kind: "text", width: 160, filterable: true, filterKind: "text" },
     ],
-    [entities, partyOptions, projects, items, partyLabel, txTypeOptions],
+    [entities, partyOptions, projects, items, partyLabel, txTypeOptions, create],
   );
 
   const handlers: DataGridHandlers<TxRow> = {

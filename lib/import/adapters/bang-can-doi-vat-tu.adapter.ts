@@ -27,6 +27,7 @@
  * (HM, section): stable only while sheet row order is unchanged.
  */
 
+import { legacyImportBlocking } from "./du-an-dt-hd-tt/legacy-import-guard";
 import * as XLSX from "xlsx";
 import type {
   ImportAdapter,
@@ -455,6 +456,10 @@ export const BangCanDoiVatTuAdapter: ImportAdapter = {
     }
 
     return { valid: errors.length === 0, errors };
+  },
+
+  async review(data, _mapping, db) {
+    return { payload: null, blocking: await legacyImportBlocking(db, String(data.meta.projectCode ?? PROJECT_CODE)), requiredAcks: [] };
   },
 
   async apply(data, _mapping, tx, importRunId): Promise<ImportSummary> {
