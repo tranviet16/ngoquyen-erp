@@ -13,13 +13,14 @@ import type { DataGridColumn, SelectOption } from "@/components/data-grid/types"
 import { noneFilterable } from "@/components/du-an/dt-hd-tt/none-filter-column";
 import type { AliasBoard } from "../alias-board";
 import { filterAnhXaRows } from "../anh-xa-filter";
+import { buildHdTtView, buildScreenRows } from "../hd-tt-screen-model";
 import {
-  boardLiveDtKeys, buildOverviewTodos, HD_TT_LOC_PREDICATES, linkHref, overviewTodoCandidates, type HdTtLoc, type OverviewTodo,
-  type SupplierLinkRow, type TodoId,
+  boardLiveDtKeys, buildOverviewTodos, HD_TT_LOC_PREDICATES, linkHref, overviewTodoCandidates, type HdTtLoc, type OverviewTodo, type SupplierLinkRow,
+  type TodoId,
 } from "../overview-todos";
 import { buildReports, type DtHdTtReports } from "../reports";
 import {
-  ANH_XA_URL, DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL, kindlessEstimateIds, parseDuToanQuery, READY_TARGETS, screenPath,
+  ANH_XA_URL, DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL, HD_TT_URL, kindlessEstimateIds, parseDuToanQuery, READY_TARGETS, screenPath,
   THUC_TE_NHAP_URL, UNSETTLED_ACTUAL,
 } from "../screen-links";
 import { boardOf, linksOf, STALE_DT_KEY, todoScenario, type TodoScenario } from "./overview-fixture";
@@ -95,9 +96,9 @@ function landingRows(t: OverviewTodo, d: Data): unknown[] | null {
     case "du-toan":
       return parseDuToanQuery(url.search).loai === "thieu" ? kindlessEstimateIds(d.estimates, d.liveCategories) : d.estimates;
     case "hd-tt": {
-      // Màn HĐ-TT chưa nhận `loc` (phase 7): áp vị từ của `loc` mà link đã dựng.
-      const loc = new URLSearchParams(t.link.params?.query).get("loc") as HdTtLoc;
-      return d.reports.hdTt.rows.filter(HD_TT_LOC_PREDICATES[loc]);
+      // Màn HĐ-TT: đọc `loc` từ href bằng parser của màn, lọc bằng đúng hàm dựng bảng của màn.
+      const { loc } = HD_TT_URL.parse(url.search);
+      return buildHdTtView(buildScreenRows(d.reports.hdTt.rows), loc).groups.flatMap((g) => g.rows);
     }
     case "cai-dat":
       return null;
@@ -122,7 +123,7 @@ const EXPECTED: Record<TodoId, { target: string; parse?: (search: string) => unk
   "ncc-chua-co-dong": { target: "dau-moi", hash: "ncc-chua-co-dong" },
   "du-toan-chua-co-loai": { target: "du-toan", parse: parseDuToanQuery, value: { loai: "thieu" } },
   "chua-cai-dat": { target: "cai-dat" },
-  "ke-toan-co-viec": { target: "hd-tt", loc: "co-viec" },
+  "ke-toan-co-viec": { target: "hd-tt", parse: HD_TT_URL.parse, value: { loc: "co-viec" }, loc: "co-viec" },
 };
 
 describe("to-do counts use their landing screen's predicate", () => {
@@ -206,10 +207,10 @@ describe("to-do links", () => {
       if (READY_TARGETS.includes(t.link.target)) continue;
       expect(linkHref(PROJECT, t.link), t.id).toBe(screenPath(PROJECT, t.link.target));
     }
-    // Hôm nay HĐ-TT chưa sẵn sàng: việc Z mở trang trần; khi phase 7 bật, href tự mang loc.
+    // HĐ-TT đã sẵn sàng: việc Z mở HĐ-TT lọc sẵn `loc=co-viec`.
     const z = todos.find((t) => t.id === "ke-toan-co-viec")!;
-    const expected = READY_TARGETS.includes("hd-tt") ? "/du-an/4/dt-hd-tt/hd-tt?loc=co-viec" : "/du-an/4/dt-hd-tt/hd-tt";
-    expect(linkHref(PROJECT, z.link)).toBe(expected);
+    expect(READY_TARGETS).toContain("hd-tt");
+    expect(linkHref(PROJECT, z.link)).toBe("/du-an/4/dt-hd-tt/hd-tt?loc=co-viec");
   });
 
   it("only Cài đặt is allowed to open unfiltered", () => {

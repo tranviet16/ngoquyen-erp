@@ -12,6 +12,8 @@
  *   anh-xa        tab=dt|hd|tt · status=chua_gan|de_xuat|xac_nhan|ngoai_dt|thieu_he_so · q (≤100 ký tự) · key
  *   du-toan       loai=thieu
  *   dt-hd         mo=id,…|none (≤30 khối mở) · dauMoi=id|none · loc=con-thieu|vuot|chua-co-hd|thieu-he-so · hd=1
+ *   hd-tt         loc=con-phai-lay-hd|con-phai-lay-ve|co-viec
+ *   dt-tt         neo #phan-i, #phan-ii, #phan-iii, #dm-{id đầu mối}
  *
  * Module thuần, an toàn cho bundle client (không Prisma, không module server).
  */
@@ -31,7 +33,7 @@ export type ScreenTarget =
   | "dt-hd" | "dt-tt" | "hd-tt" | "cai-dat";
 
 /** Màn đã nhận bộ lọc / neo từ URL. Link tới màn chưa sẵn sàng mở trang trần (không tham số, không neo). */
-export const READY_TARGETS: readonly ScreenTarget[] = ["hoa-don", "thuc-te-nhap", "chi-thuc-te", "dau-moi", "anh-xa", "du-toan", "dt-hd"];
+export const READY_TARGETS: readonly ScreenTarget[] = ["hoa-don", "thuc-te-nhap", "chi-thuc-te", "dau-moi", "anh-xa", "du-toan", "dt-hd", "hd-tt", "dt-tt"];
 
 /** Màn nằm ngoài nhóm DT-HĐ-TT (tab của công trình). */
 const PROJECT_TABS: readonly ScreenTarget[] = ["du-toan", "cai-dat"];
@@ -217,3 +219,12 @@ export function kindlessEstimateIds(
 export {
   DT_HD_LOCS, DT_HD_OPEN_MAX, DT_HD_URL, dtHdQuery, parseDtHdQuery, patchDtHdQuery, type DtHdBlockKey, type DtHdLoc, type DtHdParams,
 } from "./dt-hd-url";
+
+// ---------------------------------------------------------------------------
+// HĐ-TT: loc · DT-TT: neo — hợp đồng ở hd-tt-dt-tt-url.ts
+// ---------------------------------------------------------------------------
+
+export {
+  DT_TT_ANCHORS, dtTtAnchor, dtTtCounterpartyAnchor, HD_TT_LOCS, HD_TT_URL, hdTtQuery, parseDtTtAnchor, parseHdTtQuery, patchHdTtQuery,
+  type DtTtAnchor, type DtTtPartAnchor, type HdTtParams,
+} from "./hd-tt-dt-tt-url";

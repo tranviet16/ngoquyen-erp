@@ -6,6 +6,9 @@
  *   - Cài đặt: ngoại lệ không lọc duy nhất, chỉ cần mở được;
  *   - DT-HĐ (màn báo cáo, hook `data-dt-hd-state`): trạng thái = tham số link = URL, còn ≥ 1 đầu mối; link
  *     `dauMoi` của Kiểm tổng chỉ hiện đúng khối đó và khối đang mở; link trần hiện đủ mọi khối.
+ *   - HĐ-TT (hook `data-hd-tt-state`): trạng thái = tham số link = URL; link `loc` hiện đúng số dòng trên chip của
+ *     nó (cùng vị từ với số đếm của Tổng quan) và dòng tổng ghi "Tổng cộng (cả bảng)"; link trần hiện đủ mọi dòng.
+ *   - DT-TT (hook `data-dt-tt-screen`): có thanh nhảy; neo của link (`phan-…`, `dm-{id}`) có phần tử, URL giữ neo.
  * Đích đã sẵn sàng mà chưa có cách kiểm ở đây → lỗi (phase làm màn đó phải thêm vào). Thông báo chỉ nói
  * đích / tham số / kết luận, không in số liệu.
  */
@@ -13,10 +16,11 @@
 import type { Page } from "playwright";
 import { canonicalJson } from "../../lib/du-an/dt-hd-tt/grid-url-codec";
 import {
-  ANH_XA_URL, CHI_THUC_TE_URL, DAU_MOI_ANCHORS, DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL, DT_HD_URL, HOA_DON_URL, parseDuToanQuery,
-  READY_TARGETS, screenPath, THUC_TE_NHAP_URL, type ScreenTarget,
+  ANH_XA_URL, CHI_THUC_TE_URL, DAU_MOI_ANCHORS, DAU_MOI_COUNTERPARTY_URL, DAU_MOI_SUPPLIER_URL, DT_HD_URL, HD_TT_URL, HOA_DON_URL, parseDtTtAnchor,
+  parseDuToanQuery, READY_TARGETS, screenPath, THUC_TE_NHAP_URL, type ScreenTarget,
 } from "../../lib/du-an/dt-hd-tt/screen-links";
 import { dtHdStateOfUrl, readDtHd, waitForDtHd } from "./dt-hd-screen-hooks";
+import { hdTtStateOfUrl, readDtTt, readHdTt, waitForDtTt, waitForHdTt } from "./hd-tt-screen-hooks";
 import { liveSearch, PAGE_TIMEOUT_MS, readHook, SETTLE_MS, waitForHook } from "./screen-state-hooks";
 
 const ALL_TARGETS: readonly ScreenTarget[] = ["hoa-don", "thuc-te-nhap", "chi-thuc-te", "dau-moi", "anh-xa", "du-toan", "dt-hd", "dt-tt", "hd-tt", "cai-dat"];
@@ -119,6 +123,8 @@ export async function checkLanding(page: Page, l: ParsedLink, where: string): Pr
   }
 
   if (l.target === "dt-hd") return checkDtHdLanding(page, l, where);
+  if (l.target === "hd-tt") return checkHdTtLanding(page, l, where);
+  if (l.target === "dt-tt") return checkDtTtLanding(page, l, where);
 
   failures.push(`${where}: đích ${l.target} đã sẵn sàng nhưng lệnh đo todos chưa có cách kiểm màn này`);
   return failures;
@@ -140,5 +146,42 @@ async function checkDtHdLanding(page: Page, l: ParsedLink, where: string): Promi
     else if (!row.open) failures.push(`${where}: khối đầu mối của link không mở`);
   }
   if (canonicalJson(params) === "{}" && s.rows.length !== s.blocks) failures.push(`${where}: link trần không hiện đủ khối đầu mối`);
+  return failures;
+}
+
+/** HĐ-TT mở từ link của Tổng quan (Σ U / Σ Y / việc kế toán `loc=…`, các số và Kiểm tổng trần). */
+async function checkHdTtLanding(page: Page, l: ParsedLink, where: string): Promise<string[]> {
+  const failures: string[] = [];
+  await waitForHdTt(page);
+  await page.waitForTimeout(SETTLE_MS);
+  const s = await readHdTt(page);
+  const params = HD_TT_URL.parse(l.search);
+  if (s.state !== hdTtStateOfUrl(page)) failures.push(`${where}: data-hd-tt-state khác trạng thái đọc từ URL`);
+  if (s.state !== canonicalJson(params)) failures.push(`${where}: trạng thái HĐ-TT khác tham số của link`);
+  if (s.domRows !== s.visibleRows) failures.push(`${where}: số dòng trong bảng khác data-visible-rows`);
+  if (params.loc !== undefined) {
+    // Cùng vị từ với số đếm của Tổng quan: số dòng hiện = số trên chip của `loc` đó.
+    if (s.visibleRows !== s.chips[params.loc]) failures.push(`${where}: số dòng hiện khác số trên chip ${params.loc}`);
+    if (s.totalLabel !== "Tổng cộng (cả bảng)") failures.push(`${where}: dòng tổng không ghi "Tổng cộng (cả bảng)" khi đang lọc`);
+  } else {
+    if (!(s.totalRows >= 1)) failures.push(`${where}: HĐ-TT không có dòng nào`);
+    if (s.visibleRows !== s.totalRows) failures.push(`${where}: link trần không hiện đủ các dòng`);
+  }
+  return failures;
+}
+
+/** DT-TT mở từ link của Tổng quan (Phần I / II / III, đầu mối `#dm-{id}`). */
+async function checkDtTtLanding(page: Page, l: ParsedLink, where: string): Promise<string[]> {
+  const failures: string[] = [];
+  await waitForDtTt(page);
+  await page.waitForTimeout(SETTLE_MS);
+  const s = await readDtTt(page);
+  if (!s.jumpSticky) failures.push(`${where}: thanh nhảy Phần I · II · III không dính`);
+  if (l.hash) {
+    const anchor = parseDtTtAnchor(l.hash);
+    if (!anchor) failures.push(`${where}: neo #${l.hash} không thuộc hợp đồng DT-TT`);
+    else if (!s.anchors.includes(l.hash)) failures.push(`${where}: thiếu neo #${l.hash}`);
+    if (new URL(page.url()).hash !== `#${l.hash}`) failures.push(`${where}: URL sau khi vào không giữ neo #${l.hash}`);
+  }
   return failures;
 }

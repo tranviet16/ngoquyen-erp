@@ -21,7 +21,7 @@ import {
 } from "@/lib/du-an/dt-hd-tt/counterparty-service";
 import type { GridFilters } from "@/lib/du-an/dt-hd-tt/grid-url-codec";
 import type { CounterpartySupplierPatch } from "@/lib/du-an/dt-hd-tt/register-schemas";
-import { parseNumberCell } from "@/lib/du-an/dt-hd-tt/entry-cell-parse";
+import { supplierCellPatch } from "@/lib/du-an/dt-hd-tt/hd-tt-edit-model";
 import { DAU_MOI_ANCHORS, DAU_MOI_SUPPLIER_GRID_SPEC, DAU_MOI_SUPPLIER_URL } from "@/lib/du-an/dt-hd-tt/screen-links";
 
 const DataGrid = dynamic(() => import("@/components/data-grid").then((m) => m.DataGrid), { ssr: false }) as <T extends RowWithId>(p: {
@@ -65,16 +65,17 @@ const vnd = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 const moneyCell = (v: unknown) => (v == null || v === "" ? "" : vnd.format(Number(v)));
 
 /**
- * Bản vá của đúng một ô vừa sửa. H / S / X là ô chữ đọc chặt: ô trống = xóa số nhập tay, chữ không
- * phải số → báo lỗi (không lặng lẽ xóa H / S / X).
+ * Bản vá của đúng một ô vừa sửa. H / S / X là ô chữ đọc chặt bằng `supplierCellPatch` — tiền kiểu Việt Nam,
+ * giống màn HĐ-TT ("1.500" = 1 500): ô trống = xóa số nhập tay, chữ không phải số → báo lỗi (không lặng lẽ
+ * xóa H / S / X).
  */
 function cellPatch(col: string, value: unknown): CounterpartySupplierPatch {
   const text = value == null ? "" : String(value);
   switch (col) {
     case "counterpartyId": return { counterpartyId: value == null || Number(value) === NONE ? null : Number(value) };
-    case "paidOverrideVnd": return { paidOverrideVnd: parseNumberCell(value, "H thực nộp rà soát") };
-    case "splitActualVnd": return { splitActualVnd: parseNumberCell(value, "S thực tế riêng") };
-    case "recoveredVnd": return { recoveredVnd: parseNumberCell(value, "X đã lấy về") };
+    case "paidOverrideVnd":
+    case "splitActualVnd":
+    case "recoveredVnd": return supplierCellPatch(col, value);
     case "todoNote": return { todoNote: text || null };
     case "note": return { note: text || null };
     default: throw new Error(`Cột "${col}" không sửa được`);

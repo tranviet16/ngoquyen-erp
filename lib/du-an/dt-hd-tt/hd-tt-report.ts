@@ -19,6 +19,8 @@ import { compareCounterparties, sum, tieOut, type ReportInputs, type TieOut } fr
 export interface HdTtRow {
   supplierId: number;
   supplierName: string;
+  /** Id dòng NCC (`ProjectCounterpartySupplier`) mà H / S / X / Z ghi vào; null = NCC chưa có dòng NCC. */
+  linkId: number | null;
   counterpartyId: number | null;
   counterpartyName: string | null;
   invoiceExVat: number;
@@ -103,7 +105,7 @@ export function buildHdTtReport(inp: ReportInputs, index: BookIndex = buildBookI
     const recovered = link?.recoveredVnd ?? null;
     const v = inv.get(supplierId) ?? { net: 0, vat: 0 };
     return {
-      supplierId, supplierName: index.supplierName.get(supplierId) ?? `NCC #${supplierId}`,
+      supplierId, supplierName: index.supplierName.get(supplierId) ?? `NCC #${supplierId}`, linkId: link?.id ?? null,
       counterpartyId: cp?.id ?? null, counterpartyName: cp?.name ?? null,
       invoiceExVat: v.net, invoiceVat: v.vat, invoiceTotal: e,
       paidBook: g, paidOverride: link?.paidOverrideVnd ?? null, paid, toPay, overpaid: Math.max(0, paid - e),
