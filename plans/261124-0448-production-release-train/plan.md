@@ -75,7 +75,7 @@ admin-pc's ERP is stopped, not deleted, so it stays the rollback until modules r
 | 1 | [Phase 1: Assemble the release commit](./phase-01-start.md) | Completed |
 | 2 | [Phase 2: Prepare VIETPC as the production host](./phase-02-prepare-vietpc-as-production-host.md) | Completed (tailnet access and monitoring at cutover) |
 | 3 | [Phase 3: Clean and freeze the copy](./phase-03-clean-and-freeze-the-copy.md) | Completed (signed off and frozen 2026-11-25) |
-| 4 | [Phase 4: Cutover on VIETPC](./phase-04-cutover-on-vietpc.md) | Pending |
+| 4 | [Phase 4: Cutover on VIETPC](./phase-04-cutover-on-vietpc.md) | Completed 2026-11-25 (five modules reopened 12:51, `tailscale serve` 12:52, tailnet policy grant for VIETPC 15:51, sign-in from another device 15:54, tag `release-2026-11-golive` 20:18; admin-pc out of scope; announcement moved to phase 5) |
 | 5 | [Phase 5: Post-deploy verification, Excel catch-up and watch](./phase-05-post-deploy-verification.md) | Pending |
 
 Dependencies are strictly sequential: 1 → 2 → 3 → 4 → 5.
