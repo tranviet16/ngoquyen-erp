@@ -113,12 +113,12 @@ Người duyệt (chức danh): kế toán phụ trách công nợ vật tư. An
 | Mục | Giá trị |
 |---|---|
 | Thông báo người dùng, khoá Excel | |
-| Dump cuối trên admin-pc (tên tệp, SHA-256) | |
-| Dừng `ngoquyen-erp-3001` trên admin-pc | |
-| Dump cuối trên VIETPC (tên tệp, SHA-256) | |
-| Chuẩn hoá checksum 2 migration | |
-| Chạy `ngoquyen-prod-erp`, `migrate status`, `/api/health` | |
-| Kiểm nhanh khi module còn đóng | |
-| Mở lại module (giờ) | |
-| `tailscale serve`, địa chỉ mới gửi người dùng (giờ) | |
+| Dump cuối trên admin-pc (tên tệp, SHA-256) | Bỏ, theo quyết định của anh/chị ngày 25/11: không làm gì trên admin-pc nữa |
+| Dừng `ngoquyen-erp-3001` trên admin-pc | Bỏ, theo cùng quyết định. App cũ vẫn chạy ở `admin-pc:3001`; thông báo cho người dùng phải ghi không dùng địa chỉ đó |
+| Dump cuối trên VIETPC (tên tệp, SHA-256) | `erp-prod-20261125-1136.dump`, `C05986AC3A442505C963859DC9B6F1311C0A2AB4FD8A4609E96E6B17CE520B00` (25/11 11:36) |
+| Chuẩn hoá checksum migration | 3 migration (không phải 2), cùng nội dung, chỉ khác xuống dòng. Sau khi sửa: 62/62 khớp file LF của `6863630` |
+| Chạy `ngoquyen-prod-erp`, `migrate status`, `/api/health` | Chạy từ 25/11, image `6863630`, chỉ mở ở `127.0.0.1:3001`. Trạng thái migration kiểm bằng SQL: 62/62 đã áp dụng, không thiếu, không lạ. `/api/health` ok |
+| Kiểm nhanh khi module còn đóng | Đạt (25/11): trang đăng nhập, hai trang công nợ vật tư, ba báo cáo DT-HĐ-TT "Kiểm tổng: 79/79 khớp". Thử tải tệp chuyển sang phase 5, vì chưa có tài khoản nhân viên để giao việc |
+| Mở lại module (giờ) | 25/11 12:51: Dự án xây dựng, Vật tư / NCC, Công nợ vật tư, Thanh toán – Kế hoạch, Thanh toán – Tổng hợp. Công nợ nhân công và Tài chính vẫn đóng, chờ anh/chị quyết. Dump trước khi lưu `erp-prod-20261125-1250.dump` (SHA-256 `C10528109A7C5A6CC15D3FEFAE6C02E9514BDB418D90E2C419998A30ECFA8A76`); dump mốc sau khi mở `erp-prod-20261125-1251.dump` (SHA-256 `C8E074A328AFD9B0B78DC0E1510515E7A7950CD5F1BE1387950B7FDA27DA8D0A`) |
+| `tailscale serve`, địa chỉ mới gửi người dùng (giờ) | Bật 25/11 12:52, chỉ trong tailnet; `http://vietpc:3001/api/health` trả `ok`. Chính sách Tailscale thêm luật cho VIETPC cổng 3001 lúc 15:51; anh/chị đăng nhập được từ máy khác lúc 15:54. Địa chỉ gửi người dùng là `http://vietpc:3001`. Chưa gửi: chờ tạo tài khoản nhân viên (phase 5) |
 | Người duyệt ký nhận mở lại | |

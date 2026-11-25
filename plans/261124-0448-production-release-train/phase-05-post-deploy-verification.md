@@ -22,7 +22,7 @@ Prove every module works on VIETPC with real users, bring the công nợ entries
 1. **Smoke checks, as a non-admin user per area:**
    - login and Dashboard;
    - công nợ vật tư (`/vat-tu-ncc/cong-trinh`, `/cong-no-vt/tong-hop-cong-trinh`);
-   - payments and tasks with attachments;
+   - payments and tasks with attachments: upload one file and delete it, then check that it left the uploads folder (moved here from phase 4, which had no assignee to give a task to);
    - master data quick create;
    - the vat-tu fixes (monthly periods, payments in locked periods, quotes from slips, report filters);
    - the contract catalog;
@@ -35,11 +35,12 @@ Prove every module works on VIETPC with real users, bring the công nợ entries
    - The import cannot be rerun, because the exclusive-import guard blocks a second run.
 3. **Watch** Uptime Kuma and GlitchTip for two working days. A new error opens a fix-forward PR.
 4. **Backups:**
-   - confirm the nightly job ran and the copy reached admin-pc;
-   - keep the cutover dumps (VIETPC and admin-pc) and the old image for 14 days.
+   - confirm the nightly job ran;
+   - admin-pc is out of scope since 2026-11-25, so the off-machine copy needs another target chosen by the owner (external drive or NAS through `-OffsiteDir`; OneDrive only with the owner's explicit yes). Set it before the Excel catch-up starts;
+   - keep the VIETPC cutover dumps for 14 days.
 5. **Close-out:**
    - one release entry in `docs/project-changelog.md`;
-   - `docs/operations/deploy.md` updated for VIETPC as the host;
+   - `docs/operations/deploy.md` updated for VIETPC as the host, including the tailnet policy grant it needs (`vietpc` on `tcp:3001` for `tag:access-ngoquyen-erp` and `tag:access-all-products`, added 2026-11-25);
    - user guides pointed to the new address;
    - after 14 days, decide whether to decommission the admin-pc ERP (keep its archive dump);
    - mark this plan done.
