@@ -22,7 +22,7 @@ Run the release build on VIETPC against the cleaned copy, reopen the modules, re
    - Do not delete its database or image.
 3. **On VIETPC:**
    1. Take a final `pg_dump` of the copy, with its SHA-256 (`scripts/backup-erp-vietpc.ps1`).
-   2. Stop `ngoquyen-bansao-erp`.
+   2. Stop `ngoquyen-bansao-erp`. Already done at the phase 3 freeze (2026-11-25 11:09); only check that it is still stopped.
    3. Copy the cleaned uploads from `C:\Users\tranv\.ngoquyen-ban-sao\uploads` to `C:\Users\tranv\.ngoquyen-prod\uploads`, after phase 3 has deleted the test attachments.
    4. **Normalize two migration checksums.** In the copy, `20261106090000_vat_tu_pair_scope_and_import_review` and `20261117160000_du_an_dt_hd_tt` were recorded with the checksum of a CRLF file, while the other two release migrations carry the LF checksum. The content is identical apart from line endings.
       - Update those two `_prisma_migrations.checksum` values to the SHA-256 of the LF files. `.gitattributes` now keeps migration SQL as LF on every checkout.

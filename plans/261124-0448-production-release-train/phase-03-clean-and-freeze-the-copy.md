@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Phase 3: Clean and freeze the copy"
-status: in-progress
+status: completed
 priority: P1
 effort: "2–3h, plus the reviewer's time"
 dependencies: [2]
@@ -46,10 +46,10 @@ Remove every test artifact from the copy's database, settle the accounts, and ha
    - `after.sql` of the DT-HĐ-TT runbook passes.
 4. **Accounts.**
    - Deactivate `import-bansao` and `upload-test`. Do not delete them: their rows are referenced by import runs and audit.
-   - The user rotates the admin password at `/ho-so` → "Đổi mật khẩu". `scripts/manage-erp-admin-local.ps1` only bootstraps a missing admin: with no DPAPI store it refuses an existing one ("Admin already exists").
+   - ~~Rotate the admin password.~~ The user decided on 2026-11-24 to keep it. If it is rotated later, the user does it at `/ho-so` → "Đổi mật khẩu". `scripts/manage-erp-admin-local.ps1` only bootstraps a missing admin: with no DPAPI store it refuses an existing one ("Admin already exists").
    - ~~Create the staff accounts the user lists, with project rights.~~ Moved to phase 5 step 0: no list exists yet.
    - Sign every session out.
-5. **Reviewer sign-off.** The kế toán in charge confirms that the copy's figures stand as the go-live figures: the 09/11 dry-run checks V1–V4, step 11 and step 12a. Record it in `go-live-result.md`, with the decision to reuse the dry-run data.
+5. **Reviewer sign-off.** The kế toán in charge confirms that the copy's figures stand as the go-live figures: V1–V4 and the confirmations of import run #7, step 11 and step 12a. The sheet is Part A of [reports/go-live-result.md](reports/go-live-result.md), with the decision to reuse the copy's data.
 6. **Freeze:** after sign-off, no more writes to the copy until cutover.
 
 ## Run log (2026-11-24)
@@ -69,13 +69,31 @@ Remove every test artifact from the copy's database, settle the accounts, and ha
   - `after.sql` equals the dry-run's "after run #10" column on every count and sum. The register screens show the same row counts.
   - DT-HĐ shows 30 ✓ (29 blocks and the total) and no ✗. DT-TT shows ✓ on all 47 lines. HĐ-TT shows both checks ✓ and one "tạm = HĐ" line, as in the dry run.
   - `tasks` and `task_attachments` are empty, and no file is left under `uploads\task-attachments`.
-- **Step 4, accounts (partly):** `import-bansao` and `upload-test` were already inactive, with no live session. Still to do:
-  - the user rotates the admin password at `/ho-so`;
-  - sign every session out.
+- **Step 4, accounts:** `import-bansao` and `upload-test` were already inactive, with no live session. Every session was signed out at the freeze (below).
+- **Admin password: kept**, by the user's decision on 2026-11-24.
 - **Staff accounts: moved to phase 5.** The user has no staff list yet, so the copy goes to cutover with the admin as its only active account.
   - The copy has no staff account, no project grant, and only one role ("Giám Đốc", 11 module rights). Other roles are created at `/admin/permissions/roles`.
   - Each initial password is typed by the user, never by Claude, and must be at least 12 characters.
-- **Not yet done:** the reviewer sign-off (step 5) and the freeze (step 6).
+- **Sign-off sheet (2026-11-25):** Part A of [reports/go-live-result.md](reports/go-live-result.md). Before writing it, Claude re-checked the copy read-only:
+  - import run #7 (the 10/11 cutover) stored 0 blocking errors, and all 17 required confirmations given;
+  - V1 17/23, with the 6 differences confirmed; V2 83/91, with the 8 others confirmed as "Chọn lũy kế dù lệch"; V3 48/48; V4 11/11;
+  - the copy holds the Mầm Non supplement as rows written on 10/11 and 13/11 by an earlier version of the step 12a script. All 14 suppliers of the 16–17/11 reconciliation match its closing figures on all four columns, so the current script is not run.
+- **Independent re-check (2026-11-25), read-only.** The user asked Claude to start the checks. Kongming advised listing every change since the import before re-parsing Excel, because the stored V1–V4 results are a snapshot from 10/11.
+  - The Excel files were re-read by a separate script, not the import parser, with amounts kept outside the repo.
+  - Nhập Liệu 01/01–26/10: all 908 rows reached the ledger exactly, on both TT and HĐ, for every pair.
+  - Số Dư: the 32 imported opening balances match the sheet.
+  - CDC: the split of 4 suppliers adds up to the sheet's balances.
+  - CSV: lifetime rows plus Nhập Liệu equal the CSV on all four columns for 46/46 pairs.
+  - Every ledger row changed after the import is listed in Part A "Thay đổi sau import" and traced to its source.
+  - Three groups were entered by the admin account in the app on 11–12/11 and are not backed by the Excel files: the slip edits of supplier #1 at Dải cây xanh, its two 27/10 slips moved to Trại Chuối, and a 24/10 transfer. The user confirmed all three as real figures on 2026-11-25, so the ledger stands and the tracking file is the stale side.
+  - Part A now has a "Máy kiểm" column. Items 2, 5 and parts of 1, 3, 4, 6 and 8 still need a person.
+- **Step 5, sign-off (2026-11-25, about 11:00):** the user reported that the kế toán agreed, with no item failed. Part A records "Đồng ý" and every item as "Đạt".
+- **Step 6, freeze (2026-11-25 11:09):**
+  - Backup `erp-prod-20261125-1109.dump` with its SHA-256, by `scripts/backup-erp-vietpc.ps1`.
+  - All 7 rows of `sessions` deleted; 4 were live, all admin. Better Auth keeps a 5-minute cookie cache, so deleting sessions alone does not stop a signed-in browser at once.
+  - That is why the copy's app container `ngoquyen-bansao-erp` was also stopped. It stays stopped across Docker restarts (`unless-stopped`).
+  - The database container keeps running for the nightly backup.
+  - Nothing writes to the copy until cutover.
 
 ## Verification
 

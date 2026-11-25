@@ -28,7 +28,9 @@ Prove every module works on VIETPC with real users, bring the công nợ entries
    - the contract catalog;
    - the Dự án redesign (Tổng quan equals the reports, the Dashboard "Thực tế (sổ DT-HĐ-TT)" card, HĐ-TT edit toggle only for edit accounts, pickers, full print).
 2. **Excel catch-up (decided: kế toán, after cutover).**
-   - The kế toán enters, through the app, every công nợ entry made in Excel after the 10/11 import (dated after 26/10), within 2 working days.
+   - The kế toán enters, through the app, every công nợ entry added to Excel after the copy that import run #7 read (the workbook saved 05/11/2026 14:52), whatever its date, within 2 working days. Entries dated on or before 26/10 go into the locked conversion period through the admin override.
+   - Skip what the ERP already holds: the slips closed into the 27/10–26/11 periods, the entries made in the app on 11–12/11 and the Mầm Non supplement (list in `reports/go-live-result.md`, Part A, "Thay đổi sau import").
+   - Claude can diff the current workbook against the 05/11 copy to list exactly the new rows.
    - Then announce "ERP đủ số đến ngày X" and make the Excel files read-only.
    - The import cannot be rerun, because the exclusive-import guard blocks a second run.
 3. **Watch** Uptime Kuma and GlitchTip for two working days. A new error opens a fix-forward PR.
