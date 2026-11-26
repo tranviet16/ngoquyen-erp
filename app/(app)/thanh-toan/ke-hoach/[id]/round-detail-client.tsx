@@ -17,7 +17,13 @@ import {
   upsertItemAction,
   refreshAllItemBalancesAction,
 } from "../../actions";
-import type { PaymentCategory, RoundStatus } from "@/lib/payment/payment-service";
+import type { RoundStatus } from "@/lib/payment/payment-service";
+import {
+  postsToMaterialLedger,
+  supplierKindForCategory,
+  type PaymentCategory,
+} from "@/lib/payment/payment-category";
+import type { SupplierKind } from "@/lib/master-data/supplier-kind";
 import { CATEGORY_LABEL } from "../round-list-client";
 import { SortableTableHead } from "@/components/sortable-table/sortable-table-head";
 import { useSortableRows } from "@/components/sortable-table/use-sortable-rows";
@@ -47,7 +53,7 @@ interface Project {
   id: number;
   code: string;
   name: string;
-  /** Chủ thể sở hữu công trình — dòng vat_tu lấy Chủ thể theo đây. */
+  /** Chủ thể sở hữu công trình — dòng vật tư / nhân công lấy Chủ thể theo đây. */
   entityId?: number | null;
 }
 type Decimalish = string | number | { toString(): string };
@@ -96,39 +102,41 @@ interface Props {
 
 // ── Cascade helpers ──────────────────────────────────────────────────────────
 
-function categoryToLedgerType(c: PaymentCategory): "material" | "labor" | "all" {
-  if (c === "vat_tu") return "material";
-  if (c === "nhan_cong") return "labor";
-  return "all";
+/**
+ * Sổ để gợi ý công trình / NCC: dòng vật tư và nhân công đều đọc sổ vật tư (công nợ NCC, kể cả NCC
+ * loại nhân công, nằm ở đó; sổ "labor" thuộc tổ đội). Dịch vụ / khác không có sổ: mọi lựa chọn.
+ */
+function categoryToLedgerType(c: PaymentCategory): "material" | "all" {
+  return postsToMaterialLedger(c) ? "material" : "all";
 }
 
 /**
- * Dòng vat_tu thuộc công nợ vật tư theo cặp NCC × công trình: bắt buộc công trình, Chủ thể luôn
- * = Chủ thể của công trình (server cũng thay lại khi lưu). Trả null khi chưa chọn công trình
- * hoặc công trình chưa gán Chủ thể.
+ * Dòng vật tư / nhân công thuộc công nợ vật tư theo cặp NCC × công trình: bắt buộc công trình,
+ * Chủ thể luôn = Chủ thể của công trình (server cũng thay lại khi lưu). Trả null khi chưa chọn
+ * công trình hoặc công trình chưa gán Chủ thể.
  */
 function projectEntityId(projects: Project[], projectId: number | null): number | null {
   if (projectId == null) return null;
   return projects.find((p) => p.id === projectId)?.entityId ?? null;
 }
 
-/** Thông báo chặn lưu dòng vat_tu (null = hợp lệ). */
-function vatTuScopeError(projects: Project[], projectId: number | null): string | null {
-  if (projectId == null) return "Dòng vật tư bắt buộc chọn công trình";
+/** Thông báo chặn lưu dòng vật tư / nhân công (null = hợp lệ). */
+function materialScopeError(projects: Project[], projectId: number | null): string | null {
+  if (projectId == null) return "Dòng vật tư / nhân công bắt buộc chọn công trình";
   if (projectEntityId(projects, projectId) == null) {
     return "Công trình chưa gán Chủ thể — gán ở Master data > Dự án";
   }
   return null;
 }
 
-function VatTuScopeHint({ message }: { message: string | null }) {
+function MaterialScopeHint({ message }: { message: string | null }) {
   if (!message) return null;
   return <p className="mt-1 text-xs text-destructive">{message}</p>;
 }
 
 async function fetchCascadeProjects(
   entityId: number,
-  ledgerType: "material" | "labor" | "all",
+  ledgerType: "material" | "all",
   signal: AbortSignal
 ): Promise<Project[]> {
   const lt = ledgerType === "all" ? "material" : ledgerType;
@@ -144,7 +152,8 @@ async function fetchCascadeProjects(
 async function fetchCascadeSuppliers(
   entityId: number,
   projectId: number | null,
-  ledgerType: "material" | "labor" | "all",
+  ledgerType: "material" | "all",
+  supplierKind: SupplierKind | null,
   departmentId: number | null,
   signal: AbortSignal
 ): Promise<Supplier[]> {
@@ -154,6 +163,8 @@ async function fetchCascadeSuppliers(
     departmentId: String(departmentId ?? ""),
   });
   if (projectId !== null) params.set("projectId", String(projectId));
+  // Dòng vật tư chỉ gợi ý NCC loại vật tư, dòng nhân công chỉ NCC loại nhân công.
+  if (supplierKind) params.set("supplierKind", supplierKind);
   const res = await fetch(`/api/thanh-toan/cascade-suppliers?${params}`, { signal });
   if (!res.ok) return [];
   const data = await res.json() as { suppliers?: Supplier[] };
@@ -430,9 +441,9 @@ function ItemRow({
     item.soDuyet !== null ? Number(item.soDuyet) : Number(item.soDeNghi)
   );
 
-  // Cascade state — dòng vat_tu chọn công trình trước (mọi công trình), Chủ thể suy theo công trình.
+  // Cascade state — dòng vật tư / nhân công chọn công trình trước (mọi công trình), Chủ thể suy theo công trình.
   const [availableProjects, setAvailableProjects] = useState<Project[]>(
-    item.category === "vat_tu" ? projects : item.project ? [item.project] : []
+    postsToMaterialLedger(item.category) ? projects : item.project ? [item.project] : []
   );
   const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([item.supplier]);
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -449,7 +460,7 @@ function ItemRow({
 
   const ledgerType = categoryToLedgerType(category);
 
-  function doFetchProjects(eid: number, lt: "material" | "labor" | "all") {
+  function doFetchProjects(eid: number, lt: "material" | "all") {
     if (lt === "all") {
       // dich_vu/khac: no cascade — use full projects prop
       setAvailableProjects(projects);
@@ -465,7 +476,8 @@ function ItemRow({
       .finally(() => { setLoadingProjects(false); });
   }
 
-  function doFetchSuppliers(eid: number, pid: number | null, lt: "material" | "labor" | "all") {
+  function doFetchSuppliers(eid: number, pid: number | null, cat: PaymentCategory) {
+    const lt = categoryToLedgerType(cat);
     if (bypassCascade || lt === "all") {
       setAvailableSuppliers(suppliers);
       setSuppliersFetched(true);
@@ -476,7 +488,7 @@ function ItemRow({
     abortSuppliers.current = ctrl;
     setLoadingSuppliers(true);
     setSuppliersFetched(false);
-    fetchCascadeSuppliers(eid, pid, lt, departmentId, ctrl.signal)
+    fetchCascadeSuppliers(eid, pid, lt, supplierKindForCategory(cat), departmentId, ctrl.signal)
       .then((ss) => { setAvailableSuppliers(ss); setSuppliersFetched(true); })
       .catch(() => { /* aborted — ignore */ })
       .finally(() => { setLoadingSuppliers(false); });
@@ -493,7 +505,7 @@ function ItemRow({
   function handleProjectChange(pid: number | null) {
     setProjectId(pid);
     setSupplierId(0);
-    if (category === "vat_tu") {
+    if (postsToMaterialLedger(category)) {
       const eid = projectEntityId(projects, pid);
       if (eid == null) {
         setAvailableSuppliers([]);
@@ -501,26 +513,31 @@ function ItemRow({
         return;
       }
       setEntityId(eid);
-      doFetchSuppliers(eid, pid, ledgerType);
+      doFetchSuppliers(eid, pid, category);
       return;
     }
-    doFetchSuppliers(entityId, pid, ledgerType);
+    doFetchSuppliers(entityId, pid, category);
   }
 
   function handleCategoryChange(cat: PaymentCategory) {
+    // Đổi sang loại có lọc NCC khác (vật tư ↔ nhân công): NCC đang chọn có thể không thuộc danh sách
+    // mới — bỏ chọn để người dùng chọn lại, trừ khi đang "bỏ cascade" (danh sách là mọi NCC).
+    const nextKind = supplierKindForCategory(cat);
+    if (!bypassCascade && nextKind && nextKind !== supplierKindForCategory(category)) {
+      setSupplierId(0);
+    }
     setCategory(cat);
-    const lt = categoryToLedgerType(cat);
-    if (cat === "vat_tu") {
+    if (postsToMaterialLedger(cat)) {
       setAvailableProjects(projects);
       const eid = projectEntityId(projects, projectId);
       if (eid != null) {
         setEntityId(eid);
-        doFetchSuppliers(eid, projectId, lt);
+        doFetchSuppliers(eid, projectId, cat);
       }
       return;
     }
     if (entityId && projectId !== undefined) {
-      doFetchSuppliers(entityId, projectId, lt);
+      doFetchSuppliers(entityId, projectId, cat);
     }
   }
 
@@ -531,7 +548,7 @@ function ItemRow({
       setAvailableSuppliers(suppliers);
       setSuppliersFetched(true);
     } else {
-      doFetchSuppliers(entityId, projectId, ledgerType);
+      doFetchSuppliers(entityId, projectId, category);
     }
   }
 
@@ -590,12 +607,12 @@ function ItemRow({
     item.note,
   ]);
 
-  const vatTuError = category === "vat_tu" ? vatTuScopeError(projects, projectId) : null;
+  const scopeError = postsToMaterialLedger(category) ? materialScopeError(projects, projectId) : null;
 
   function save() {
-    if (vatTuError) { toast.error(vatTuError); return; }
+    if (scopeError) { toast.error(scopeError); return; }
     if (!supplierId) { toast.error("Chọn NCC"); return; }
-    const savedEntityId = category === "vat_tu" ? (projectEntityId(projects, projectId) ?? entityId) : entityId;
+    const savedEntityId = postsToMaterialLedger(category) ? (projectEntityId(projects, projectId) ?? entityId) : entityId;
     startTransition(async () => {
       try {
         await upsertItemAction({
@@ -690,8 +707,8 @@ function ItemRow({
             className="h-8 w-36 rounded border bg-background px-1 text-sm disabled:opacity-70"
             value={entityId}
             onChange={(e) => handleEntityChange(Number(e.target.value))}
-            disabled={category === "vat_tu"}
-            title={category === "vat_tu" ? "Dòng vật tư: Chủ thể theo công trình" : undefined}
+            disabled={postsToMaterialLedger(category)}
+            title={postsToMaterialLedger(category) ? "Dòng vật tư / nhân công: Chủ thể theo công trình" : undefined}
           >
             {entities.map((en) => (
               <option key={en.id} value={en.id}>{en.name}</option>
@@ -708,14 +725,14 @@ function ItemRow({
               className="h-8 w-44 rounded border bg-background px-1 text-sm"
               value={projectId ?? ""}
               onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-              disabled={loadingProjects || (category !== "vat_tu" && !entityId)}
+              disabled={loadingProjects || (!postsToMaterialLedger(category) && !entityId)}
             >
               <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
               {availableProjects.map((p) => (
                 <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
               ))}
             </select>
-            <VatTuScopeHint message={vatTuError} />
+            <MaterialScopeHint message={scopeError} />
           </>
         ) : item.project ? (
           `${item.project.code} — ${item.project.name}`
@@ -742,11 +759,6 @@ function ItemRow({
                 <p className="text-xs text-muted-foreground">
                   Không có NCC khớp — kiểm tra Chủ thể/Công trình
                 </p>
-                {category === "nhan_cong" && (
-                  <p className="text-xs text-muted-foreground opacity-75">
-                    (nhan_cong: ledger labor dùng Contractor, payment chỉ link Supplier — chưa hỗ trợ)
-                  </p>
-                )}
               </div>
             )}
             {isAdmin && (
@@ -915,7 +927,7 @@ function NewItemRow({
   const [congNoInput, setCongNoInput] = useState(0);
   const [luyKeInput, setLuyKeInput] = useState(0);
 
-  // Mặc định loại vat_tu: chọn công trình trước (mọi công trình), Chủ thể suy theo công trình.
+  // Mặc định loại vat_tu: dòng vật tư / nhân công chọn công trình trước (mọi công trình), Chủ thể suy theo công trình.
   const [availableProjects, setAvailableProjects] = useState<Project[]>(projects);
   const [availableSuppliers, setAvailableSuppliers] = useState<Supplier[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
@@ -932,7 +944,7 @@ function NewItemRow({
 
   const ledgerType = categoryToLedgerType(category);
 
-  function doFetchProjects(eid: number, lt: "material" | "labor" | "all") {
+  function doFetchProjects(eid: number, lt: "material" | "all") {
     if (lt === "all") {
       // dich_vu/khac: no cascade — use full projects prop
       setAvailableProjects(projects);
@@ -948,7 +960,8 @@ function NewItemRow({
       .finally(() => { setLoadingProjects(false); });
   }
 
-  function doFetchSuppliers(eid: number, pid: number | null, lt: "material" | "labor" | "all") {
+  function doFetchSuppliers(eid: number, pid: number | null, cat: PaymentCategory) {
+    const lt = categoryToLedgerType(cat);
     if (bypassCascade || lt === "all") {
       setAvailableSuppliers(suppliers);
       setSuppliersFetched(true);
@@ -959,7 +972,7 @@ function NewItemRow({
     abortSuppliers.current = ctrl;
     setLoadingSuppliers(true);
     setSuppliersFetched(false);
-    fetchCascadeSuppliers(eid, pid, lt, departmentId, ctrl.signal)
+    fetchCascadeSuppliers(eid, pid, lt, supplierKindForCategory(cat), departmentId, ctrl.signal)
       .then((ss) => { setAvailableSuppliers(ss); setSuppliersFetched(true); })
       .catch(() => { /* aborted */ })
       .finally(() => { setLoadingSuppliers(false); });
@@ -980,29 +993,28 @@ function NewItemRow({
     setSupplierId(null);
     setAvailableSuppliers([]);
     setSuppliersFetched(false);
-    if (category === "vat_tu") {
+    if (postsToMaterialLedger(category)) {
       const eid = projectEntityId(projects, pid);
       setEntityId(eid);
-      if (eid != null) doFetchSuppliers(eid, pid, ledgerType);
+      if (eid != null) doFetchSuppliers(eid, pid, category);
       return;
     }
-    if (entityId) doFetchSuppliers(entityId, pid, ledgerType);
+    if (entityId) doFetchSuppliers(entityId, pid, category);
   }
 
   function handleCategoryChange(cat: PaymentCategory) {
     setCategory(cat);
-    const lt = categoryToLedgerType(cat);
     setSupplierId(null);
     setSuppliersFetched(false);
-    if (cat === "vat_tu") {
+    if (postsToMaterialLedger(cat)) {
       setAvailableProjects(projects);
       const eid = projectEntityId(projects, projectId);
       setEntityId(eid);
-      if (eid != null) doFetchSuppliers(eid, projectId, lt);
+      if (eid != null) doFetchSuppliers(eid, projectId, cat);
       return;
     }
     if (entityId && projectId !== undefined) {
-      doFetchSuppliers(entityId, projectId, lt);
+      doFetchSuppliers(entityId, projectId, cat);
     }
   }
 
@@ -1014,15 +1026,15 @@ function NewItemRow({
       setSuppliersFetched(true);
     } else {
       if (entityId) {
-        doFetchSuppliers(entityId, projectId, ledgerType);
+        doFetchSuppliers(entityId, projectId, category);
       }
     }
   }
 
-  const vatTuError = category === "vat_tu" ? vatTuScopeError(projects, projectId) : null;
+  const scopeError = postsToMaterialLedger(category) ? materialScopeError(projects, projectId) : null;
 
   function add() {
-    if (vatTuError) { toast.error(vatTuError); return; }
+    if (scopeError) { toast.error(scopeError); return; }
     if (!entityId) { toast.error("Chọn Chủ thể"); return; }
     if (!supplierId) { toast.error("Chọn NCC"); return; }
     startTransition(async () => {
@@ -1082,10 +1094,10 @@ function NewItemRow({
           className="h-8 w-36 rounded border bg-background px-1 text-sm disabled:opacity-70"
           value={entityId ?? ""}
           onChange={(e) => handleEntityChange(e.target.value ? Number(e.target.value) : null)}
-          disabled={category === "vat_tu"}
-          title={category === "vat_tu" ? "Dòng vật tư: Chủ thể theo công trình" : undefined}
+          disabled={postsToMaterialLedger(category)}
+          title={postsToMaterialLedger(category) ? "Dòng vật tư / nhân công: Chủ thể theo công trình" : undefined}
         >
-          <option value="">{category === "vat_tu" ? "— Theo công trình —" : "— Chọn Chủ thể —"}</option>
+          <option value="">{postsToMaterialLedger(category) ? "— Theo công trình —" : "— Chọn Chủ thể —"}</option>
           {entities.map((en) => (
             <option key={en.id} value={en.id}>{en.name}</option>
           ))}
@@ -1096,14 +1108,14 @@ function NewItemRow({
           className="h-8 w-44 rounded border bg-background px-1 text-sm"
           value={projectId ?? ""}
           onChange={(e) => handleProjectChange(e.target.value ? Number(e.target.value) : null)}
-          disabled={loadingProjects || (category !== "vat_tu" && !entityId)}
+          disabled={loadingProjects || (!postsToMaterialLedger(category) && !entityId)}
         >
           <option value="">{loadingProjects ? "Đang tải..." : "—"}</option>
           {availableProjects.map((p) => (
             <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
           ))}
         </select>
-        {projectId != null && <VatTuScopeHint message={vatTuError} />}
+        {projectId != null && <MaterialScopeHint message={scopeError} />}
       </td>
       <td className="px-2 py-2">
         <div className="space-y-1">
@@ -1123,11 +1135,6 @@ function NewItemRow({
               <p className="text-xs text-muted-foreground">
                 Không có NCC khớp — kiểm tra Chủ thể/Công trình
               </p>
-              {category === "nhan_cong" && (
-                <p className="text-xs text-muted-foreground opacity-75">
-                  (nhan_cong: ledger labor dùng Contractor, payment chỉ link Supplier — chưa hỗ trợ)
-                </p>
-              )}
             </div>
           )}
           {isAdmin && (

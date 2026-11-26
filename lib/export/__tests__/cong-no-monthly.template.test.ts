@@ -58,6 +58,49 @@ describe("buildCongNoMonthlyExcel", () => {
     expect(totalRow).toContain(100); // summed openingTt
   });
 
+  it("Loại NCC (sổ vật tư): keeps only that kind's suppliers and names the kind in the title", async () => {
+    const zero = { openingHd: D(0), layHangHd: D(0), thanhToanHd: D(0), closingHd: D(0) };
+    mockAgg.queryWindowByParty.mockResolvedValue([
+      { partyId: 1, openingTt: D(100), layHangTt: D(0), thanhToanTt: D(0), closingTt: D(100), ...zero },
+      { partyId: 2, openingTt: D(5), layHangTt: D(0), thanhToanTt: D(0), closingTt: D(5), ...zero },
+    ]);
+    mockDb.supplier.findMany.mockImplementation(async (args: { where: { kind?: string } }) =>
+      args.where.kind === "nhan_cong" ? [{ id: 2 }] : [{ id: 2, name: "NCC B" }],
+    );
+    mockDb.entity.findUnique.mockResolvedValue({ name: "Chủ thể X" });
+
+    const { aoa } = readSheet(await buildCongNoMonthlyExcel("material", MAY, 7, { supplierKind: "nhan_cong" }));
+    expect(String(aoa[0][0])).toContain("Loại NCC: Nhân công");
+    expect(aoa.some((r) => r.includes("NCC B"))).toBe(true);
+    expect(aoa.some((r) => r.includes("NCC #1"))).toBe(false);
+    expect(aoa.find((r) => r.includes("TỔNG"))).toContain(5);
+  });
+
+  it("Loại NCC with no supplier yet gives an empty table, not every supplier", async () => {
+    mockAgg.queryWindowByParty.mockResolvedValue([
+      {
+        partyId: 1,
+        openingTt: D(100), layHangTt: D(0), thanhToanTt: D(0), closingTt: D(100),
+        openingHd: D(0), layHangHd: D(0), thanhToanHd: D(0), closingHd: D(0),
+      },
+    ]);
+    mockDb.supplier.findMany.mockResolvedValue([]);
+    mockDb.entity.findUnique.mockResolvedValue({ name: "Chủ thể X" });
+
+    const { aoa } = readSheet(await buildCongNoMonthlyExcel("material", MAY, 7, { supplierKind: "nhan_cong" }));
+    expect(aoa.find((r) => r.includes("TỔNG"))).not.toContain(100);
+    expect(aoa.some((r) => r.includes("NCC #1"))).toBe(false);
+  });
+
+  it("ignores Loại NCC on the labor ledger (parties are crews, not suppliers)", async () => {
+    mockAgg.queryWindowByParty.mockResolvedValue([]);
+    mockDb.contractor.findMany.mockResolvedValue([]);
+    mockDb.entity.findUnique.mockResolvedValue(null);
+    const { aoa } = readSheet(await buildCongNoMonthlyExcel("labor", MAY, 7, { supplierKind: "nhan_cong" }));
+    expect(mockDb.supplier.findMany).not.toHaveBeenCalled();
+    expect(String(aoa[0][0])).not.toContain("Loại NCC");
+  });
+
   it("falls back to a '#id' label when the party is missing", async () => {
     mockAgg.queryWindowByParty.mockResolvedValue([
       {

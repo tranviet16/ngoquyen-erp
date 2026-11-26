@@ -70,6 +70,11 @@ Admin quản lý tài khoản người dùng qua trang quản trị.
 1. Menu → **Danh Mục > Nhà Cung Cấp**
 2. Thêm/sửa/xóa tương tự Đơn Vị
 3. Nhà cung cấp được liên kết với giao nhận vật tư và công nợ
+4. **Loại** (Vật tư / Nhân công): chọn trong form Thêm / Sửa, hoặc bấm ô cột **Loại** trên lưới để đổi ngay. NCC mới, kể cả NCC tạo nhanh tại ô chọn ở màn khác, mặc định là **Vật tư**. Cột Loại lọc được như các cột khác.
+   - Loại chỉ là nhãn phân loại. Đổi loại **không dời dòng sổ nào**: công nợ của NCC loại nhân công vẫn nằm ở sổ công nợ vật tư, cùng kỳ đối chiếu đã ký, khoá kỳ và mốc chuyển đổi. Tổng công nợ "Tất cả" không đổi khi đổi loại.
+   - Loại dùng để lọc báo cáo công nợ vật tư (bộ lọc **Loại NCC**) và để gợi ý NCC trong đợt thanh toán (dòng Vật tư gợi ý NCC loại vật tư, dòng Nhân công gợi ý NCC loại nhân công).
+   - Chỉ admin đổi được loại; mỗi lần đổi có dòng trong Audit Log.
+   - Danh mục **Nhà Thầu** (tổ đội) và module Công Nợ Nhân Công không đổi.
 
 ### 4.3 Nhà Thầu (Contractors)
 

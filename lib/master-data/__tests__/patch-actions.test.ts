@@ -52,6 +52,7 @@ import {
 } from "@/lib/master-data/entity-service";
 import {
   patchSupplier,
+  updateSupplier,
 } from "@/lib/master-data/supplier-service";
 import {
   patchContractor,
@@ -144,6 +145,32 @@ describe("patchSupplier", () => {
     mockDb.supplier.update.mockResolvedValue(row);
     const result = await patchSupplier(1, { name: "NCC A", taxCode: "123" });
     expect(result).toEqual(row);
+  });
+
+  it("accepts kind nhan_cong", async () => {
+    mockDb.supplier.update.mockResolvedValue({ id: 1, kind: "nhan_cong" });
+    await patchSupplier(1, { kind: "nhan_cong" });
+    expect(mockDb.supplier.update.mock.calls[0][0]).toEqual({ where: { id: 1 }, data: { kind: "nhan_cong" } });
+  });
+
+  it("rejects a kind outside vat_tu / nhan_cong", async () => {
+    await expect(patchSupplier(1, { kind: "dich_vu" })).rejects.toThrow();
+    expect(mockDb.supplier.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── updateSupplier (form Sửa) ──────────────────────────────────────────────
+describe("updateSupplier", () => {
+  it("saves the chosen kind", async () => {
+    mockDb.supplier.update.mockResolvedValue({ id: 2 });
+    await updateSupplier(2, { name: "NCC B", kind: "nhan_cong" });
+    expect(mockDb.supplier.update.mock.calls[0][0].data.kind).toBe("nhan_cong");
+  });
+
+  it("keeps the current kind when the caller omits it", async () => {
+    mockDb.supplier.update.mockResolvedValue({ id: 2 });
+    await updateSupplier(2, { name: "NCC B" } as Parameters<typeof updateSupplier>[1]);
+    expect(mockDb.supplier.update.mock.calls[0][0].data).not.toHaveProperty("kind");
   });
 });
 

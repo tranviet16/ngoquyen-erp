@@ -7,6 +7,7 @@ import { CrudDialog, DeleteConfirmDialog } from "@/components/master-data/crud-d
 import { SupplierForm } from "@/components/master-data/supplier-form";
 import { createSupplier, updateSupplier, softDeleteSupplier, patchSupplier } from "@/lib/master-data/supplier-service";
 import { type SupplierInput } from "@/lib/master-data/schemas";
+import { parseSupplierKind } from "@/lib/master-data/supplier-kind";
 import { useRouter } from "next/navigation";
 import { SUPPLIER_COLUMNS, SUPPLIER_SPEC, type SupplierRow } from "@/lib/master-data/suppliers/table-spec";
 
@@ -47,7 +48,7 @@ export function SuppliersClient({ data, total, page, pageSize, searchValue }: Su
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Nhà Cung Cấp</h1>
-          <p className="text-sm text-muted-foreground">Danh sách nhà cung cấp vật tư xây dựng</p>
+          <p className="text-sm text-muted-foreground">Danh sách nhà cung cấp vật tư và nhân công</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>Thêm mới</Button>
       </div>
@@ -99,6 +100,7 @@ export function SuppliersClient({ data, total, page, pageSize, searchValue }: Su
           <SupplierForm
             defaultValues={{
               name: editTarget.name,
+              kind: parseSupplierKind(editTarget.kind) ?? "vat_tu",
               taxCode: editTarget.taxCode ?? "",
               phone: editTarget.phone ?? "",
               address: editTarget.address ?? "",

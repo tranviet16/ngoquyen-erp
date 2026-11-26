@@ -11,6 +11,8 @@ import {
   resolvePeriodValue,
   type ReportPeriodValue,
 } from "@/components/ledger/report-period-selector";
+import { SupplierKindSelect } from "@/components/ledger/supplier-kind-select";
+import { setSupplierKindParam, type SupplierKind } from "@/lib/master-data/supplier-kind";
 
 interface Props {
   entities: Option[];
@@ -28,6 +30,8 @@ interface Props {
     entityIds: number[];
     projectIds: number[];
     showZero: boolean;
+    /** Chỉ sổ vật tư (đối tác là NCC) có bộ lọc Loại NCC; null = tất cả. */
+    supplierKind?: SupplierKind | null;
   };
 }
 
@@ -57,6 +61,8 @@ export function DetailReportFilter({
   const [selectedProjectIds, setSelectedProjectIds] = useState<number[]>(defaultValues.projectIds);
   const [projectOptions, setProjectOptions] = useState<Option[]>(initialProjects);
   const [showZero, setShowZero] = useState(defaultValues.showZero);
+  const [supplierKind, setSupplierKind] = useState<SupplierKind | null>(defaultValues.supplierKind ?? null);
+  const hasSupplierKind = ledgerType === "material";
 
   // AbortController ref — latest-wins for cascade fetch
   const abortRef = useRef<AbortController | null>(null);
@@ -102,6 +108,7 @@ export function DetailReportFilter({
     }
     if (selectedEntityIds.length > 0) params.set("entityIds", selectedEntityIds.join(","));
     if (selectedProjectIds.length > 0) params.set("projectIds", selectedProjectIds.join(","));
+    if (hasSupplierKind) setSupplierKindParam(params, supplierKind);
     params.set("showZero", showZero ? "1" : "0");
     router.push(`?${params.toString()}`, { scroll: false });
   }
@@ -113,6 +120,7 @@ export function DetailReportFilter({
     setSelectedEntityIds([]);
     setSelectedProjectIds([]);
     setShowZero(false);
+    setSupplierKind(null);
     router.push(initialPeriod ? "?period=all&showZero=0" : "?showZero=0", { scroll: false });
   }
 
@@ -173,6 +181,10 @@ export function DetailReportFilter({
             onChange={setSelectedProjectIds}
           />
         </div>
+
+        {hasSupplierKind && (
+          <SupplierKindSelect id="detail-report-supplier-kind" value={supplierKind} onChange={setSupplierKind} />
+        )}
       </div>
 
       {/* Row 2: hide-zero + actions */}

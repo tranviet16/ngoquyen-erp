@@ -7,6 +7,7 @@
 
 import { requireReleasedModuleRequest } from "@/lib/acl/released-module-request";
 import { parseReportWindow } from "@/lib/ledger/report-period";
+import { supplierIdsOfKind } from "@/lib/master-data/supplier-kind-query";
 import { queryDetailReport } from "./balance-report-service";
 import {
   buildProjectPivot,
@@ -23,7 +24,8 @@ export interface ProjectDebtSummary {
 
 /**
  * `input`: `{ from, to }` ISO `YYYY-MM-DD` hoặc null, `groupBy` "ncc" | "cong-trinh",
- * `entityIds?` số nguyên dương. Kiểm tra lại ở đây vì server action nhận dữ liệu từ client.
+ * `entityIds?` số nguyên dương, `loai?` Loại NCC. Kiểm tra lại ở đây vì server action nhận dữ liệu
+ * từ client. Loại chưa có NCC nào cho `partyIds: []`, và `queryDetailReport` trả rỗng (không phải toàn bộ).
  */
 export async function getProjectDebtSummary(input: unknown): Promise<ProjectDebtSummary> {
   await requireReleasedModuleRequest("cong-no-vt");
@@ -32,11 +34,14 @@ export async function getProjectDebtSummary(input: unknown): Promise<ProjectDebt
   const window = parseReportWindow({ from: query.from, to: query.to });
   if ("error" in window) throw new Error(window.error);
 
+  const partyIds = query.supplierKind ? await supplierIdsOfKind(query.supplierKind) : undefined;
+
   const { rows } = await queryDetailReport({
     ledgerType: "material",
     ...(window.from ? { from: window.from } : {}),
     ...(window.to ? { to: window.to } : {}),
     entityIds: query.entityIds.length > 0 ? query.entityIds : undefined,
+    ...(partyIds ? { partyIds } : {}),
     showZero: false,
   });
 

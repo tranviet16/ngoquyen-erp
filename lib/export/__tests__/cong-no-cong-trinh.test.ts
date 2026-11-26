@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   canAccess: vi.fn(),
   findUser: vi.fn(),
   findEntities: vi.fn(),
+  findSuppliers: vi.fn(),
   queryDetailReport: vi.fn(),
 }));
 
@@ -14,7 +15,11 @@ vi.mock("next/headers", () => ({ headers: vi.fn().mockResolvedValue(new Headers(
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: mocks.getSession } } }));
 vi.mock("@/lib/acl", () => ({ canAccess: mocks.canAccess }));
 vi.mock("@/lib/prisma", () => ({
-  prisma: { user: { findUnique: mocks.findUser }, entity: { findMany: mocks.findEntities } },
+  prisma: {
+    user: { findUnique: mocks.findUser },
+    entity: { findMany: mocks.findEntities },
+    supplier: { findMany: mocks.findSuppliers },
+  },
 }));
 vi.mock("@/lib/cong-no-vt/balance-report-service", () => ({ queryDetailReport: mocks.queryDetailReport }));
 vi.mock("@/lib/export/templates/cong-no-monthly", () => ({ buildCongNoMonthlyExcel: vi.fn() }));
@@ -163,6 +168,20 @@ describe("buildCongNoCongTrinhExcel", () => {
     expect(String(aoa[0][0])).toContain("Chủ thể: Cty A, Cty B");
   });
 
+  it("Loại NCC: truyền NCC của loại xuống queryDetailReport và ghi loại vào tiêu đề", async () => {
+    mocks.findSuppliers.mockResolvedValue([{ id: 20 }]);
+    const { aoa } = await load(params({ supplierKind: "nhan_cong" }));
+    expect(mocks.findSuppliers).toHaveBeenCalledWith(expect.objectContaining({ where: { kind: "nhan_cong" } }));
+    expect(mocks.queryDetailReport).toHaveBeenCalledWith(expect.objectContaining({ partyIds: [20] }));
+    expect(String(aoa[0][0])).toContain("Loại NCC: Nhân công");
+  });
+
+  it("không có Loại NCC thì không tra NCC theo loại", async () => {
+    await load(params());
+    expect(mocks.findSuppliers).not.toHaveBeenCalled();
+    expect(mocks.queryDetailReport).toHaveBeenCalledWith(expect.not.objectContaining({ partyIds: expect.anything() }));
+  });
+
   it("từ chối cửa sổ ngược thay vì xuất", async () => {
     await expect(buildCongNoCongTrinhExcel(params({ from: "2026-06-01", to: "2026-05-01" }))).rejects.toThrow();
     expect(mocks.queryDetailReport).not.toHaveBeenCalled();
@@ -188,6 +207,12 @@ describe("POST /api/export/excel (cong-no-cong-trinh)", () => {
     );
     const wb = XLSX.read(Buffer.from(await res.arrayBuffer()), { type: "buffer" });
     expect(wb.SheetNames).toEqual([CONG_NO_CONG_TRINH_SHEET]);
+  });
+
+  it("route đọc tham số loai giống trang", async () => {
+    mocks.findSuppliers.mockResolvedValue([{ id: 20 }]);
+    await POST(request({ from: null, to: null, groupBy: "ncc", loai: "nhan_cong" }));
+    expect(mocks.queryDetailReport).toHaveBeenCalledWith(expect.objectContaining({ partyIds: [20] }));
   });
 
   it("đặt tên toan-bo / den-nay cho cửa sổ không giới hạn", async () => {

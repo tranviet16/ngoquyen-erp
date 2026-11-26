@@ -4,6 +4,8 @@ import { getMaterialDebtMatrix } from "@/lib/cong-no-vt/material-ledger-service"
 import { resolveReportPeriod } from "@/lib/ledger/report-period";
 import { pickMatrixEntities } from "@/lib/ledger/debt-matrix-columns";
 import { DebtMatrix } from "@/components/ledger/debt-matrix";
+import { SUPPLIER_KIND_PARAM } from "@/lib/master-data/supplier-kind";
+import { resolveSupplierKindFilter } from "@/lib/master-data/supplier-kind-query";
 import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 import { TongHopFilter } from "./tong-hop-filter";
 
@@ -32,11 +34,18 @@ export default async function TongHopPage({ searchParams }: PageProps) {
   const hideZero = one(sp.hideZero) === "1";
   const from = isoDay(period.from);
   const to = isoDay(period.to);
+  // Loại NCC: trống = tất cả; loại chưa có NCC nào thì bảng rỗng, không gọi service.
+  const kindFilter = await resolveSupplierKindFilter(sp[SUPPLIER_KIND_PARAM]);
 
   const [matrix, allEntities] = await Promise.all([
-    periodError
+    periodError || kindFilter.empty
       ? Promise.resolve([])
-      : getMaterialDebtMatrix({ from, to, entityIds: entityIds.length > 0 ? entityIds : undefined }),
+      : getMaterialDebtMatrix({
+          from,
+          to,
+          entityIds: entityIds.length > 0 ? entityIds : undefined,
+          ...(kindFilter.partyIds ? { partyIds: kindFilter.partyIds } : {}),
+        }),
     // Gồm cả Chủ thể đã xoá mềm để cột luôn cộng đủ vào tổng công ty.
     prisma.entity.findMany({ select: { id: true, name: true, deletedAt: true } }),
   ]);
@@ -72,7 +81,7 @@ export default async function TongHopPage({ searchParams }: PageProps) {
         <div className="flex flex-wrap items-center gap-2">
           <ExcelExportButton
             template="cong-no-tong-hop"
-            params={{ from, to, entityIds }}
+            params={{ from, to, entityIds, ...(kindFilter.kind ? { [SUPPLIER_KIND_PARAM]: kindFilter.kind } : {}) }}
             label="Xuất Excel"
             filename={`cong-no-tong-hop-${from ?? "toan-bo"}-${to ?? "den-nay"}.xlsx`}
           />
@@ -84,6 +93,7 @@ export default async function TongHopPage({ searchParams }: PageProps) {
         currentPeriod={period.params}
         entities={filterEntities}
         selectedEntityIds={entityIds}
+        supplierKind={kindFilter.kind}
         hideZero={hideZero}
       />
       {periodError && (

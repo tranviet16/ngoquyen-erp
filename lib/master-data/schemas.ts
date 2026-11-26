@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUPPLIER_KINDS } from "./supplier-kind";
 
 export const entitySchema = z.object({
   name: z.string().trim().min(1, "Tên không được để trống"),
@@ -11,6 +12,8 @@ export const supplierSchema = z.object({
   taxCode: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  // NCC tạo mới (kể cả tạo nhanh từ màn khác) mặc định là vật tư.
+  kind: z.enum(SUPPLIER_KINDS).default("vat_tu"),
 });
 
 export const contractorSchema = z.object({

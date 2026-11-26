@@ -9,6 +9,7 @@ import {
   type PivotGroupBy,
 } from "@/lib/cong-no-vt/project-debt-pivot";
 import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
+import { SUPPLIER_KIND_PARAM, parseSupplierKind } from "@/lib/master-data/supplier-kind";
 import { TongHopCongTrinhFilter } from "./tong-hop-cong-trinh-client";
 import { ProjectDebtPivotTable } from "./project-debt-pivot-table";
 
@@ -42,12 +43,15 @@ export default async function TongHopCongTrinhPage({ searchParams }: PageProps) 
   ];
   const from = isoDay(period.from);
   const to = isoDay(period.to);
+  // Loại NCC: trống / lạ = tất cả; server action và route xuất Excel đọc cùng tham số `loai`.
+  const supplierKind = parseSupplierKind(sp[SUPPLIER_KIND_PARAM]);
+  const kindParam = supplierKind ? { [SUPPLIER_KIND_PARAM]: supplierKind } : {};
   // Kiểm cùng quy tắc với server action / route để URL sai hiện thông báo thay vì trang lỗi.
   const query = parseProjectDebtQuery({ from, to, groupBy: groupByRaw ?? "ncc", entityIds });
   const paramError = "error" in requested ? requested.error : "error" in query ? query.error : null;
 
   const [summary, entities] = await Promise.all([
-    paramError ? Promise.resolve(null) : getProjectDebtSummary({ from, to, groupBy, entityIds }),
+    paramError ? Promise.resolve(null) : getProjectDebtSummary({ from, to, groupBy, entityIds, ...kindParam }),
     prisma.entity.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true },
@@ -75,7 +79,7 @@ export default async function TongHopCongTrinhPage({ searchParams }: PageProps) 
           <div className="flex flex-wrap items-center gap-2">
             <ExcelExportButton
               template="cong-no-cong-trinh"
-              params={{ from, to, groupBy, entityIds }}
+              params={{ from, to, groupBy, entityIds, ...kindParam }}
               label="Xuất Excel"
               filename={`cong-no-cong-trinh-${groupBy}-${from ?? "toan-bo"}-${to ?? "den-nay"}.xlsx`}
             />
@@ -89,6 +93,7 @@ export default async function TongHopCongTrinhPage({ searchParams }: PageProps) 
         groupBy={groupBy}
         entities={entities}
         selectedEntityIds={entityIds}
+        supplierKind={supplierKind}
       />
 
       {paramError || !summary ? (

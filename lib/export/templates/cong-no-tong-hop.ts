@@ -2,6 +2,7 @@
  * Export template: Tổng hợp công nợ vật tư NCC × Chủ thể (sheet "Công Nợ").
  * Header 3 hàng: tiêu đề; Chủ thể (gộp ngang 6 cột) + "Nhà cung cấp" (gộp dọc); nhãn cột.
  * Nhóm cuối "TỔNG CÔNG TY". Nhãn kỳ do server tính từ cửa sổ đã kiểm tra, không nhận từ client.
+ * Lọc Loại NCC (`supplierKind`) giống trang: loại chưa có NCC nào cho file chỉ có dòng TỔNG = 0.
  */
 
 import * as XLSX from "xlsx";
@@ -17,12 +18,16 @@ import {
   type CongNoSheetCell,
 } from "@/lib/ledger/debt-matrix-columns";
 import { prisma } from "@/lib/prisma";
+import { SUPPLIER_KIND_LABEL, type SupplierKind } from "@/lib/master-data/supplier-kind";
+import { resolveSupplierKindFilter } from "@/lib/master-data/supplier-kind-query";
 
 export interface CongNoTongHopParams {
   /** ISO `YYYY-MM-DD` hoặc null = không giới hạn; đã kiểm tra bằng windowSchema ở route. */
   from: string | null;
   to: string | null;
   entityIds?: number[];
+  /** Không có = mọi loại NCC. */
+  supplierKind?: SupplierKind;
 }
 
 const NUM_FMT = "#,##0";
@@ -36,7 +41,16 @@ export async function buildCongNoTongHopExcel(params: CongNoTongHopParams): Prom
   if ("error" in period) throw new Error(period.error);
 
   const entityIds = params.entityIds && params.entityIds.length > 0 ? params.entityIds : undefined;
-  const matrix = await queryDebtMatrix("material", { from: period.from, to: period.to, entityIds });
+  const kindFilter = await resolveSupplierKindFilter(params.supplierKind);
+  // queryDebtMatrix coi partyIds rỗng là "không lọc": loại chưa có NCC nào thì không truy vấn.
+  const matrix = kindFilter.empty
+    ? []
+    : await queryDebtMatrix("material", {
+        from: period.from,
+        to: period.to,
+        entityIds,
+        ...(kindFilter.partyIds ? { partyIds: kindFilter.partyIds } : {}),
+      });
 
   const [suppliers, allEntities] = await Promise.all([
     prisma.supplier.findMany({
@@ -59,7 +73,8 @@ export async function buildCongNoTongHopExcel(params: CongNoTongHopParams): Prom
   const groupNames = [...entities.map((e) => e.name), "TỔNG CÔNG TY"];
 
   const aoa: unknown[][] = [];
-  aoa.push([`Tổng hợp công nợ vật tư NCC × Chủ thể — ${period.label}`]);
+  const kindLabel = kindFilter.kind ? ` — Loại NCC: ${SUPPLIER_KIND_LABEL[kindFilter.kind]}` : "";
+  aoa.push([`Tổng hợp công nợ vật tư NCC × Chủ thể — ${period.label}${kindLabel}`]);
   const groupRow: unknown[] = ["Nhà cung cấp"];
   const labelRow: unknown[] = [""];
   groupNames.forEach((name, g) => {

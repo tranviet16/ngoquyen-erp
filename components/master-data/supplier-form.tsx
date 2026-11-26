@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { supplierSchema } from "@/lib/master-data/schemas";
+import { SUPPLIER_KIND_OPTIONS } from "@/lib/master-data/supplier-kind";
 
 type SupplierFormValues = z.input<typeof supplierSchema>;
 type SupplierOutput = z.infer<typeof supplierSchema>;
@@ -22,6 +23,7 @@ export function SupplierForm({ defaultValues, onSubmit, isSubmitting }: Supplier
     resolver: zodResolver(supplierSchema),
     defaultValues: {
       name: "",
+      kind: "vat_tu",
       taxCode: "",
       phone: "",
       address: "",
@@ -40,6 +42,29 @@ export function SupplierForm({ defaultValues, onSubmit, isSubmitting }: Supplier
               <FormLabel>Tên nhà cung cấp</FormLabel>
               <FormControl>
                 <Input placeholder="Nhập tên nhà cung cấp" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="kind"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Loại</FormLabel>
+              <FormControl>
+                <select
+                  {...field}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {SUPPLIER_KIND_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
               </FormControl>
               <FormMessage />
             </FormItem>

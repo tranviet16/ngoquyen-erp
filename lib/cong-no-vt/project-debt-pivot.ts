@@ -17,6 +17,7 @@
 
 import { z } from "zod";
 import { windowSchema } from "@/lib/ledger/report-period";
+import { SUPPLIER_KIND_PARAM, parseSupplierKind, type SupplierKind } from "@/lib/master-data/supplier-kind";
 import type { DetailRow } from "./balance-report-service";
 
 // ─── Kiểu công khai ────────────────────────────────────────────────────────────
@@ -99,6 +100,8 @@ export interface ProjectDebtQuery {
   to: string | null;
   groupBy: PivotGroupBy;
   entityIds: number[];
+  /** Bộ lọc Loại NCC (tham số `loai`); không có = mọi loại. */
+  supplierKind?: SupplierKind;
 }
 
 const MAX_ENTITY_IDS = 200;
@@ -112,7 +115,7 @@ const queryRestSchema = z.object({
     .max(MAX_ENTITY_IDS, `Chọn tối đa ${MAX_ENTITY_IDS} Chủ thể`),
 });
 
-/** Kiểm tra tham số từ client: cửa sổ ISO, kiểu nhóm, danh sách Chủ thể. Không ném. */
+/** Kiểm tra tham số từ client: cửa sổ ISO, kiểu nhóm, danh sách Chủ thể, Loại NCC (`loai`). Không ném. */
 export function parseProjectDebtQuery(input: unknown): ProjectDebtQuery | { error: string } {
   if (input == null || typeof input !== "object" || Array.isArray(input)) {
     return { error: "Tham số không hợp lệ" };
@@ -122,11 +125,14 @@ export function parseProjectDebtQuery(input: unknown): ProjectDebtQuery | { erro
   if (!window.success) return { error: window.error.issues[0]?.message ?? "Mốc thời gian không hợp lệ" };
   const rest = queryRestSchema.safeParse({ groupBy: raw.groupBy, entityIds: raw.entityIds ?? [] });
   if (!rest.success) return { error: rest.error.issues[0]?.message ?? "Tham số không hợp lệ" };
+  // Loại trống / lạ = mọi loại (giống trang báo cáo), để link cũ không có `loai` giữ nguyên hành vi.
+  const supplierKind = parseSupplierKind(raw[SUPPLIER_KIND_PARAM]);
   return {
     from: window.data.from,
     to: window.data.to,
     groupBy: rest.data.groupBy,
     entityIds: [...new Set(rest.data.entityIds)],
+    ...(supplierKind ? { supplierKind } : {}),
   };
 }
 

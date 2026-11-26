@@ -460,15 +460,21 @@ export async function getMaterialMonthlyReport(
 /**
  * Báo cáo theo NCC trên cửa sổ `[from, to]` (ISO `YYYY-MM-DD` hoặc null = không giới hạn).
  * Đầu kỳ = số dư ban đầu + Σ có dấu trước `from`; cuối kỳ = đầu kỳ + tăng − giảm.
+ *
+ * `partyIds` (bộ lọc Loại NCC): chỉ giữ dòng của các NCC này; mảng rỗng = không dòng nào.
+ * Mỗi dòng là một NCC nên lọc sau khi tính không đổi số của dòng nào.
  */
 export async function getMaterialWindowReport(
   window: { from: string | null; to: string | null },
-  entityId: number
+  entityId: number,
+  partyIds?: number[]
 ): Promise<MonthlyByPartyRow[]> {
   await requireReleasedModuleRequest("cong-no-vt");
   if (!Number.isInteger(entityId) || entityId <= 0) throw new Error("Chủ thể không hợp lệ");
   const w = parseWindowOrThrow(window);
-  return withSupplierNames(await service.windowByParty(w, entityId));
+  const rows = await service.windowByParty(w, entityId);
+  const keep = partyIds ? new Set(partyIds) : null;
+  return withSupplierNames(keep ? rows.filter((r) => keep.has(r.partyId)) : rows);
 }
 
 export async function firstMaterialEntityWithActivity(year: number, month: number) {
@@ -502,5 +508,8 @@ export async function getMaterialDebtMatrix(filter?: {
   const { from, to, ...ids } = filter ?? {};
   // Không truyền from/to ⇒ toàn bộ; có truyền thì kiểm tra như cửa sổ báo cáo.
   const w = parseWindowOrThrow({ from: from ?? null, to: to ?? null });
+  // `queryDebtMatrix` coi partyIds rỗng là "không lọc"; ở đây rỗng nghĩa là không NCC nào
+  // (bộ lọc Loại NCC chưa có NCC nào), nên trả rỗng thay vì cả ma trận.
+  if (ids.partyIds && ids.partyIds.length === 0) return [];
   return service.detailedDebtMatrix({ ...ids, from: w.from, to: w.to });
 }

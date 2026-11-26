@@ -4,10 +4,12 @@
  * Returns: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
  *
  * Supported templates:
- *   - cong-no-monthly: { ledgerType, entityId, period?, y?, q?, m?, w?, from?, to? | year, month }
- *   - cong-no-tong-hop: { from: ISO|null, to: ISO|null, entityIds?: number[] } (quyền đọc cong-no-vt)
- *   - cong-no-cong-trinh: { from: ISO|null, to: ISO|null, groupBy: "ncc"|"cong-trinh", entityIds?: number[] }
+ *   - cong-no-monthly: { ledgerType, entityId, period?, y?, q?, m?, w?, from?, to? | year, month, loai? }
+ *   - cong-no-tong-hop: { from: ISO|null, to: ISO|null, entityIds?: number[], loai? } (quyền đọc cong-no-vt)
+ *   - cong-no-cong-trinh: { from: ISO|null, to: ISO|null, groupBy: "ncc"|"cong-trinh", entityIds?: number[], loai? }
  *     (quyền đọc cong-no-vt)
+ *   `loai` = Loại NCC ("vat_tu" | "nhan_cong"); trống / lạ = mọi loại, như trang báo cáo.
+ *   Với cong-no-monthly chỉ áp khi ledgerType = "material".
  *   - doi-chieu: { ledgerType, entityId?, partyId?, projectId? }
  *   - du-toan: { projectId }
  *   - sl-dt: { year, month?, projectId? }
@@ -29,6 +31,7 @@ import { buildDuToanExcel } from "@/lib/export/templates/du-toan";
 import { buildSlDtExcel } from "@/lib/export/templates/sl-dt";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
 import { resolveReportPeriod, windowSchema } from "@/lib/ledger/report-period";
+import { SUPPLIER_KIND_PARAM, parseSupplierKind } from "@/lib/master-data/supplier-kind";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // Auth check
@@ -104,7 +107,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         if ("error" in period) {
           return NextResponse.json({ error: "Mốc thời gian không hợp lệ" }, { status: 400 });
         }
-        buffer = await buildCongNoMonthlyExcel(ledgerType, period, entityId);
+        const supplierKind = ledgerType === "material" ? parseSupplierKind(params[SUPPLIER_KIND_PARAM]) : null;
+        buffer = supplierKind
+          ? await buildCongNoMonthlyExcel(ledgerType, period, entityId, { supplierKind })
+          : await buildCongNoMonthlyExcel(ledgerType, period, entityId);
         const slug = ledgerType === "material" ? "vt" : "nc";
         const rest = { ...period.params };
         delete rest.period;
@@ -130,7 +136,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           return NextResponse.json({ error: "Chủ thể không hợp lệ" }, { status: 400 });
         }
         const { from, to } = window.data;
-        buffer = await buildCongNoTongHopExcel({ from, to, entityIds: rawIds as number[] });
+        const supplierKind = parseSupplierKind(params[SUPPLIER_KIND_PARAM]);
+        buffer = await buildCongNoTongHopExcel({
+          from,
+          to,
+          entityIds: rawIds as number[],
+          ...(supplierKind ? { supplierKind } : {}),
+        });
         filename = `cong-no-tong-hop-${from ?? "toan-bo"}-${to ?? "den-nay"}.xlsx`;
         break;
       }

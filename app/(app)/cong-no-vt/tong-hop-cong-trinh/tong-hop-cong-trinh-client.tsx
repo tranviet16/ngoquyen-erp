@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ControlledMultiSelect, type Option } from "@/components/ledger/controlled-multi-select";
+import { SupplierKindSelect } from "@/components/ledger/supplier-kind-select";
+import { setSupplierKindParam, type SupplierKind } from "@/lib/master-data/supplier-kind";
 import {
   ReportPeriodSelector,
   resolvePeriodValue,
@@ -18,16 +20,18 @@ interface Props {
   groupBy: PivotGroupBy;
   entities: Option[];
   selectedEntityIds: number[];
+  supplierKind: SupplierKind | null;
 }
 
 const SELECT_CLS = "h-9 rounded-md border border-input bg-background text-foreground px-3 text-sm shadow-sm";
 
-/** Bộ lọc tổng hợp theo công trình: mốc thời gian, chiều nhóm, Chủ thể; chỉ ghi URL khi bấm Áp dụng. */
-export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selectedEntityIds }: Props) {
+/** Bộ lọc tổng hợp theo công trình: mốc thời gian, chiều nhóm, Chủ thể, Loại NCC; chỉ ghi URL khi bấm Áp dụng. */
+export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selectedEntityIds, supplierKind }: Props) {
   const router = useRouter();
   const [period, setPeriod] = useState<ReportPeriodValue>(currentPeriod);
   const [group, setGroup] = useState<PivotGroupBy>(groupBy);
   const [entityIds, setEntityIds] = useState<number[]>(selectedEntityIds);
+  const [kind, setKind] = useState<SupplierKind | null>(supplierKind);
   const invalid = "error" in resolvePeriodValue(period);
 
   function handleApply() {
@@ -35,6 +39,7 @@ export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selec
     const params = new URLSearchParams(period);
     params.set("groupBy", group);
     if (entityIds.length > 0) params.set("entityIds", entityIds.join(","));
+    setSupplierKindParam(params, kind);
     router.push(`?${params.toString()}`, { scroll: false });
   }
 
@@ -43,6 +48,7 @@ export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selec
     setPeriod({ period: "year", y: year });
     setGroup("ncc");
     setEntityIds([]);
+    setKind(null);
     router.push(`?period=year&y=${year}&groupBy=ncc`, { scroll: false });
   }
 
@@ -67,6 +73,7 @@ export function TongHopCongTrinhFilter({ currentPeriod, groupBy, entities, selec
           <Label>Chủ thể</Label>
           <ControlledMultiSelect options={entities} selected={entityIds} label="chủ thể" onChange={setEntityIds} />
         </div>
+        <SupplierKindSelect id="tong-hop-cong-trinh-supplier-kind" value={kind} onChange={setKind} />
       </div>
       <div className="flex gap-2">
         <Button size="sm" onClick={handleApply} disabled={invalid}>Áp dụng</Button>

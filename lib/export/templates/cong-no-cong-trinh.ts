@@ -22,6 +22,8 @@ import {
 } from "@/lib/cong-no-vt/project-debt-pivot";
 import { resolveReportPeriod } from "@/lib/ledger/report-period";
 import { prisma } from "@/lib/prisma";
+import { SUPPLIER_KIND_LABEL } from "@/lib/master-data/supplier-kind";
+import { supplierIdsOfKind } from "@/lib/master-data/supplier-kind-query";
 
 /** Đã kiểm tra bằng `parseProjectDebtQuery` ở route. */
 export type CongNoCongTrinhParams = ProjectDebtQuery;
@@ -43,12 +45,15 @@ export async function buildCongNoCongTrinhExcel(params: CongNoCongTrinhParams): 
   if ("error" in period) throw new Error(period.error);
 
   const entityIds = params.entityIds.length > 0 ? params.entityIds : undefined;
+  // Loại chưa có NCC nào cho partyIds rỗng; queryDetailReport trả rỗng (không phải toàn bộ).
+  const partyIds = params.supplierKind ? await supplierIdsOfKind(params.supplierKind) : undefined;
   const [{ rows }, entities] = await Promise.all([
     queryDetailReport({
       ledgerType: "material",
       ...(period.from ? { from: period.from } : {}),
       ...(period.to ? { to: period.to } : {}),
       entityIds,
+      ...(partyIds ? { partyIds } : {}),
       showZero: false,
     }),
     entityIds
@@ -65,6 +70,7 @@ export async function buildCongNoCongTrinhExcel(params: CongNoCongTrinhParams): 
   const title = [
     `Công nợ vật tư theo công trình (${labels.title}) — ${period.label}`,
     ...(entityNames.length > 0 ? [`Chủ thể: ${entityNames.join(", ")}`] : []),
+    ...(params.supplierKind ? [`Loại NCC: ${SUPPLIER_KIND_LABEL[params.supplierKind]}`] : []),
   ].join(" — ");
 
   const merges: XLSX.Range[] = [

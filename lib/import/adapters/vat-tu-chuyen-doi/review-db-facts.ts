@@ -2,7 +2,8 @@
  * Đọc từ DB cho lớp lập kế hoạch: danh mục (Chủ thể, NCC, công trình, vật tư chưa xóa) và dữ kiện
  * của các NCC trong run — đọc SAU khi đã khóa NCC ("khóa rồi mới kiểm"): run chuyển đổi khác đã
  * ghi, dữ liệu đang có theo cặp (guard độc quyền), phiếu ERP, thanh toán ERP sau mốc, dòng đợt
- * `vat_tu` còn mở (draft / submitted / approved — mỗi đợt cần người dùng xác nhận).
+ * `vat_tu` / `nhan_cong` còn mở (draft / submitted / approved — mỗi đợt cần người dùng xác nhận):
+ * cả hai loại ghi sổ vật tư khi đóng đợt (`MATERIAL_LEDGER_CATEGORIES`).
  */
 
 import type { ImportTx } from "../adapter-types";
@@ -11,6 +12,7 @@ import { CUTOVER_DATE } from "./cutover-constants";
 import { addDays } from "./day-utils";
 import { POST_CUTOVER_DAY_TOLERANCE } from "./post-cutover-matching";
 import type { Catalog, DbFacts, PairGuardFact } from "./plan-types";
+import { MATERIAL_LEDGER_CATEGORIES } from "@/lib/payment/payment-category";
 
 const OPEN_ROUND_STATUSES = ["draft", "submitted", "approved"];
 
@@ -85,7 +87,11 @@ export async function loadDbFacts(db: ImportTx, supplierIds: readonly number[], 
     select: { id: true, partyId: true, projectId: true, date: true, totalTt: true, paymentRoundItemId: true, content: true },
   });
   const roundItems = await db.paymentRoundItem.findMany({
-    where: { category: "vat_tu", supplierId: { in: ids }, round: { status: { in: OPEN_ROUND_STATUSES }, deletedAt: null } },
+    where: {
+      category: { in: [...MATERIAL_LEDGER_CATEGORIES] },
+      supplierId: { in: ids },
+      round: { status: { in: OPEN_ROUND_STATUSES }, deletedAt: null },
+    },
     select: {
       id: true,
       roundId: true,

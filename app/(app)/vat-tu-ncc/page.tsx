@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { SUPPLIER_KIND_LABEL } from "@/lib/master-data/supplier-kind";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +54,12 @@ export default async function VatTuNccPage() {
               href={`/vat-tu-ncc/${s.id}/ngay`}
               className="block rounded-lg border p-4 hover:border-primary hover:shadow-sm transition-all"
             >
-              <p className="font-semibold">{s.name}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-semibold">{s.name}</p>
+                {s.kind === "nhan_cong" && (
+                  <StatusBadge label={SUPPLIER_KIND_LABEL.nhan_cong} tone="info" className="shrink-0" />
+                )}
+              </div>
               {s.taxCode && <p className="text-xs text-muted-foreground">MST: {s.taxCode}</p>}
               {s.phone && <p className="text-xs text-muted-foreground">SĐT: {s.phone}</p>}
               <p className="text-xs text-muted-foreground mt-1">

@@ -71,7 +71,13 @@ Lưới hiện 200 dòng mỗi trang, mới nhất trước; dùng nút **Trư�
 
 **Ghi trong giai đoạn khoá (chỉ admin)**: ở tab **Thanh toán** của NCC, admin ghi / sửa / xoá được chuyển khoản hoặc thuế hoá đơn có ngày ≤ 26/10/2026 hoặc rơi vào kỳ đã ký. Hệ thống hiện thông báo khoá kèm câu hỏi xác nhận; bấm OK thì dòng được ghi đúng ngày nhập, các bảng đối chiếu đã ký của cặp từ ngày đó trở đi được tính lại số (giữ ngày ký, ghi lại người sửa). Dòng sinh từ đợt thanh toán vẫn không sửa tay được; lưới Nhập liệu vẫn từ chối các ngày này.
 
-**Kế hoạch thanh toán** (`/thanh-toan/ke-hoach`): dòng loại vật tư phải chọn **công trình** trước. Chủ thể tự điền theo công trình và bị khoá. Đợt đóng sẽ ghi "Trả tiền" vào sổ của đúng cặp, với ngày là ngày đóng đợt.
+**Kế hoạch thanh toán** (`/thanh-toan/ke-hoach`): dòng loại **Vật tư** và **Nhân công** phải chọn **công trình** trước. Chủ thể tự điền theo công trình và bị khoá. Đợt đóng sẽ ghi "Trả tiền" vào sổ công nợ vật tư của đúng cặp NCC × công trình, với ngày là ngày đóng đợt (khoá kỳ và mốc chuyển đổi áp như nhau cho hai loại).
+
+- Dòng **Vật tư** chỉ gợi ý NCC loại vật tư; dòng **Nhân công** chỉ gợi ý NCC loại nhân công (đổi loại NCC ở **Danh Mục > Nhà Cung Cấp**). Admin bật **Bỏ cascade (full NCC)** để chọn mọi NCC. Đổi loại dòng giữa Vật tư và Nhân công thì NCC đang chọn bị bỏ chọn, chọn lại trong danh sách mới.
+- NCC chỉ có số dư đầu kỳ ở công trình (chưa có dòng sổ nào) vẫn được gợi ý.
+- Công nợ / lũy kế của dòng Nhân công tự điền từ sổ công nợ vật tư của NCC, như dòng Vật tư. Dòng Nhân công tạo trước bản cập nhật này: bấm **Cập nhật số dư** khi đợt còn nháp để lấy lại số.
+- Đợt chỉ chuyển sang **Đã duyệt** khi mọi dòng Vật tư / Nhân công có số duyệt > 0 đều có công trình. Nếu còn dòng thiếu công trình, hệ thống báo số dòng và giữ đợt ở **Đã gửi**: từ chối dòng đó rồi duyệt tiếp.
+- Dòng Dịch vụ / Khác không ghi sổ, không bắt buộc công trình.
 
 ### 3.4 Số dư ban đầu — theo cặp, khoá khi cặp có kỳ ký
 
@@ -94,26 +100,27 @@ Lưới hiện 200 dòng mỗi trang, mới nhất trước; dùng nút **Trư�
    - **Tuần ISO**: tuần theo chuẩn ISO (Thứ 2 – CN) — tuần 53 chỉ ở năm có 53 tuần
    - **Kỳ chuẩn 27→26**: cửa sổ 27 tháng trước → 26 tháng chọn (mặc định nếu không chọn)
    - **Tuỳ chọn**: từ ngày → đến ngày (ISO format YYYY-MM-DD)
+   - **Loại NCC**: Tất cả (mặc định) / Vật tư / Nhân công. Chọn một loại thì bảng và các dòng tổng chỉ cộng NCC thuộc loại đó; tổng "Vật tư" + tổng "Nhân công" bằng tổng "Tất cả". Loại chưa có NCC nào cho bảng rỗng.
 3. Click **Áp dụng** (không push URL tự động)
 4. Xem bảng: **LH = Đầu kỳ + Lấy hàng**
    - LH TT: lấy hàng TT
    - Trả TT: thanh toán TT
    - Nợ TT: còn nợ TT
    - LH HĐ, Trả HĐ, Nợ HĐ: như trên nhưng cột thuế hoá đơn (HĐ luôn = 0 nếu không có thuế)
-5. Click **Xuất Excel** để tải file `cong-no-monthly-T<tháng>-<năm>.xlsx`
+5. Click **Xuất Excel** để tải file `cong-no-monthly-T<tháng>-<năm>.xlsx`. File theo đúng Chủ thể, mốc và Loại NCC đang xem; tiêu đề ghi loại khi có lọc.
 
 ### 3.6 Chi tiết sổ cái — Theo cửa sổ thời gian
 
 1. Menu → **Công Nợ VT > Chi Tiết**
 2. Chọn nhà cung cấp
-3. Bộ chọn mốc thời gian (như Báo cáo tháng), mặc định **Năm** hiện tại
+3. Bộ chọn mốc thời gian (như Báo cáo tháng), mặc định **Năm** hiện tại; bộ lọc **Loại NCC** như Báo cáo tháng
 4. Click **Áp dụng**
 5. Xem dòng lịch sử: ngày ghi sổ (ngày nghiệp vụ), loại giao dịch, số tiền TT/HĐ, số dư lũy kế
 
 ### 3.7 Tổng hợp NCC × Chủ thể — Ma trận công nợ
 
 1. Menu → **Công Nợ VT > Tổng hợp NCC × Chủ thể** (`/cong-no-vt/tong-hop`)
-2. Bộ chọn mốc thời gian (mặc định: **Năm** hiện tại, khớp sheet "Công Nợ" của Excel; chọn **Toàn bộ** thì LH / Trả cộng cả dòng "Lũy kế chuyển đổi" trước 2026)
+2. Bộ chọn mốc thời gian (mặc định: **Năm** hiện tại, khớp sheet "Công Nợ" của Excel; chọn **Toàn bộ** thì LH / Trả cộng cả dòng "Lũy kế chuyển đổi" trước 2026); bộ lọc **Loại NCC** như Báo cáo tháng
 3. Xem ma trận:
    - **Dòng**: Chủ thể (entity) + tất cả NCC của chủ thể → tổng cộng Chủ thể
    - **Cột (per Chủ thể)**: 
@@ -125,7 +132,7 @@ Lưới hiện 200 dòng mỗi trang, mới nhất trước; dùng nút **Trư�
      - Nợ HĐ (còn nợ HĐ)
    - LH và Trả chỉ là phát sinh trong kỳ xem, **không cộng đầu kỳ**. Nợ là công nợ còn lại đến cuối kỳ (gồm cả số dư chuyển sang), nên Nợ = Đầu kỳ + LH − Trả
    - **TỔNG CÔNG TY**: cộng tất cả chủ thể
-4. Click **Xuất Excel** → `cong-no-tong-hop-<mốc>.xlsx` (header 2 hàng gộp ô)
+4. Click **Xuất Excel** → `cong-no-tong-hop-<mốc>.xlsx` (header 2 hàng gộp ô), theo đúng Chủ thể, mốc và Loại NCC đang xem
    - Mở cho quyền **đọc** `cong-no-vt`
 
 ### 3.8 Tổng hợp theo công trình — năm hoặc từ đầu
@@ -135,6 +142,7 @@ Lưới hiện 200 dòng mỗi trang, mới nhất trước; dùng nút **Trư�
    - **Kỳ xem**: cùng bộ chọn mốc như Báo cáo tháng, mặc định **Năm** hiện tại
    - **Nhóm theo**: NCC → công trình, hoặc Công trình → NCC
    - **Chủ thể**: chọn một hoặc nhiều; để trống là tất cả
+   - **Loại NCC**: Tất cả (mặc định) / Vật tư / Nhân công, như Báo cáo tháng
 3. Cột (TT và HĐ):
    - Kỳ có ngày bắt đầu (Năm, Tháng, Kỳ chuẩn…): **Đầu kỳ / PS tăng / PS giảm / Cuối kỳ**, với Cuối kỳ = Đầu kỳ + PS tăng − PS giảm
    - **Toàn bộ** (hoặc chỉ có "Đến ngày"): **Số dư chuyển sang / LH lũy kế / Đã trả lũy kế / Còn nợ**. Ở cặp lũy kế, LH lũy kế gồm dòng "Lũy kế chuyển đổi" 26/12/2025

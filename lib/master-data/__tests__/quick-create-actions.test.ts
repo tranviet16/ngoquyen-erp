@@ -47,7 +47,8 @@ describe("quickCreateRecordAction", () => {
     const result = await quickCreateRecordAction("supplier", { name: "  Thép Việt Đức " });
 
     expect(result).toEqual({ ok: true, record: { kind: "supplier", id: 51, name: "Thép Việt Đức" } });
-    expect(mockDb.supplier.create).toHaveBeenCalledWith({ data: { name: "Thép Việt Đức" } });
+    // NCC tạo nhanh từ màn khác mặc định là loại vật tư.
+    expect(mockDb.supplier.create).toHaveBeenCalledWith({ data: { name: "Thép Việt Đức", kind: "vat_tu" } });
     expect(mockModuleRequest).toHaveBeenCalledWith("master-data");
   });
 
