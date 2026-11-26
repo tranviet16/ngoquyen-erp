@@ -1,7 +1,7 @@
 ---
 title: "Loại NCC (vật tư / nhân công)"
 description: "Thêm trường Loại cho NCC, lọc báo cáo công nợ vật tư theo loại và cho đề nghị thanh toán nhân công dùng đúng sổ, không dời dòng sổ nào."
-status: in-progress
+status: completed
 priority: P2
 effort: 3d
 branch: main
