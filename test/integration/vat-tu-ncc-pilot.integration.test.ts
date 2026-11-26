@@ -318,7 +318,7 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     expect(after?.signedSnapshotJson).toBeNull();
   });
 
-  it("đóng đợt thanh toán chỉ sinh thanh_toan cho vat_tu, idempotent", async () => {
+  it("đóng đợt thanh toán sinh thanh_toan sổ vật tư cho dòng vat_tu và nhan_cong (không cho dịch vụ), idempotent", async () => {
     const ids = await seedMasterData();
     const user = await prisma.user.create({
       data: { id: "u-pilot", name: "Pilot", email: "pilot@test.local", role: "admin" },
@@ -350,8 +350,9 @@ describe("vat-tu-ncc pilot Nam Hương (integration)", () => {
     const events = await prisma.ledgerTransaction.findMany({
       where: { transactionType: "thanh_toan", partyId: ids.supplier.id, deletedAt: null },
     });
-    expect(events).toHaveLength(2);
+    // Dòng nhân công cũng trừ công nợ NCC ở sổ vật tư (công nợ NCC, kể cả NCC loại nhân công, nằm ở đó).
+    expect(events).toHaveLength(3);
     expect(events.every((e) => e.ledgerType === "material")).toBe(true);
-    expect(events.reduce((s, e) => s + Number(e.totalTt), 0)).toBe(50_000_000);
+    expect(events.reduce((s, e) => s + Number(e.totalTt), 0)).toBe(149_000_000);
   });
 });

@@ -162,6 +162,7 @@ Tab **Đối chiếu công nợ** (`/vat-tu-ncc/[NCC]/doi-chieu?projectId=…`) 
 1. Menu → **Công Nợ VT > Chi Tiết**
 2. Chọn nhà cung cấp
 3. Xem lịch sử: ngày, loại (nợ/trả), số tiền, số dư lũy kế
+4. Bộ lọc **Loại NCC** (Tất cả / Vật tư / Nhân công) chỉ cộng NCC thuộc loại đã chọn. Ở trang **Vật tư theo NCC**, thẻ NCC loại nhân công có nhãn **Nhân công**.
 
 > Cán bộ vật tư chỉ xem được, không nhập liệu công nợ (kế toán nhập).
 

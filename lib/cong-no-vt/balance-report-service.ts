@@ -71,6 +71,12 @@ export interface DetailReportFilters {
   to?: Date;
   entityIds?: number[];
   projectIds?: number[];
+  /**
+   * Lọc theo NCC / đội (`partyId`). Không truyền = mọi đối tác. Khác `entityIds` / `projectIds`,
+   * mảng rỗng nghĩa là "không đối tác nào" và trả bảng rỗng (bộ lọc Loại NCC chưa có NCC nào),
+   * không bao giờ là "tất cả".
+   */
+  partyIds?: number[];
   showZero: boolean;
 }
 
@@ -124,8 +130,13 @@ export async function queryDetailReport(
   }
   if (periodEndExclusive) periodEnd = new Date(periodEndExclusive.getTime() - 1);
 
+  if (filters.partyIds && filters.partyIds.length === 0) {
+    return { rows: [], subtotals: [], periodEnd };
+  }
+
   const entityIdsArr = entityIds && entityIds.length > 0 ? entityIds : null;
   const projectIdsArr = projectIds && projectIds.length > 0 ? projectIds : null;
+  const partyIdsArr = filters.partyIds ?? null;
 
   // ── Single GROUP BY query — FULL OUTER JOIN ob ⋈ tx ────────────────────────
   const rawRows = await prisma.$queryRaw<RawRow[]>`
@@ -137,6 +148,7 @@ export async function queryDetailReport(
       WHERE "ledgerType" = ${ledgerType}
         AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
         AND (${projectIdsArr}::int[] IS NULL OR "projectId" = ANY(${projectIdsArr}::int[]))
+        AND (${partyIdsArr}::int[] IS NULL OR "partyId" = ANY(${partyIdsArr}::int[]))
     ),
     tx AS (
       SELECT "entityId", "partyId", "projectId",
@@ -152,6 +164,7 @@ export async function queryDetailReport(
         AND (${periodEndExclusive}::timestamp IS NULL OR "date" < ${periodEndExclusive}::timestamp)
         AND (${entityIdsArr}::int[] IS NULL OR "entityId" = ANY(${entityIdsArr}::int[]))
         AND (${projectIdsArr}::int[] IS NULL OR "projectId" = ANY(${projectIdsArr}::int[]))
+        AND (${partyIdsArr}::int[] IS NULL OR "partyId" = ANY(${partyIdsArr}::int[]))
       GROUP BY "entityId", "partyId", "projectId"
     )
     SELECT

@@ -2,6 +2,7 @@
  * Export template: Báo cáo Công nợ Vật tư / Nhân công theo cửa sổ thời gian
  * Pivot: party (NCC / Đội) × 1 cửa sổ `[from, to]`, 10 columns + dòng tổng (matches SOP).
  * Nhãn kỳ do server tính từ cửa sổ đã kiểm tra (resolveReportPeriod), không nhận từ client.
+ * Lọc Loại NCC (`supplierKind`) chỉ áp cho sổ vật tư; sổ nhân công (đội) bỏ qua tham số này.
  */
 
 import { createWorkbook, addSheet, workbookToBuffer, type SheetColumn } from "../excel-exporter";
@@ -9,6 +10,8 @@ import { queryWindowByParty } from "@/lib/ledger/ledger-aggregations";
 import type { ResolvedReportPeriod } from "@/lib/ledger/report-period";
 import { prisma } from "@/lib/prisma";
 import type { LedgerType } from "@/lib/ledger/ledger-types";
+import { SUPPLIER_KIND_LABEL, type SupplierKind } from "@/lib/master-data/supplier-kind";
+import { resolveSupplierKindFilter } from "@/lib/master-data/supplier-kind-query";
 
 const COLUMNS: SheetColumn[] = [
   { header: "STT", key: "stt", width: 6 },
@@ -26,9 +29,16 @@ const COLUMNS: SheetColumn[] = [
 export async function buildCongNoMonthlyExcel(
   ledgerType: LedgerType,
   period: Pick<ResolvedReportPeriod, "from" | "to" | "label">,
-  entityId: number
+  entityId: number,
+  options: { supplierKind?: SupplierKind } = {}
 ): Promise<Buffer> {
-  const rawRows = await queryWindowByParty(ledgerType, { from: period.from, to: period.to, entityId });
+  const kindFilter = await resolveSupplierKindFilter(
+    ledgerType === "material" ? options.supplierKind : undefined,
+  );
+  const windowRows = await queryWindowByParty(ledgerType, { from: period.from, to: period.to, entityId });
+  // Mỗi dòng là một NCC: lọc sau khi tính; tập rỗng (loại chưa có NCC nào) cho bảng rỗng.
+  const keep = kindFilter.partyIds ? new Set(kindFilter.partyIds) : null;
+  const rawRows = keep ? windowRows.filter((r) => keep.has(r.partyId)) : windowRows;
 
   const partyIds = rawRows.map((r) => r.partyId);
   const [parties, entity] = await Promise.all([
@@ -81,7 +91,9 @@ export async function buildCongNoMonthlyExcel(
   const wb = createWorkbook();
   const label = ledgerType === "material" ? "Vật tư" : "Nhân công";
   addSheet(wb, "Báo cáo tháng", COLUMNS, [...dataRows, totalRow], {
-    title: `Báo cáo Công nợ ${label} — ${period.label} — Chủ thể: ${entity?.name ?? `#${entityId}`}`,
+    title: `Báo cáo Công nợ ${label} — ${period.label} — Chủ thể: ${entity?.name ?? `#${entityId}`}${
+      kindFilter.kind ? ` — Loại NCC: ${SUPPLIER_KIND_LABEL[kindFilter.kind]}` : ""
+    }`,
   });
 
   return workbookToBuffer(wb);

@@ -44,6 +44,13 @@ describe("POST /api/export/excel (cong-no-tong-hop)", () => {
     expect(res.headers.get("Content-Disposition")).toContain("cong-no-tong-hop-2026-04-27-2026-05-26.xlsx");
   });
 
+  it("passes the Loại NCC filter through; an unknown value means every kind", async () => {
+    await POST(request({ from: null, to: null, loai: "nhan_cong" }));
+    expect(mocks.build).toHaveBeenLastCalledWith({ from: null, to: null, entityIds: [], supplierKind: "nhan_cong" });
+    await POST(request({ from: null, to: null, loai: "labor" }));
+    expect(mocks.build).toHaveBeenLastCalledWith({ from: null, to: null, entityIds: [] });
+  });
+
   it("names an unbounded window toan-bo / den-nay", async () => {
     const res = await POST(request({ from: null, to: null }));
     expect(res.headers.get("Content-Disposition")).toContain("cong-no-tong-hop-toan-bo-den-nay.xlsx");

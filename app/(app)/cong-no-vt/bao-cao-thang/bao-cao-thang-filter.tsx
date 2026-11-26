@@ -9,6 +9,8 @@ import {
   resolvePeriodValue,
   type ReportPeriodValue,
 } from "@/components/ledger/report-period-selector";
+import { SupplierKindSelect } from "@/components/ledger/supplier-kind-select";
+import { setSupplierKindParam, type SupplierKind } from "@/lib/master-data/supplier-kind";
 
 interface EntityOption { id: number; name: string; }
 
@@ -17,19 +19,22 @@ interface Props {
   currentPeriod: ReportPeriodValue;
   currentEntityId?: number;
   entities: EntityOption[];
+  supplierKind: SupplierKind | null;
 }
 
-export function BaoCaoThangFilter({ currentPeriod, currentEntityId, entities }: Props) {
+export function BaoCaoThangFilter({ currentPeriod, currentEntityId, entities, supplierKind }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [period, setPeriod] = useState<ReportPeriodValue>(currentPeriod);
   const [entityId, setEntityId] = useState(String(currentEntityId ?? ""));
+  const [kind, setKind] = useState<SupplierKind | null>(supplierKind);
   const invalid = "error" in resolvePeriodValue(period);
 
   function handleFilter() {
     if (invalid) return;
     const params = new URLSearchParams(period);
     if (entityId) params.set("entityId", entityId);
+    setSupplierKindParam(params, kind);
     router.push(pathname + "?" + params.toString());
   }
 
@@ -46,6 +51,7 @@ export function BaoCaoThangFilter({ currentPeriod, currentEntityId, entities }: 
           {entities.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
         </select>
       </div>
+      <SupplierKindSelect id="bao-cao-thang-supplier-kind" value={kind} onChange={setKind} />
       <Button size="lg" onClick={handleFilter} disabled={invalid}>Xem</Button>
     </div>
   );

@@ -1,8 +1,9 @@
 /**
  * Đồng bộ đợt thanh toán đã đóng (đã chi thật) vào sổ cái công nợ vật tư.
- * Chỉ category vat_tu (material) — nhân công/dịch vụ/khác chưa có trong phạm vi.
+ * Dòng vat_tu và nhan_cong (`postsToMaterialLedger`): công nợ NCC, kể cả NCC loại nhân công, nằm ở
+ * sổ vật tư. Dịch vụ / khác không ghi sổ.
  * Idempotent theo paymentRoundItemId: 1 dòng đợt ↔ tối đa 1 event thanh_toan.
- * Sổ vật tư theo cặp NCC × công trình: dòng vat_tu phải có công trình; Chủ thể của event suy
+ * Sổ vật tư theo cặp NCC × công trình: dòng phải có công trình; Chủ thể của event suy
  * từ công trình; khoá kỳ + mốc chuyển đổi kiểm theo cặp.
  * Không "use server" — helper nội bộ chạy trong transaction của closeRound.
  */
@@ -12,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { toBusinessDateUtc } from "@/lib/ledger/business-date";
 import { assertPeriodOpen, lockSuppliers } from "@/lib/vat-tu-ncc/period-lock";
 import { MaterialScopeError, resolveMaterialEntityId } from "@/lib/vat-tu-ncc/pair-scope";
+import { MATERIAL_LEDGER_CATEGORIES } from "./payment-category";
 
 type SyncClient = Pick<
   typeof prisma,
@@ -26,16 +28,16 @@ export async function syncClosedRoundToLedger(roundId: number, client: SyncClien
   if (!round) throw new Error(`Không tìm thấy đợt #${roundId}`);
 
   const items = await client.paymentRoundItem.findMany({
-    where: { roundId, category: "vat_tu", soDuyet: { gt: 0 } },
+    where: { roundId, category: { in: [...MATERIAL_LEDGER_CATEGORIES] }, soDuyet: { gt: 0 } },
     select: { id: true, supplierId: true, projectId: true, soDuyet: true },
   });
 
-  // Dòng vat_tu cũ thiếu công trình: báo rõ từng dòng thay vì để CHECK sổ cái từ chối.
+  // Dòng vat_tu / nhan_cong cũ thiếu công trình: báo rõ từng dòng thay vì để CHECK sổ cái từ chối.
   const missingProject = items.filter((item) => item.projectId == null);
   if (missingProject.length) {
     throw new MaterialScopeError(
       "missing_project",
-      `Không đóng được đợt: ${missingProject.length} dòng vật tư thiếu công trình ` +
+      `Không đóng được đợt: ${missingProject.length} dòng vật tư / nhân công thiếu công trình ` +
         `(${missingProject.map((item) => `#${item.id}`).join(", ")}). Sửa dòng hoặc từ chối dòng đó trước khi đóng.`,
     );
   }

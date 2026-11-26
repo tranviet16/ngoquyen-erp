@@ -11,6 +11,8 @@ import { MonthlyReport } from "@/components/ledger/monthly-report";
 import { BaoCaoThangFilter } from "./bao-cao-thang-filter";
 import { ExcelExportButton, PrintButton } from "@/components/export-buttons";
 import { serializeDecimals } from "@/lib/serialize";
+import { SUPPLIER_KIND_PARAM } from "@/lib/master-data/supplier-kind";
+import { resolveSupplierKindFilter } from "@/lib/master-data/supplier-kind-query";
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -37,6 +39,9 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
   if ("error" in period) throw new Error(period.error);
 
   const entities = await prisma.entity.findMany({ where: { deletedAt: null }, select: { id: true, name: true }, orderBy: { name: "asc" } });
+  // Loại NCC: trống = tất cả; `partyIds` rỗng (loại chưa có NCC nào) cho bảng rỗng.
+  const kindFilter = await resolveSupplierKindFilter(params[SUPPLIER_KIND_PARAM]);
+  const kindParam: Record<string, string> = kindFilter.kind ? { [SUPPLIER_KIND_PARAM]: kindFilter.kind } : {};
 
   const rawEntityId = Array.isArray(params.entityId) ? params.entityId[0] : params.entityId;
   const entityId = rawEntityId ? parseInt(rawEntityId, 10) : NaN;
@@ -48,17 +53,24 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
       return (
         <div className="space-y-4">
           <h1 className="text-2xl font-bold">Báo cáo tháng - Vật tư</h1>
-          <BaoCaoThangFilter currentPeriod={period.params} currentEntityId={undefined} entities={entities} />
+          <BaoCaoThangFilter
+            currentPeriod={period.params}
+            currentEntityId={undefined}
+            entities={entities}
+            supplierKind={kindFilter.kind}
+          />
           <p className="text-sm text-muted-foreground py-8 text-center">Chưa có dữ liệu cho bất kỳ chủ thể nào</p>
         </div>
       );
     }
     // Giữ nguyên tham số mốc đã chuẩn hoá khi chuyển hướng.
-    redirect(`/cong-no-vt/bao-cao-thang?${new URLSearchParams({ ...period.params, entityId: String(fallback) }).toString()}`);
+    redirect(
+      `/cong-no-vt/bao-cao-thang?${new URLSearchParams({ ...period.params, entityId: String(fallback), ...kindParam }).toString()}`,
+    );
   }
 
   const [rows, currentEntity] = await Promise.all([
-    getMaterialWindowReport({ from: isoDay(period.from), to: isoDay(period.to) }, entityId),
+    getMaterialWindowReport({ from: isoDay(period.from), to: isoDay(period.to) }, entityId, kindFilter.partyIds),
     prisma.entity.findUnique({ where: { id: entityId }, select: { id: true, name: true } }),
   ]);
 
@@ -75,7 +87,7 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
         <div className="flex flex-wrap items-center gap-2">
           <ExcelExportButton
             template="cong-no-monthly"
-            params={{ ledgerType: "material", ...period.params, entityId }}
+            params={{ ledgerType: "material", ...period.params, entityId, ...kindParam }}
             label="Xuất Excel"
             filename={`cong-no-vt-bao-cao-${periodSlug}.xlsx`}
           />
@@ -87,6 +99,7 @@ export default async function BaoCaoThangPage({ searchParams }: Props) {
         currentPeriod={period.params}
         currentEntityId={entityId}
         entities={entities}
+        supplierKind={kindFilter.kind}
       />
       {periodError && (
         <p role="alert" className="text-sm text-destructive">

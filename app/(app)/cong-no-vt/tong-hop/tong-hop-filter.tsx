@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ControlledMultiSelect, type Option } from "@/components/ledger/controlled-multi-select";
+import { SupplierKindSelect } from "@/components/ledger/supplier-kind-select";
+import { setSupplierKindParam, type SupplierKind } from "@/lib/master-data/supplier-kind";
 import {
   ReportPeriodSelector,
   resolvePeriodValue,
@@ -16,14 +18,16 @@ interface Props {
   currentPeriod: ReportPeriodValue;
   entities: Option[];
   selectedEntityIds: number[];
+  supplierKind: SupplierKind | null;
   hideZero: boolean;
 }
 
 /** Bộ lọc tổng hợp: chỉ ghi URL khi bấm Áp dụng. */
-export function TongHopFilter({ currentPeriod, entities, selectedEntityIds, hideZero }: Props) {
+export function TongHopFilter({ currentPeriod, entities, selectedEntityIds, supplierKind, hideZero }: Props) {
   const router = useRouter();
   const [period, setPeriod] = useState<ReportPeriodValue>(currentPeriod);
   const [entityIds, setEntityIds] = useState<number[]>(selectedEntityIds);
+  const [kind, setKind] = useState<SupplierKind | null>(supplierKind);
   const [hide, setHide] = useState(hideZero);
   const invalid = "error" in resolvePeriodValue(period);
 
@@ -31,6 +35,7 @@ export function TongHopFilter({ currentPeriod, entities, selectedEntityIds, hide
     if (invalid) return;
     const params = new URLSearchParams(period);
     if (entityIds.length > 0) params.set("entityIds", entityIds.join(","));
+    setSupplierKindParam(params, kind);
     if (hide) params.set("hideZero", "1");
     router.push(`?${params.toString()}`, { scroll: false });
   }
@@ -38,6 +43,7 @@ export function TongHopFilter({ currentPeriod, entities, selectedEntityIds, hide
   function handleReset() {
     setPeriod({ period: "all" });
     setEntityIds([]);
+    setKind(null);
     setHide(false);
     router.push("?period=all", { scroll: false });
   }
@@ -55,6 +61,7 @@ export function TongHopFilter({ currentPeriod, entities, selectedEntityIds, hide
             onChange={setEntityIds}
           />
         </div>
+        <SupplierKindSelect id="tong-hop-supplier-kind" value={kind} onChange={setKind} />
       </div>
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm cursor-pointer">

@@ -90,6 +90,8 @@ function actAs(user: { id: string; role: string; isDirector: boolean; isLeader: 
 beforeEach(() => {
   vi.resetAllMocks();
   aclMock.canAccessEntitlement.mockResolvedValue(true);
+  // Mặc định đợt không có dòng nào thiếu công trình (kiểm trước khi chuyển đợt sang "approved").
+  mockDb.paymentRoundItem.findMany.mockResolvedValue([]);
   deptMock.getDeptAccessMap.mockResolvedValue({
     scope: "scoped",
     grants: new Map([[1, "edit"]]),
@@ -302,6 +304,37 @@ describe("upsertItem — create path", () => {
     expect(mockDb.paymentRoundItem.create).not.toHaveBeenCalled();
   });
 
+  it("auto-fills a nhan_cong item from the material ledger of the supplier, never the labor ledger", async () => {
+    mockDb.project.findUnique.mockResolvedValue({ entityId: 3 });
+    vi.mocked(getOutstandingDebt).mockResolvedValue(new Prisma.Decimal("640"));
+    vi.mocked(getCumulativePaid).mockResolvedValue(new Prisma.Decimal("40"));
+    await svc.upsertItem({
+      roundId: 1, supplierId: 7, entityId: 99, projectId: 11,
+      category: "nhan_cong", soDeNghi: 1000,
+    });
+    const expected = { ledgerType: "material", entityId: 3, partyId: 7, projectId: 11 };
+    expect(getOutstandingDebt).toHaveBeenCalledWith(expected);
+    expect(getCumulativePaid).toHaveBeenCalledWith(expected);
+    expect(mockDb.paymentRoundItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ entityId: 3, congNo: 640, luyKe: 40 }) }),
+    );
+  });
+
+  it("rejects a nhan_cong item without a project, like vat_tu", async () => {
+    await expect(
+      svc.upsertItem({ roundId: 1, supplierId: 7, entityId: 3, projectId: null, category: "nhan_cong", soDeNghi: 1000 }),
+    ).rejects.toThrow(/Dòng vật tư \/ nhân công: thiếu công trình/);
+    expect(mockDb.paymentRoundItem.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects editing an item into nhan_cong without a project", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({ roundId: 1, category: "khac", projectId: null, entityId: 1 });
+    await expect(
+      svc.upsertItem({ id: 5, roundId: 1, supplierId: 7, entityId: 3, projectId: null, category: "nhan_cong", soDeNghi: 1 }),
+    ).rejects.toThrow(/thiếu công trình/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
+  });
+
   it("rejects editing an item into vat_tu without a project", async () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({ roundId: 1, category: "khac", projectId: null, entityId: 1 });
     await expect(
@@ -494,6 +527,30 @@ describe("approveItem", () => {
     expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
   });
 
+  it("rejects approving a nhan_cong item without a project (it posts to the material ledger on close)", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      id: 9, category: "nhan_cong", projectId: null, soDeNghi: 100, round: { id: 1, status: "submitted" },
+    });
+    await expect(svc.approveItem({ itemId: 9 })).rejects.toThrow(/dòng vật tư \/ nhân công thiếu công trình \(#9\)/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
+  });
+
+  it("keeps the round submitted when an earlier-approved nhan_cong item has no project", async () => {
+    mockDb.paymentRoundItem.findUnique.mockResolvedValue({
+      id: 1, category: "khac", projectId: null, soDeNghi: 100, round: { id: 1, status: "submitted" },
+    });
+    mockDb.paymentRoundItem.update.mockResolvedValue({ id: 1 });
+    mockDb.paymentRoundItem.count.mockResolvedValue(2);
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([{ id: 6, category: "nhan_cong", projectId: null }]);
+    await expect(svc.approveItem({ itemId: 1 })).rejects.toThrow(/thiếu công trình \(#6\)/);
+    expect(mockDb.paymentRoundItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ roundId: 1, projectId: null, category: { in: ["vat_tu", "nhan_cong"] } }),
+      }),
+    );
+    expect(mockDb.paymentRound.update).not.toHaveBeenCalled();
+  });
+
   it("auto-approves the round once every item is resolved", async () => {
     mockDb.paymentRoundItem.findUnique.mockResolvedValue({
       soDeNghi: 100, round: { id: 1, status: "submitted" },
@@ -589,6 +646,18 @@ describe("bulkApproveAsRequested", () => {
         data: expect.objectContaining({ status: "approved" }),
       }),
     );
+  });
+
+  it("rejects bulk approval while an already-approved nhan_cong item (soDuyet > 0) has no project", async () => {
+    mockDb.paymentRound.findUnique.mockResolvedValue({ status: "submitted" });
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.paymentRoundItem.count.mockResolvedValue(2);
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([
+      { id: 3, soDeNghi: 100, soDuyet: 100, approvedAt: new Date(), category: "nhan_cong", projectId: null },
+      { id: 4, soDeNghi: 50, soDuyet: null, approvedAt: null, category: "khac", projectId: null },
+    ]);
+    await expect(svc.bulkApproveAsRequested(1)).rejects.toThrow(/thiếu công trình \(#3\)/);
+    expect(mockDb.paymentRoundItem.update).not.toHaveBeenCalled();
   });
 
   it("rejects bulk approval while a pending vat_tu item has no project", async () => {
@@ -687,6 +756,18 @@ describe("closeRound", () => {
     // Khoá kỳ kiểm theo cặp (NCC 3, công trình 11).
     expect(mockDb.supplierReconciliation.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ supplierId: 3, projectId: 11 }) }),
+    );
+  });
+
+  it("syncs both vat_tu and nhan_cong items to the material ledger on close", async () => {
+    mockDb.paymentRound.updateMany.mockResolvedValue({ count: 1 });
+    mockDb.paymentRound.findUnique.mockResolvedValue({ month: "2026-06", sequence: 1 });
+    mockDb.paymentRoundItem.findMany.mockResolvedValue([]);
+    await svc.closeRound(1);
+    expect(mockDb.paymentRoundItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ roundId: 1, category: { in: ["vat_tu", "nhan_cong"] } }),
+      }),
     );
   });
 

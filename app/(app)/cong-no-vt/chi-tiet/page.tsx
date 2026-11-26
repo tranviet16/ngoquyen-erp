@@ -4,6 +4,8 @@ import { getMaterialDetailReport } from "@/lib/cong-no-vt/material-detail-report
 import { DetailReportTable } from "@/components/ledger/detail-report-table";
 import { DetailReportFilter } from "@/components/ledger/detail-report-filter";
 import { resolveReportPeriod } from "@/lib/ledger/report-period";
+import { SUPPLIER_KIND_PARAM } from "@/lib/master-data/supplier-kind";
+import { resolveSupplierKindFilter } from "@/lib/master-data/supplier-kind-query";
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -38,6 +40,8 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
       .filter((n) => Number.isFinite(n) && n > 0) ?? [];
 
   const showZero = one(sp.showZero) === "1";
+  // Loại NCC: trống = tất cả; `partyIds` rỗng (loại chưa có NCC nào) cho bảng rỗng.
+  const kindFilter = await resolveSupplierKindFilter(sp[SUPPLIER_KIND_PARAM]);
 
   // Load entities + initial cascade projects in parallel
   const entityIdsParam = entityIds.length > 0 ? entityIds : null;
@@ -83,6 +87,7 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
     to: isoDay(period.to),
     entityIds: entityIds.length > 0 ? entityIds : undefined,
     projectIds: projectIds.length > 0 ? projectIds : undefined,
+    ...(kindFilter.partyIds ? { partyIds: kindFilter.partyIds } : {}),
     showZero,
   });
 
@@ -105,6 +110,7 @@ export default async function ChiTietPage({ searchParams }: PageProps) {
           entityIds,
           projectIds,
           showZero,
+          supplierKind: kindFilter.kind,
         }}
       />
 

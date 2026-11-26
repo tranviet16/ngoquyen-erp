@@ -105,4 +105,31 @@ describe("buildCongNoTongHopExcel", () => {
   it("rejects an invalid window instead of exporting", async () => {
     await expect(buildCongNoTongHopExcel({ from: "2026-06-01", to: "2026-05-01" })).rejects.toThrow();
   });
+
+  it("Loại NCC: passes that kind's suppliers as partyIds and names the kind in the title", async () => {
+    mockDb.supplier.findMany.mockImplementation(async (args: { where: { kind?: string } }) =>
+      args.where.kind === "nhan_cong" ? [{ id: 10 }] : [{ id: 10, name: "Nam Hương" }, { id: 20, name: "Bê tông HP" }],
+    );
+    const { aoa } = await load({ from: null, to: null, supplierKind: "nhan_cong" });
+    expect(mockAgg.queryDebtMatrix).toHaveBeenCalledWith("material", expect.objectContaining({ partyIds: [10] }));
+    expect(String(aoa[0][0])).toContain("Loại NCC: Nhân công");
+  });
+
+  it("Loại NCC with no supplier yet: no matrix query, only a zero TỔNG row (never every supplier)", async () => {
+    mockDb.supplier.findMany.mockImplementation(async (args: { where: { kind?: string } }) =>
+      args.where.kind ? [] : [{ id: 10, name: "Nam Hương" }],
+    );
+    const { aoa } = await load({ from: null, to: null, supplierKind: "nhan_cong" });
+    expect(mockAgg.queryDebtMatrix).not.toHaveBeenCalled();
+    const body = aoa.slice(3);
+    expect(body).toHaveLength(1);
+    expect(body[0][0]).toBe("TỔNG");
+    expect(body[0].slice(1).every((v) => v === 0)).toBe(true);
+  });
+
+  it("without a kind it does not look suppliers up by kind", async () => {
+    await load({ from: null, to: null });
+    expect(mockAgg.queryDebtMatrix).toHaveBeenCalledWith("material", expect.not.objectContaining({ partyIds: expect.anything() }));
+    for (const [args] of mockDb.supplier.findMany.mock.calls) expect(args.where).not.toHaveProperty("kind");
+  });
 });

@@ -11,8 +11,14 @@ import { syncClosedRoundToLedger } from "./payment-ledger-sync";
 import { MaterialScopeError, resolveMaterialEntityId } from "@/lib/vat-tu-ncc/pair-scope";
 import { bypassAudit } from "@/lib/async-context";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  MATERIAL_LEDGER_CATEGORIES,
+  PAYMENT_CATEGORIES,
+  postsToMaterialLedger,
+  type PaymentCategory,
+} from "./payment-category";
 
-export type PaymentCategory = "vat_tu" | "nhan_cong" | "dich_vu" | "khac";
+export type { PaymentCategory } from "./payment-category";
 export type RoundStatus =
   | "draft"
   | "submitted"
@@ -20,15 +26,18 @@ export type RoundStatus =
   | "rejected"
   | "closed";
 
-const VALID_CATEGORIES: PaymentCategory[] = ["vat_tu", "nhan_cong", "dich_vu", "khac"];
+const VALID_CATEGORIES: readonly PaymentCategory[] = PAYMENT_CATEGORIES;
 
 /**
  * Map PaymentCategory → LedgerType for balance auto-fill.
+ * nhan_cong cũng là "material": dòng thanh toán luôn gắn NCC, và công nợ NCC (kể cả NCC loại
+ * nhân công) nằm ở sổ vật tư. Sổ "labor" đánh số theo id tổ đội — tra bằng id NCC sẽ đọc nhầm
+ * công nợ của tổ đội cùng id.
  * dich_vu and khac have no ledger backing — SKIP auto-fill (default to 0).
  */
 const CATEGORY_LEDGER_TYPE: Partial<Record<PaymentCategory, LedgerType>> = {
   vat_tu: "material",
-  nhan_cong: "labor",
+  nhan_cong: "material",
   // dich_vu: no ledger backing — skip balance auto-fill
   // khac: no ledger backing — skip balance auto-fill
 };
@@ -190,38 +199,64 @@ export async function createRound(input: CreateRoundInput) {
 }
 
 /**
- * Dòng vat_tu thuộc công nợ vật tư theo cặp NCC × công trình: bắt buộc công trình và Chủ thể
- * luôn = Chủ thể của công trình (giá trị client gửi bị thay). Loại khác giữ nguyên đầu vào.
+ * Dòng vat_tu / nhan_cong thuộc công nợ vật tư theo cặp NCC × công trình: bắt buộc công trình và
+ * Chủ thể luôn = Chủ thể của công trình (giá trị client gửi bị thay). Loại khác giữ nguyên đầu vào.
  */
 async function scopeItem(
   category: PaymentCategory,
   projectId: number | null,
   entityId: number,
-  itemLabel = "Dòng vật tư",
+  itemLabel = "Dòng vật tư / nhân công",
 ): Promise<{ projectId: number | null; entityId: number }> {
-  if (category !== "vat_tu") return { projectId, entityId };
+  if (!postsToMaterialLedger(category)) return { projectId, entityId };
   if (projectId == null) {
-    throw new MaterialScopeError("missing_project", `${itemLabel}: thiếu công trình — chọn công trình cho dòng vật tư.`);
+    throw new MaterialScopeError(
+      "missing_project",
+      `${itemLabel}: thiếu công trình — chọn công trình cho dòng vật tư / nhân công.`,
+    );
   }
   return { projectId, entityId: await resolveMaterialEntityId(prisma, projectId) };
 }
 
 /**
- * Dòng vat_tu cũ (tạo trước khi bắt buộc công trình) không được duyệt / làm mới số dư / đóng:
- * báo lỗi rõ từng dòng. Từ chối dòng (soDuyet = 0) vẫn được — đó là lối ra cho dòng cũ.
+ * Dòng vat_tu / nhan_cong cũ (tạo trước khi bắt buộc công trình) không được duyệt / làm mới số dư /
+ * đóng: báo lỗi rõ từng dòng. Từ chối dòng (soDuyet = 0) vẫn được — đó là lối ra cho dòng cũ.
  */
-function assertVatTuItemsHaveProject(
+function assertMaterialItemsHaveProject(
   items: Array<{ id: number; category: string; projectId: number | null }>,
   action: string,
 ) {
-  const missing = items.filter((item) => item.category === "vat_tu" && item.projectId == null);
+  const missing = items.filter((item) => postsToMaterialLedger(item.category) && item.projectId == null);
   if (missing.length) {
     throw new MaterialScopeError(
       "missing_project",
-      `Không thể ${action}: dòng vật tư thiếu công trình (${missing.map((item) => `#${item.id}`).join(", ")}). ` +
+      `Không thể ${action}: dòng vật tư / nhân công thiếu công trình (${missing.map((item) => `#${item.id}`).join(", ")}). ` +
         `Sửa dòng khi đợt còn nháp hoặc từ chối dòng đó.`,
     );
   }
+}
+
+/**
+ * Đợt chỉ được chuyển sang "approved" khi mọi dòng sẽ ghi sổ vật tư lúc đóng đều có công trình:
+ * dòng đã duyệt có số duyệt > 0, hoặc dòng chờ duyệt có số đề nghị > 0. Đợt đã duyệt mà còn dòng
+ * thiếu công trình thì không đóng được và hết đường sửa (sửa dòng chỉ khi nháp, từ chối dòng chỉ khi
+ * đã gửi) — nên chặn ở đây, khi đợt còn "submitted" và người duyệt còn từ chối được dòng đó.
+ */
+function assertRoundItemsPostable(
+  items: Array<{
+    id: number;
+    category: string;
+    projectId: number | null;
+    approvedAt: Date | null;
+    soDeNghi: unknown;
+    soDuyet: unknown;
+  }>,
+  action: string,
+) {
+  const willPost = items.filter((item) =>
+    item.approvedAt == null ? Number(item.soDeNghi) > 0 : Number(item.soDuyet ?? 0) > 0,
+  );
+  assertMaterialItemsHaveProject(willPost, action);
 }
 
 /**
@@ -298,9 +333,9 @@ export async function upsertItem(input: UpsertItemInput) {
       }
       updateData.category = input.category;
     }
-    // Dòng sau khi sửa là vat_tu → phải có công trình, Chủ thể theo công trình.
+    // Dòng sau khi sửa là vat_tu / nhan_cong → phải có công trình, Chủ thể theo công trình.
     const nextCategory = (input.category ?? existing.category) as PaymentCategory;
-    if (nextCategory === "vat_tu") {
+    if (postsToMaterialLedger(nextCategory)) {
       const scoped = await scopeItem(
         nextCategory,
         input.projectId !== undefined ? input.projectId : existing.projectId,
@@ -405,7 +440,7 @@ export async function refreshItemBalances(itemId: number) {
   if (item.round.createdById !== actor.id && !isAdmin(actor.role)) {
     throw new Error("Chỉ người lập đợt hoặc admin được làm mới số dư");
   }
-  assertVatTuItemsHaveProject([item], "làm mới số dư");
+  assertMaterialItemsHaveProject([item], "làm mới số dư");
 
   const category = item.category as PaymentCategory;
   const scoped = await scopeItem(category, item.projectId, item.entityId, `Dòng #${item.id}`);
@@ -442,7 +477,7 @@ export async function refreshAllItemBalances(roundId: number) {
     where: { roundId },
     select: { id: true, category: true, entityId: true, supplierId: true, projectId: true },
   });
-  assertVatTuItemsHaveProject(items, "làm mới số dư");
+  assertMaterialItemsHaveProject(items, "làm mới số dư");
   const refreshed = await Promise.all(items.map(async (item) => {
     const category = item.category as PaymentCategory;
     const scoped = await scopeItem(category, item.projectId, item.entityId, `Dòng #${item.id}`);
@@ -524,8 +559,8 @@ export async function approveItem(input: {
     throw new Error("Người lập đợt không được tự duyệt");
 
   const soDuyet = input.soDuyet ?? Number(item.soDeNghi);
-  // Duyệt số > 0 sẽ ghi sổ vật tư khi đóng đợt → dòng vat_tu phải có công trình.
-  if (soDuyet > 0) assertVatTuItemsHaveProject([item], "duyệt");
+  // Duyệt số > 0 sẽ ghi sổ vật tư khi đóng đợt → dòng vat_tu / nhan_cong phải có công trình.
+  if (soDuyet > 0) assertMaterialItemsHaveProject([item], "duyệt");
 
   await prisma.paymentRoundItem.update({
     where: { id: input.itemId },
@@ -584,11 +619,13 @@ export async function bulkApproveAsRequested(roundId: number) {
     }
     const total = await tx.paymentRoundItem.count({ where: { roundId } });
     if (total === 0) return;
-    const pendingItems = await tx.paymentRoundItem.findMany({
-      where: { roundId, approvedAt: null },
-      select: { id: true, soDeNghi: true, category: true, projectId: true },
+    // Kiểm cả dòng đã duyệt trước đó: đợt sắp "approved" phải đóng được.
+    const items = await tx.paymentRoundItem.findMany({
+      where: { roundId },
+      select: { id: true, soDeNghi: true, soDuyet: true, approvedAt: true, category: true, projectId: true },
     });
-    assertVatTuItemsHaveProject(pendingItems.filter((item) => Number(item.soDeNghi) > 0), "duyệt cả đợt");
+    assertRoundItemsPostable(items, "duyệt cả đợt");
+    const pendingItems = items.filter((item) => item.approvedAt == null);
     for (const item of pendingItems) {
       await tx.paymentRoundItem.update({
         where: { id: item.id },
@@ -613,6 +650,18 @@ async function maybeAutoApproveRound(roundId: number, actor: Actor) {
     }),
   ]);
   if (total > 0 && total === approved) {
+    // Dòng đã duyệt > 0 sẽ ghi sổ vật tư khi đóng: thiếu công trình thì giữ đợt ở "submitted"
+    // (báo lỗi) để người duyệt còn từ chối dòng đó, thay vì để đợt "approved" không đóng được.
+    const stuck = await prisma.paymentRoundItem.findMany({
+      where: {
+        roundId,
+        projectId: null,
+        category: { in: [...MATERIAL_LEDGER_CATEGORIES] },
+        soDuyet: { gt: 0 },
+      },
+      select: { id: true, category: true, projectId: true },
+    });
+    assertMaterialItemsHaveProject(stuck, "chuyển đợt sang đã duyệt");
     await prisma.paymentRound.update({
       where: { id: roundId },
       data: {

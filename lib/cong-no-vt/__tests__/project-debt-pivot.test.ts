@@ -168,6 +168,12 @@ describe("parseProjectDebtQuery", () => {
     expect(parseProjectDebtQuery({ groupBy: "ncc" })).toEqual({ from: null, to: null, groupBy: "ncc", entityIds: [] });
   });
 
+  it("đọc Loại NCC từ tham số loai; trống hoặc lạ = mọi loại", () => {
+    expect(parseProjectDebtQuery({ groupBy: "ncc", loai: "nhan_cong" })).toMatchObject({ supplierKind: "nhan_cong" });
+    expect(parseProjectDebtQuery({ groupBy: "ncc", loai: "labor" })).not.toHaveProperty("supplierKind");
+    expect(parseProjectDebtQuery({ groupBy: "ncc", loai: "" })).not.toHaveProperty("supplierKind");
+  });
+
   it.each([
     [{ from: "2026-13-40", to: null, groupBy: "ncc" }, /YYYY-MM-DD/],
     [{ from: "2026-06-01", to: "2026-05-01", groupBy: "ncc" }, /Từ ngày/],
