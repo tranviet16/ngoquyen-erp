@@ -1,6 +1,6 @@
 # Kiểm tra triển khai — Dự án đọc sổ công nợ vật tư (27/11/2026)
 
-Nhánh `feat/du-an-doc-so-cong-no-vt`, chưa commit. Code của cả 4 phase đã viết xong. Kiểm tự động đều xanh. Phần kiểm tay trên giao diện dev chưa làm vì không có server dev chạy và cần tài khoản đăng nhập của chủ đầu tư.
+Nhánh `feat/du-an-doc-so-cong-no-vt`, PR #42. Code của cả 4 phase đã viết xong, kiểm tự động đều xanh, CI của PR xanh. Đã kiểm tay trên giao diện dev (mục "Kiểm tay trên bản dev").
 
 ## Kiểm tự động
 
@@ -10,7 +10,7 @@ Nhánh `feat/du-an-doc-so-cong-no-vt`, chưa commit. Code của cả 4 phase đ�
 | `eslint` trên mọi file đã sửa | sạch |
 | `npx vitest run --project unit` | 180 file, 1835 test xanh (gồm `module-release-entrypoints`, `project-service-acl-contract`, 3 file test mới của `lib/du-an/project-ledger/`) |
 | Integration toàn bộ trên Postgres tạm 127.0.0.1:5435 (`DATABASE_URL` truyền tường minh, in cổng trước khi chạy) | 32 file, 202 test xanh, gồm `du-an-so-cong-no-vt` (8 test, khẳng định a–f) và `du-an-hop-dong-tie-out` (sau khi tách vị từ phiếu chưa chốt) |
-| `next build` (biến môi trường giả, DB 5435) | xem mục cuối |
+| `next build` | thành công |
 
 ## Tie-out trên DB dev (5434, chỉ đọc)
 
@@ -32,9 +32,23 @@ Nhánh `feat/du-an-doc-so-cong-no-vt`, chưa commit. Code của cả 4 phase đ�
 
 11/11 công trình khớp đến từng đồng. Số dòng của #1 (490 + 1 số dư đầu kỳ), #14 (109) và #4 (280 dòng sổ dự án) đúng như plan. Theo quy tắc nguồn, cả ba công trình đều mặc định mở "Sổ công nợ vật tư" vì sổ có dòng; #4 vẫn chuyển sang "Sổ dự án (280 dòng)" được.
 
-## Làm mới trang sau khi ghi sổ (phase 4 bước 1)
+## Kiểm tay trên bản dev (27/11, server bản build tại 127.0.0.1:3003, CSDL 5434, đăng nhập admin)
 
-Chưa kiểm trên trình duyệt. Theo code: các trang Dự án đều render động theo phiên (đọc `headers()` / `searchParams`), `next.config.ts` không đặt `staleTimes`, và không có `use cache` / `unstable_cache` / `revalidate` trong `app/(app)/du-an`, `lib/du-an`, `lib/cong-no-vt`. Vì vậy mở tab sau khi ghi ở Nhập liệu, chốt phiếu hay đợt thanh toán sẽ render lại với số mới. Theo đúng plan (chỉ viết helper khi thấy số cũ), chưa thêm `revalidate-project-ledger-views.ts`.
+Trước khi ghi thử đã sao lưu CSDL dev: `C:\Users\tranv\.ngoquyen-dev\backups\dev-truoc-kiem-du-an-so-cong-no-20261127.dump`. Mọi dòng thử đã xóa sau khi kiểm; chỉ còn một bản ghi audit "tạo dòng thử" của sổ dự án #4 làm lịch sử.
+
+- **Công Nợ NCC khớp báo cáo trên giao diện:** so trang `/du-an/{id}/cong-no` với `/cong-no-vt/chi-tiet?period=all&projectIds={id}` (chế độ "Toàn bộ"). #1 (11 NCC), #4 (26 NCC), #14 (6 NCC): hàng tổng và từng NCC khớp cả 8 số, không lệch.
+- **Giao Dịch:** công tắc ghi "Sổ công nợ vật tư (490 dòng)" cho #1, 109 cho #14, 367 cho #4 kèm "Sổ dự án (280 dòng)". Lưới #1 hiện 490 dòng, dải số dư đầu kỳ có 1 dòng. Mặc định mở sổ công nợ. `?nguon=abc` và tham số lặp đều về mặc định. `?nguon=so-du-an` của #1 hiện thông báo "Sổ dự án của công trình chưa có giao dịch" kèm nút sang sổ công nợ.
+- **Trạng thái rỗng:** #1 và #14 có thông báo ở Cân Đối VT, Định Mức và Dashboard. #4 không có ở cả ba. #20 (không có sổ VT) có ở Cân Đối VT và Định Mức nhưng không có ở Dashboard.
+- **Link:** 7 link "Mở sổ NCC" / "Theo công trình" của #14 đều trả 200. `/du-an/0/cong-no`, `/du-an/1.5/giao-dich`, `/du-an/abc/cong-no` trả 404.
+- **Làm mới trang sau khi ghi sổ:** mở Công Nợ NCC #14, điều hướng trong app sang Giao Dịch, chèn tạm một dòng thanh toán 1.000 đ, rồi điều hướng trong app quay lại. Giao Dịch thấy 110 dòng; Công Nợ NCC thấy Đã trả TT của NCC #5 và của tổng tăng đúng 1.000 đ. Cả hai lần điều hướng đều trong cùng một trang, không tải lại. Như vậy không cần `revalidate-project-ledger-views.ts`: các trang render động, không bị bộ nhớ đệm của router giữ số cũ, bất kể sổ được ghi theo đường nào.
+- **Sổ dự án #4:** tạo một dòng qua hộp "Thêm giao dịch" thành công. Lưới lên 281 dòng, TT 1.000 đ, URL giữ `?nguon=so-du-an`. Thao tác sửa / xóa trên lưới canvas không điều khiển tự động ổn định được, nên chưa thao tác. Phần này dùng nguyên component và server action cũ, PR không đổi, và đã có integration test chạy qua (`du-an-dt-hd-tt-rollback`).
+- **Cô lập lỗi:** chèn tạm một run chuyển đổi đã commit nhưng thiếu mốc ngày, để lần đọc sổ vật tư bị lỗi. Kết quả:
+  - Giao Dịch của #14 và #4 hiện "Không đọc được sổ Công nợ vật tư lúc này", rơi về Sổ dự án và vẫn có nút "Thêm giao dịch".
+  - Dashboard vẫn mở bình thường, chỉ mất thông báo.
+  - Công Nợ NCC trả lỗi 500, như đã chọn ở mục review.
+
+  Xóa run tạm thì mọi trang về bình thường.
+- **Chưa kiểm trên giao diện:** người dùng không phải admin, vì bản dev chỉ có 3 tài khoản admin. Quy tắc quyền đã có integration test (f).
 
 ## Lệch so với plan
 
@@ -56,12 +70,10 @@ Reviewer (chỉ đọc) xác nhận đủ 6 yêu cầu: không ghi `project_tran
 
 Giữ nguyên, có lý do: lỗi đọc phiếu chưa chốt (mốc chuyển đổi hỏng) vẫn làm lỗi cả tab, giống tab Hợp đồng. Nuốt lỗi sẽ làm số trông như đầy đủ trong khi còn phiếu chưa vào sổ.
 
-## Chưa làm (cần chủ đầu tư hoặc server dev)
+## Quyền mặc định và công trình chỉ có sổ dự án (đếm 27/11 trên bản dev, chỉ đọc)
 
-- Phase 2 bước 3–5, phase 3 bước 3–5, phase 4 kiểm dev: xem tay #1, #4, #14 trên giao diện; bấm "Mở sổ NCC" của #14; đăng nhập người dùng thử không phải admin; tạm làm `loadProjectLedgerSwitchInfo` ném lỗi để thử cô lập lỗi; tạo / sửa / xóa một dòng sổ dự án.
-- Kiểm làm mới trang trên trình duyệt sau từng cách ghi sổ.
-- Quyền mặc định `cong-no-vt` trong `role_permissions` trước khi mở module (rủi ro đã ghi ở plan).
+Bản dev là bản chụp production ngày 24/11. Production không bị chạm.
 
-## Câu hỏi còn mở
-
-- Trên production có thể có công trình mà công nợ NCC chỉ nằm trong `project_transactions` (bản dev chỉ có #4). Với các công trình đó, Công Nợ NCC giờ hiện bảng rỗng kèm link sang Giao Dịch (Sổ dự án), theo đúng quyết định "nguồn HĐ = sổ công nợ vật tư cho mọi công trình". Nên đếm trên production trước khi mở module.
+- `role_permissions`: chỉ vai trò `giam-doc` có quyền mặc định cho ba module liên quan, và có cả ba (`du-an`, `cong-no-vt`, `vat-tu-ncc`, mức edit). Vai trò khác không có quyền mặc định nào cho các module này. Bản dev chỉ có 3 người dùng, đều là admin.
+- `module_availability`: `du-an`, `cong-no-vt`, `vat-tu-ncc` đều đang `development`. Mở `du-an` thì nên mở `cong-no-vt` cùng lúc, như plan đã ghi.
+- `project_transactions` chỉ có ở #4 (280 dòng, đều mang tên NCC), và #4 cũng có 367 dòng sổ vật tư. Không công trình nào có công nợ NCC chỉ nằm trong sổ dự án, nên không công trình nào bị Công Nợ NCC rỗng sau thay đổi này. Nên đếm lại trên production ngay trước khi mở module, vì dữ liệu sau 24/11 chưa có trong bản dev.

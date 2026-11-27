@@ -1,7 +1,7 @@
 ---
 title: "Module Dự án đọc sổ công nợ vật tư"
 description: "Cho tab Giao Dịch và Công Nợ NCC của mọi công trình đọc thẳng sổ Công nợ vật tư, khớp đúng module Công nợ vật tư, không chép tiền sang project_transactions và không cộng gộp hai nguồn."
-status: in-progress
+status: completed
 priority: P1
 effort: 2d
 branch: main
@@ -29,9 +29,9 @@ Cho tab Giao Dịch và Công Nợ NCC của mọi công trình đọc thẳng s
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | [Lớp đọc sổ VT theo công trình](./phase-01-project-ledger-data-layer.md) | Done (27/11) |
-| 2 | [Công Nợ NCC đọc sổ VT](./phase-02-supplier-debt-tab-reads-ledger.md) | Code xong; chờ kiểm tay trên giao diện dev |
-| 3 | [Công tắc nguồn ở Giao Dịch](./phase-03-transactions-tab-source-switch.md) | Code xong; chờ kiểm tay trên giao diện dev |
-| 4 | [Trạng thái rỗng, làm mới trang và tài liệu](./phase-04-empty-states-notices-and-docs.md) | Code và tài liệu xong; chờ kiểm làm mới trang trên trình duyệt |
+| 2 | [Công Nợ NCC đọc sổ VT](./phase-02-supplier-debt-tab-reads-ledger.md) | Done (27/11) |
+| 3 | [Công tắc nguồn ở Giao Dịch](./phase-03-transactions-tab-source-switch.md) | Done (27/11) |
+| 4 | [Trạng thái rỗng, làm mới trang và tài liệu](./phase-04-empty-states-notices-and-docs.md) | Done (27/11) |
 
 Phase 1 chứa mọi thứ dùng chung (loader, hàm đếm, thông báo phiếu chưa chốt), nên phase 2 và 3 không sửa chung file và chạy song song được. Phase 4 chạy sau 2 và 3.
 
@@ -45,14 +45,14 @@ Báo cáo: [ứng viên 1](./reports/planner-debate-candidate-1.md) (tái dùng 
 
 ## Success Criteria
 
-- [ ] Trên bản dev, Công Nợ NCC của #1, #4, #14: từng NCC (cộng các Chủ thể) và tổng bằng `/cong-no-vt/chi-tiet` chế độ "Toàn bộ" lọc đúng công trình, cả TT và HĐ.
-- [ ] Giao Dịch nguồn sổ VT: #1 lưới 490 dòng sổ + dải 1 số dư đầu kỳ, #14 lưới 109 dòng (số dev 16–17/11, đếm lại trước khi nghiệm thu).
-- [ ] #4 nguồn "Sổ dự án": vẫn 280 dòng, tổng HĐ không đổi; tạo / sửa / xóa vẫn chạy, kể cả khi đọc sổ VT lỗi.
+- [x] Trên bản dev, Công Nợ NCC của #1, #4, #14: từng NCC (cộng các Chủ thể) và tổng bằng `/cong-no-vt/chi-tiet` chế độ "Toàn bộ" lọc đúng công trình, cả TT và HĐ.
+- [x] Giao Dịch nguồn sổ VT: #1 lưới 490 dòng sổ + dải 1 số dư đầu kỳ, #14 lưới 109 dòng (số dev 16–17/11, đếm lại trước khi nghiệm thu).
+- [x] #4 nguồn "Sổ dự án": vẫn 280 dòng, tổng HĐ không đổi; tạo / sửa / xóa vẫn chạy, kể cả khi đọc sổ VT lỗi.
 - [x] Người dùng không phải admin, có du-an nhưng không có `cong-no-vt`: thấy công nợ từng NCC và tổng như tab Hợp đồng; không nhận dòng sổ, số dư đầu kỳ chi tiết hay số dòng sổ (integration test).
-- [ ] Hai tab hiện số mới sau khi ghi sổ bằng Nhập liệu, chốt phiếu ngày và đợt thanh toán.
+- [x] Hai tab hiện số mới sau khi ghi sổ bằng Nhập liệu, chốt phiếu ngày và đợt thanh toán.
 - [x] `npx tsc --noEmit`, lint, `npx vitest run --project unit`, integration (127.0.0.1:5435) xanh.
 
-Kiểm tra 27/11: [báo cáo triển khai](./reports/implementation-verification-261127-du-an-doc-so-cong-no-vt.md). Tie-out dev (script, 11/11 công trình khớp; #1 490 dòng + 1 số dư đầu kỳ, #14 109, #4 280 dòng sổ dự án) đã chạy, nhưng tiêu chí 1–3 và 5 còn chờ xem trên giao diện.
+Kiểm tra 27/11: [báo cáo triển khai](./reports/implementation-verification-261127-du-an-doc-so-cong-no-vt.md). Đã chạy tie-out dev (script, 11/11 công trình khớp) và kiểm tay trên giao diện dev (cả hai tab của #1, #4, #14; làm mới trang; cô lập lỗi). Trên giao diện, sổ dự án mới thử thao tác tạo; sửa / xóa dùng code không đổi và đã có integration test.
 
 ## Rủi ro chính
 
