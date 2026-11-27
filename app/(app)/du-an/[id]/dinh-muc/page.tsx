@@ -3,6 +3,7 @@ import { listNorm } from "@/lib/du-an/norm-service";
 import { getSettings } from "@/lib/du-an/settings-service";
 import { listGroups } from "@/lib/du-an/material-group-service";
 import { DinhMucClient } from "./dinh-muc-client";
+import { ProjectBookEmptyState } from "@/components/du-an/project-book-empty-state";
 import { serializeDecimals } from "@/lib/serialize";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
@@ -36,12 +37,15 @@ export default async function DinhMucPage({ params }: Props) {
   ]);
 
   return (
-    <DinhMucClient
-      projectId={projectId}
-      rows={serializeDecimals(rows)}
-      groups={groups}
-      thresholds={thresholds}
-      canEdit={canEdit}
-    />
+    <div className="space-y-3">
+      {rows.length === 0 && <ProjectBookEmptyState projectId={projectId} lead="Tab này so dự toán với sổ dự án." />}
+      <DinhMucClient
+        projectId={projectId}
+        rows={serializeDecimals(rows)}
+        groups={groups}
+        thresholds={thresholds}
+        canEdit={canEdit}
+      />
+    </div>
   );
 }

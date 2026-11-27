@@ -209,7 +209,7 @@ Lưu ý:
 - **NCC chỉ chọn từ danh sách NCC đang hoạt động.** NCC mới phải nhờ admin tạo ở Dữ liệu nền tảng (kèm MST).
 - Sửa trực tiếp trên lưới: chọn ô, gõ, Enter. Mỗi lần chỉ ô vừa sửa được gửi đi.
 - Dòng có tên hàng chưa gán hiện "chưa gán" ở cột **Ánh xạ**. Dòng này vẫn được cộng vào mọi tổng. Khi có dòng chưa gán, góc trên có nút **"n dòng chưa gán — mở Ánh xạ"**.
-- Mỗi dòng hóa đơn tự sinh một giao dịch HĐ ở các tab cũ (Giao dịch, Cân đối VT, Định mức, Công nợ NCC). Giao dịch đó chỉ đọc ở tab Giao dịch; muốn sửa thì sửa dòng hóa đơn.
+- Mỗi dòng hóa đơn tự sinh một giao dịch HĐ ở các tab cũ (Giao dịch nguồn Sổ dự án, Cân đối VT, Định mức). Giao dịch đó chỉ đọc ở tab Giao dịch; muốn sửa thì sửa dòng hóa đơn. Tab Công nợ NCC không dùng giao dịch này: tab đọc sổ Công nợ vật tư.
 - Nếu công trình còn giao dịch HĐ cũ chưa được thay bằng sổ, máy từ chối thêm hóa đơn và yêu cầu import file trước, để không cộng HĐ hai lần.
 
 ### 4.4 Thực tế nhập
@@ -451,10 +451,10 @@ Mọi dòng kiểm (✓ / ✗) phải ✓. Nếu có ✗, xem số "Δ" ở cu�
 ## 9. Các Tab Cũ Lấy Hóa Đơn Từ Đâu
 
 Khi công trình có sổ Hóa đơn:
-- Hàng tab của nhóm **Vật tư & công nợ** ghi chú "Hóa đơn ở các tab này lấy từ sổ Hóa đơn (Đối chiếu DT-HĐ-TT)."
-- **Giao dịch** hiện băng "Công trình này có sổ Hóa đơn…": các giao dịch HĐ sinh từ sổ là chỉ đọc, bấm "Sửa ở sổ Hóa đơn" để sửa.
+- Hàng tab của nhóm **Vật tư & công nợ** ghi chú "Cân Đối VT, Định Mức và Giao Dịch (Sổ dự án) lấy HĐ từ sổ Hóa đơn; Công Nợ NCC và Giao Dịch (Sổ công nợ vật tư) lấy từ sổ Công nợ vật tư."
+- **Giao dịch**, nguồn **Sổ dự án**, hiện băng "Công trình này có sổ Hóa đơn…": các giao dịch HĐ sinh từ sổ là chỉ đọc, bấm "Sửa ở sổ Hóa đơn" để sửa. Nguồn **Sổ công nợ vật tư** là các dòng sổ công nợ, không liên quan sổ Hóa đơn (xem hướng dẫn [Kế toán](ke-toan.md), mục "Công nợ vật tư trong trang Dự án").
 - **Cân đối VT**, **Định mức**: "Đã lấy HĐ" và SL HĐ lấy từ sổ Hóa đơn. "Thực tế đã nhập" ở Cân đối VT là 0, vì thực tế nằm ở DT-TT / HĐ-TT.
-- **Công nợ NCC** chỉ cộng giao dịch "lấy hàng", nên thấp hơn tổng sổ đúng bằng phần máy móc và nhân công.
+- **Công nợ NCC** đọc sổ Công nợ vật tư (TT và HĐ, lũy kế, cộng mọi Chủ thể), không đọc sổ Hóa đơn hay giao dịch dự án. Số HĐ ở đây vì vậy có thể khác tổng sổ Hóa đơn.
 - **Dashboard** của công trình: thẻ "Thực tế" đọc từ sổ, tên thẻ là "Thực tế (sổ DT-HĐ-TT)" (xem hướng dẫn [Chỉ huy công trường](chi-huy-cong-truong.md)).
 
 ---

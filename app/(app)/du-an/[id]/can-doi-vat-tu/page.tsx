@@ -4,6 +4,7 @@ import { serializeDecimals } from "@/lib/serialize";
 import { requireModuleAccess } from "@/lib/acl/guards";
 import { canAccessEntitlement } from "@/lib/acl/effective";
 import { CanDoiVatTuClient } from "./can-doi-vat-tu-client";
+import { ProjectBookEmptyState } from "@/components/du-an/project-book-empty-state";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -23,5 +24,12 @@ export default async function CanDoiVatTuPage({ params }: Props) {
     canAccessEntitlement(userId, "du-an", { minLevel: "edit", scope: { kind: "project", projectId } }),
   ]);
 
-  return <CanDoiVatTuClient projectId={projectId} data={serializeDecimals(data)} canEdit={canEdit} />;
+  return (
+    <div className="space-y-3">
+      {data.groups.length === 0 && (
+        <ProjectBookEmptyState projectId={projectId} lead="Tab này so dự toán với sổ dự án." />
+      )}
+      <CanDoiVatTuClient projectId={projectId} data={serializeDecimals(data)} canEdit={canEdit} />
+    </div>
+  );
 }

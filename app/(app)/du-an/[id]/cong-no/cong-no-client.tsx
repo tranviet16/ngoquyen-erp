@@ -1,155 +1,166 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useMemo, useTransition } from "react";
-import type { ReactElement } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import type { DataGridColumn, DataGridHandlers, RowWithId } from "@/components/data-grid/types";
+import { useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { PendingDeliveriesNotice } from "@/components/du-an/pending-deliveries-notice";
+import { formatNumber } from "@/lib/utils/format";
+import type { PairTotals } from "@/lib/du-an/contract-detail/list-figures";
+import type { PendingSummary } from "@/lib/du-an/project-ledger/supplier-balances";
+import type { ProjectSupplierBalance } from "@/lib/du-an/project-ledger/project-ledger-loader";
 import { SupplierMultiSelect } from "./supplier-multi-select";
-import { vndFormatter, numberFormatter } from "@/lib/format";
-import type {
-  SupplierDebtRow,
-  SupplierDebtSummary,
-} from "@/lib/du-an/supplier-debt-service";
-
-const DataGrid = dynamic(
-  () => import("@/components/data-grid").then((m) => m.DataGrid),
-  { ssr: false },
-) as <T extends RowWithId>(p: {
-  columns: DataGridColumn<T>[];
-  rows: T[];
-  handlers: DataGridHandlers<T>;
-  height?: number | string;
-}) => ReactElement;
-
-interface DebtGridRow extends RowWithId {
-  supplierName: string;
-  itemName: string;
-  qty: number;
-  unit: string;
-  amountTaken: number;
-  amountTakenHd: number;
-  amountPaid: number;
-  amountPaidHd: number;
-  balance: number;
-  balanceHd: number;
-  note: string;
-}
 
 interface Props {
-  rows: SupplierDebtRow[];
-  summary: SupplierDebtSummary;
-  supplierNames: string[];
-  initialSuppliers: string[];
+  projectId: number;
+  suppliers: ProjectSupplierBalance[];
+  options: { id: number; name: string }[];
+  totals: PairTotals;
+  pending: PendingSummary;
+  /** Mã NCC đang lọc (`?ncc=`); rỗng = mọi NCC. */
+  selected: number[];
+  /** Có quyền Vật tư NCC → hiện link mở sổ NCC. */
+  canOpenSupplierBook: boolean;
 }
 
-export function CongNoClient({
-  rows: source,
-  summary,
-  supplierNames,
-  initialSuppliers,
-}: Props) {
+const AMOUNT_COLS = [
+  ["openingTt", "Đầu kỳ"],
+  ["phatSinhTt", "Phát sinh"],
+  ["daTraTt", "Đã trả"],
+  ["cuoiKyTt", "Còn nợ"],
+  ["openingHd", "Đầu kỳ"],
+  ["phatSinhHd", "Phát sinh"],
+  ["daTraHd", "Đã trả"],
+  ["cuoiKyHd", "Còn nợ"],
+] as const satisfies readonly (readonly [keyof PairTotals, string])[];
+
+const CELL = "px-3 py-1.5 border text-right tabular-nums";
+
+export function CongNoClient({ projectId, suppliers, options, totals, pending, selected, canOpenSupplierBook }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useParams<{ id: string }>();
-  const [pending, startTransition] = useTransition();
-  // Công nợ vật tư theo sổ cái (theo NCC × công trình) nằm ở module vat-tu-ncc; tab này giữ nguồn cũ.
-  const projectId = params?.id && /^\d+$/.test(params.id) ? params.id : null;
+  const [navigating, startTransition] = useTransition();
+  const filtered = selected.length > 0;
 
-  const selected = useMemo<string[]>(() => {
-    const sp = searchParams?.get("suppliers");
-    if (sp) return sp.split(",").map((s) => s.trim()).filter(Boolean);
-    return initialSuppliers;
-  }, [searchParams, initialSuppliers]);
-
-  const pushFilter = (next: string[]) => {
+  const pushFilter = (next: number[]) => {
     const params = new URLSearchParams(searchParams?.toString());
-    if (next.length > 0) {
-      params.set("suppliers", next.join(","));
-    } else {
-      params.delete("suppliers");
-    }
+    if (next.length > 0) params.set("ncc", next.join(","));
+    else params.delete("ncc");
     const qs = params.toString();
-    startTransition(() => {
-      router.push(qs ? `?${qs}` : "?");
-    });
+    startTransition(() => router.push(qs ? `?${qs}` : "?"));
   };
-
-  const rows: DebtGridRow[] = source.map((r) => ({
-    id: r.id,
-    supplierName: r.supplierName,
-    itemName: r.itemName ?? "",
-    qty: r.qty ?? 0,
-    unit: r.unit ?? "",
-    amountTaken: r.amountTaken ?? 0,
-    amountTakenHd: r.amountTakenHd ?? 0,
-    amountPaid: r.amountPaid ?? 0,
-    amountPaidHd: r.amountPaidHd ?? 0,
-    balance: r.balance ?? 0,
-    balanceHd: r.balanceHd ?? 0,
-    note: r.note ?? "",
-  }));
-
-  const columns: DataGridColumn<DebtGridRow>[] = [
-    { id: "supplierName", title: "Nhà cung cấp", kind: "text", width: 240, readonly: true },
-    { id: "itemName", title: "Vật tư", kind: "text", width: 200, readonly: true },
-    {
-      id: "qty",
-      title: "SL",
-      kind: "number",
-      width: 100,
-      readonly: true,
-      format: (v) => numberFormatter(Number(v ?? 0), 2),
-    },
-    { id: "unit", title: "ĐVT", kind: "text", width: 80, readonly: true },
-    { id: "amountTaken", title: "Lấy hàng TT", kind: "currency", width: 140, readonly: true },
-    { id: "amountTakenHd", title: "Lấy hàng HĐ", kind: "currency", width: 140, readonly: true },
-    { id: "amountPaid", title: "Đã trả TT", kind: "currency", width: 140, readonly: true },
-    { id: "amountPaidHd", title: "Đã trả HĐ", kind: "currency", width: 140, readonly: true },
-    { id: "balance", title: "Còn nợ TT", kind: "currency", width: 140, readonly: true },
-    { id: "balanceHd", title: "Còn nợ HĐ", kind: "currency", width: 140, readonly: true },
-    { id: "note", title: "Ghi chú", kind: "text", width: 200, readonly: true },
-  ];
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <SummaryCard label="Số dòng" value={summary.rowCount.toString()} />
-        <SummaryCard label="Lấy hàng TT" value={vndFormatter(summary.totalTaken)} />
-        <SummaryCard label="Lấy hàng HĐ" value={vndFormatter(summary.totalTakenHd)} />
-        <SummaryCard label="Còn nợ TT" value={vndFormatter(summary.totalBalance)} />
-        <SummaryCard label="Còn nợ HĐ" value={vndFormatter(summary.totalBalanceHd)} />
-        <SummaryCard
-          label="Còn nợ tổng (TT+HĐ)"
-          value={vndFormatter(summary.totalBalanceCombined)}
-          highlight
-        />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SummaryCard label="Số NCC" value={String(suppliers.length)} />
+        <SummaryCard label="Phát sinh TT" value={formatNumber(totals.phatSinhTt)} />
+        <SummaryCard label="Còn nợ TT" value={formatNumber(totals.cuoiKyTt)} highlight />
+        <SummaryCard label="Còn nợ HĐ" value={formatNumber(totals.cuoiKyHd)} />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card p-3">
         <span className="text-sm font-medium">Lọc NCC:</span>
-        <SupplierMultiSelect options={supplierNames} value={selected} onChange={pushFilter} />
-        {selected.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => pushFilter([])} disabled={pending}>
+        <SupplierMultiSelect
+          options={options.map((o) => ({ id: o.id, label: o.name }))}
+          value={selected}
+          onChange={pushFilter}
+        />
+        {filtered && (
+          <Button variant="outline" size="sm" onClick={() => pushFilter([])} disabled={navigating}>
             Tất cả NCC
           </Button>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
-          Dữ liệu được nhập từ file Quản Lý Dự Án Xây Dựng (sheet &quot;Công Nợ&quot;).
+          Nguồn: sổ Công nợ vật tư, lũy kế toàn bộ, cộng mọi Chủ thể. Từng dòng sổ xem ở tab Giao Dịch.
         </span>
-        {projectId && (
-          <Link
-            href={`/vat-tu-ncc/cong-trinh/${projectId}`}
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            Công nợ vật tư theo sổ cái →
+        {canOpenSupplierBook && (
+          <Link href={`/vat-tu-ncc/cong-trinh/${projectId}`} className="text-xs font-medium text-primary hover:underline">
+            Theo công trình →
           </Link>
         )}
       </div>
 
-      <DataGrid<DebtGridRow> columns={columns} rows={rows} handlers={{}} height={520} />
+      <PendingDeliveriesNotice count={pending.count} unpricedCount={pending.unpricedCount} />
+
+      {suppliers.length === 0 ? (
+        <p className="rounded-md border py-8 text-center text-sm text-muted-foreground">
+          {filtered ? (
+            "Không có NCC nào khớp bộ lọc."
+          ) : (
+            <>
+              Công trình chưa có công nợ nhà cung cấp trong sổ Công nợ vật tư. Giao dịch nhập tay của công trình (nếu
+              có) xem ở{" "}
+              <Link href={`/du-an/${projectId}/giao-dich?nguon=so-du-an`} className="font-medium text-primary hover:underline">
+                Giao Dịch (Sổ dự án)
+              </Link>
+              .
+            </>
+          )}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full min-w-[1100px] border-collapse text-sm">
+            <thead>
+              <tr className="bg-muted text-xs font-semibold uppercase tracking-wide">
+                <th rowSpan={2} className="sticky left-0 z-10 min-w-[200px] border bg-muted px-3 py-2 text-left">
+                  Nhà cung cấp
+                </th>
+                <th colSpan={4} className="border px-3 py-2 text-center">Thực tế (TT)</th>
+                <th colSpan={4} className="border px-3 py-2 text-center">Hóa đơn (HĐ)</th>
+                <th rowSpan={2} className="min-w-[90px] border px-3 py-2 text-right">Phiếu chưa chốt</th>
+              </tr>
+              <tr className="bg-muted text-xs font-semibold uppercase tracking-wide">
+                {AMOUNT_COLS.map(([key, label]) => (
+                  <th key={key} className="min-w-[110px] border px-3 py-2 text-right">{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {suppliers.map((s) => (
+                <tr key={s.supplierId} className="hover:bg-muted/40">
+                  <td className="sticky left-0 z-10 border bg-background px-3 py-1.5">
+                    <div>
+                      {s.supplierName}
+                      {s.supplierDeleted && <span className="ml-1 text-xs text-muted-foreground">(đã xóa khỏi danh mục)</span>}
+                    </div>
+                    {canOpenSupplierBook && !s.supplierDeleted && (
+                      <Link
+                        href={`/vat-tu-ncc/${s.supplierId}/ngay?projectId=${projectId}`}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Mở sổ NCC
+                      </Link>
+                    )}
+                  </td>
+                  {AMOUNT_COLS.map(([key]) => (
+                    <td key={key} className={CELL}>{formatNumber(s[key])}</td>
+                  ))}
+                  <td className={CELL}>
+                    {s.pendingCount > 0 && (
+                      <span title={s.unpricedCount > 0 ? `${s.unpricedCount} phiếu chưa có giá` : undefined}>
+                        {s.pendingCount}
+                        {s.unpricedCount > 0 && "*"}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-muted/60 font-semibold">
+                <td className="sticky left-0 z-10 border bg-muted px-3 py-1.5 text-left">
+                  {filtered ? "Tổng các NCC đang lọc" : "Tổng"}
+                </td>
+                {AMOUNT_COLS.map(([key]) => (
+                  <td key={key} className={CELL}>{formatNumber(totals[key])}</td>
+                ))}
+                <td className={CELL}>{pending.count > 0 ? pending.count : ""}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -158,9 +169,7 @@ function SummaryCard({ label, value, highlight }: { label: string; value: string
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={"mt-1 text-base font-semibold " + (highlight ? "text-destructive" : "")}>
-        {value || "—"}
-      </div>
+      <div className={"mt-1 text-base font-semibold tabular-nums " + (highlight ? "text-destructive" : "")}>{value}</div>
     </div>
   );
 }

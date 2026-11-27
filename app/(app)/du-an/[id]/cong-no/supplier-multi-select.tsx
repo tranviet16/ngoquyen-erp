@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Check, ChevronDown } from "lucide-react";
 
 interface Props {
-  options: string[];
-  value: string[];
-  onChange: (next: string[]) => void;
+  options: { id: number; label: string }[];
+  /** Mã NCC đang chọn. */
+  value: number[];
+  onChange: (next: number[]) => void;
 }
 
 export function SupplierMultiSelect({ options, value, onChange }: Props) {
@@ -28,19 +29,19 @@ export function SupplierMultiSelect({ options, value, onChange }: Props) {
   const filtered = useMemo(() => {
     if (!query) return options;
     const q = query.toLowerCase();
-    return options.filter((o) => o.toLowerCase().includes(q));
+    return options.filter((o) => o.label.toLowerCase().includes(q));
   }, [options, query]);
 
-  const toggle = (name: string) => {
-    if (value.includes(name)) onChange(value.filter((v) => v !== name));
-    else onChange([...value, name]);
+  const toggle = (id: number) => {
+    if (value.includes(id)) onChange(value.filter((v) => v !== id));
+    else onChange([...value, id]);
   };
 
   const label =
     value.length === 0
       ? "Tất cả NCC"
       : value.length === 1
-        ? value[0]
+        ? (options.find((o) => o.id === value[0])?.label ?? `NCC #${value[0]}`)
         : `${value.length} NCC đã chọn`;
 
   return (
@@ -69,13 +70,13 @@ export function SupplierMultiSelect({ options, value, onChange }: Props) {
                 Không có NCC khớp
               </div>
             )}
-            {filtered.map((name) => {
-              const selected = value.includes(name);
+            {filtered.map(({ id, label: name }) => {
+              const selected = value.includes(id);
               return (
                 <button
-                  key={name}
+                  key={id}
                   type="button"
-                  onClick={() => toggle(name)}
+                  onClick={() => toggle(id)}
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
                 >
                   <span

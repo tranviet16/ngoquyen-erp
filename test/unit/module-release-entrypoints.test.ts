@@ -184,6 +184,11 @@ describe("module release entrypoint contract", () => {
       "lib/du-an/contract-detail/ledger-source.ts",
       "lib/du-an/contract-detail/cdt-source.ts",
       "lib/du-an/contract-detail/contract-detail-loader.ts",
+      // Sổ Công nợ vật tư theo công trình (tab Công Nợ NCC, Giao Dịch): cùng ranh giới.
+      "lib/du-an/project-ledger/project-ledger-source.ts",
+      "lib/du-an/project-ledger/supplier-balances.ts",
+      "lib/du-an/project-ledger/project-ledger-loader.ts",
+      "lib/du-an/project-ledger/transactions-source.ts",
     ]) {
       expect(source(path), path).not.toMatch(/^\s*["']use server["'];/);
     }

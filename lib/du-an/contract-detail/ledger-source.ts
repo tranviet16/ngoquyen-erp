@@ -105,21 +105,14 @@ export interface PendingDeliveries {
 }
 
 /**
- * Phiếu vật tư ngày chưa xóa của cặp mà chưa có dòng sổ (chưa xóa) nào mang `deliveryId` của phiếu.
- * Bỏ qua phiếu "lịch sử Excel" như lưới an toàn phiếu ↔ sổ của Vật tư NCC: ngày ≤ mốc chuyển đổi đã
- * commit, hoặc nằm trong kỳ chuyển đổi (marker có `importRunId`) của cặp — tiền của các phiếu đó đã
- * vào sổ qua dòng Nhập Liệu, không bao giờ có event.
+ * Vị từ "phiếu vật tư ngày chưa chốt" trên bảng `supplier_delivery_daily` đặt alias `d`: phiếu chưa xóa
+ * mà chưa có dòng sổ (chưa xóa) nào mang `deliveryId` của phiếu. Bỏ qua phiếu "lịch sử Excel" như lưới
+ * an toàn phiếu ↔ sổ của Vật tư NCC: ngày ≤ mốc chuyển đổi đã commit, hoặc nằm trong kỳ chuyển đổi
+ * (marker có `importRunId`) của cặp — tiền của các phiếu đó đã vào sổ qua dòng Nhập Liệu, không bao giờ
+ * có event. `cutoverDate` lấy từ `getMaterialCutoverDate`.
  */
-export async function loadPendingDeliveries(supplierId: number, projectId: number, db: RawClient = prisma): Promise<PendingDeliveries> {
-  const cutoverDate = await getMaterialCutoverDate(db);
-  const [row] = await db.$queryRaw<{ count: number; knownAmount: Prisma.Decimal; unpricedCount: number }[]>`
-    SELECT COUNT(*)::int AS count,
-           COALESCE(SUM(d."totalAmount"), 0) AS "knownAmount",
-           (COUNT(*) FILTER (WHERE d."totalAmount" IS NULL))::int AS "unpricedCount"
-      FROM supplier_delivery_daily d
-     WHERE d."supplierId" = ${supplierId}
-       AND d."projectId" = ${projectId}
-       AND d."deletedAt" IS NULL
+export function pendingDeliveryPredicateSql(cutoverDate: Date | null): Prisma.Sql {
+  return Prisma.sql`d."deletedAt" IS NULL
        AND NOT EXISTS (
          SELECT 1 FROM ledger_transactions t WHERE t."deliveryId" = d.id AND t."deletedAt" IS NULL
        )
@@ -130,6 +123,19 @@ export async function loadPendingDeliveries(supplierId: number, projectId: numbe
             AND r."importRunId" IS NOT NULL AND r."deletedAt" IS NULL
             AND d.date BETWEEN r."periodFrom" AND r."periodTo"
        )`;
+}
+
+/** Phiếu vật tư ngày chưa chốt của cặp (định nghĩa ở `pendingDeliveryPredicateSql`). */
+export async function loadPendingDeliveries(supplierId: number, projectId: number, db: RawClient = prisma): Promise<PendingDeliveries> {
+  const cutoverDate = await getMaterialCutoverDate(db);
+  const [row] = await db.$queryRaw<{ count: number; knownAmount: Prisma.Decimal; unpricedCount: number }[]>`
+    SELECT COUNT(*)::int AS count,
+           COALESCE(SUM(d."totalAmount"), 0) AS "knownAmount",
+           (COUNT(*) FILTER (WHERE d."totalAmount" IS NULL))::int AS "unpricedCount"
+      FROM supplier_delivery_daily d
+     WHERE d."supplierId" = ${supplierId}
+       AND d."projectId" = ${projectId}
+       AND ${pendingDeliveryPredicateSql(cutoverDate)}`;
   return {
     count: Number(row?.count ?? 0),
     knownAmount: new Prisma.Decimal(row?.knownAmount ?? 0).toFixed(),

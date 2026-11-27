@@ -171,7 +171,18 @@ Kỳ tháng **tự tạo**: khi có phiếu ngày (có đơn giá), chuyển kho
    - Kỳ đã ký bất biến (số dư ban đầu của cặp cũng bị khoá sau ký đầu tiên)
    - "Kỳ chuyển đổi (khóa)" không có nút ký / gỡ ký; chỉ admin hoàn tác import mới gỡ được
 
-Tab **Công nợ** trong trang Dự án vẫn lấy số từ giao dịch dự án. Liên kết **"Công nợ vật tư theo sổ cái →"** mở trang công trình ở Vật tư – Nhà cung cấp.
+### Công nợ vật tư trong trang Dự án
+
+Hai tab của nhóm **Vật tư & công nợ** trong trang Dự án đọc thẳng sổ Công nợ vật tư. Không có số nào được chép sang giao dịch dự án, và hai nguồn không bao giờ cộng gộp.
+
+- **Công Nợ NCC**: mỗi NCC một dòng, gồm Đầu kỳ, Phát sinh, Đã trả, Còn nợ cho cả TT và HĐ, cộng mọi Chủ thể, lũy kế toàn bộ. Số khớp đúng báo cáo **Công Nợ VT > Chi Tiết** ở chế độ "Toàn bộ" khi lọc theo công trình đó. Lọc NCC bằng ô **Lọc NCC**; khi đang lọc, hàng cuối ghi "Tổng các NCC đang lọc". Cột **Phiếu chưa chốt** đếm phiếu vật tư ngày chưa chốt vào sổ (dấu \* = có phiếu chưa có giá); tiền của các phiếu này chưa nằm trong số. Người có quyền Vật tư – Nhà cung cấp thấy link **"Mở sổ NCC"** ở từng NCC và **"Theo công trình →"**.
+- **Giao Dịch** có công tắc **Nguồn**: **Sổ công nợ vật tư (n dòng)** là lưới chỉ xem các dòng sổ, số dư đầu kỳ nằm ở dải riêng phía trên lưới (không tính vào n); **Sổ dự án (m dòng)** là giao dịch dự án như trước, vẫn thêm / sửa / xóa được. Mặc định mở Sổ công nợ vật tư khi sổ có dòng. Muốn sửa dòng sổ thì sửa ở **Công nợ vật tư > Nhập liệu** (link "Sửa ở Công nợ vật tư →"). Nếu tạm thời không đọc được sổ, trang báo và chỉ hiện Sổ dự án.
+
+**Quyền xem** giống tab Hợp đồng: ai xem được dự án đều thấy công nợ từng NCC và tổng ở tab Công Nợ NCC; muốn xem từng dòng sổ ở tab Giao Dịch thì cần thêm quyền đọc **Công nợ vật tư**. Không có quyền đó thì Giao Dịch chỉ có Sổ dự án.
+
+Công trình dùng sổ đội (Đối chiếu DT-HĐ-TT): số HĐ ở tab Công Nợ NCC nay lấy từ sổ Công nợ vật tư, không còn lấy từ sổ Hóa đơn, và tab có thêm TT, đã trả. Vì vậy số khác trước đây.
+
+Công trình chưa có dự toán / sổ dự án: Cân Đối VT, Định Mức (và Dashboard, nếu công trình có sổ Công nợ vật tư) hiện ghi chú giải thích vì sao trống, kèm link sang hai tab trên.
 
 ---
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getProjectDashboard } from "@/lib/du-an/dashboard-service";
 import { formatVND, formatDate, formatNumber } from "@/lib/utils/format";
@@ -8,6 +9,7 @@ import { StatCard } from "@/components/du-an/stat-card";
 import { loadBookHeadline } from "@/components/du-an/dt-hd-tt/load-report-page";
 import { figureDataValue } from "@/components/du-an/dt-hd-tt/tong-quan-view";
 import { tongQuanPath } from "@/lib/du-an/dt-hd-tt/overview";
+import { DashboardLedgerOnlyNotice } from "@/components/du-an/project-book-empty-state";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -40,6 +42,10 @@ export default async function ProjectDashboardPage({ params }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Công trình chỉ có sổ Công nợ vật tư: nói rõ vì sao các thẻ dự toán / sổ dự án bằng 0. */}
+      <Suspense fallback={null}>
+        <DashboardLedgerOnlyNotice projectId={projectId} />
+      </Suspense>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard
           label="Tiến độ"
