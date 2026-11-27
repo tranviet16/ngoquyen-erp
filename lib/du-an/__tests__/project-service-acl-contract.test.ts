@@ -12,7 +12,6 @@ const serviceFiles = [
   "norm-service.ts",
   "schedule-service.ts",
   "settings-service.ts",
-  "supplier-debt-service.ts",
   "transaction-service.ts",
   // Sổ "Đối chiếu DT-HĐ-TT": mọi service ("use server") của thư mục con cũng phải theo hợp đồng này.
   "dt-hd-tt/report-service.ts",

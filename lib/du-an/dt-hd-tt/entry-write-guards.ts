@@ -47,8 +47,11 @@ export const refChanged = (current: number | null, next: number | null): boolean
 
 export type EntryBook = "hoa-don" | "thuc-te-nhap" | "chi-thuc-te";
 
-/** Các tab cũ của dự án được nuôi bởi giao dịch HĐ sinh từ sổ Hóa đơn. */
-const OLD_TABS = ["giao-dich", "can-doi-vat-tu", "dinh-muc", "cong-no"] as const;
+/**
+ * Các tab cũ của dự án được nuôi bởi giao dịch HĐ sinh từ sổ Hóa đơn. Công Nợ NCC không nằm đây: tab đọc sổ
+ * Công nợ vật tư, không đọc giao dịch dự án.
+ */
+const OLD_TABS = ["giao-dich", "can-doi-vat-tu", "dinh-muc"] as const;
 
 /** Làm mới ba báo cáo + sổ vừa ghi; sổ Hóa đơn còn nuôi các tab cũ qua giao dịch HĐ sinh tự động. */
 export function revalidateEntryBook(projectId: number, book: EntryBook): void {
